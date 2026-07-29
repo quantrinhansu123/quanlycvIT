@@ -1,36 +1,54 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Goal App – Quản lý công việc (Next.js)
 
-## Getting Started
+Giao diện được dựng lại từ ảnh chụp màn hình "Goal App": Sidebar quản trị + Danh sách dự án (bảng/lưới) + Modal thêm/sửa dự án + Trang chi tiết dự án.
 
-First, run the development server:
+## Công nghệ
+
+Next.js 16 (App Router, Turbopack) · TypeScript · Tailwind CSS v4 · React 19 · Lucide React.
+
+## Cài đặt & chạy
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run lint
+npm run build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Mặc định chạy ở `http://localhost:3002` (đổi cổng bằng `next dev -p <port>` nếu cần).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Kết nối Supabase và API
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Sao chép `.env.example` thành `.env.local`, sau đó điền
+   `NEXT_PUBLIC_SUPABASE_URL` và `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
+2. Chạy `npx supabase db push` để áp dụng toàn bộ migration.
+3. API nằm tại `/api`. Trong giai đoạn hiện tại, ba màn hình Dự án, Công việc
+   và Task gọi API trực tiếp, chưa yêu cầu đăng nhập hay session.
+4. Migration `20260729000300_dev_anon_project_api.sql` cấp quyền `anon` tạm
+   thời cho các bảng của ba màn hình và chỉ các cột danh bạ cần hiển thị.
+5. Ba service dự án, công việc và task đã dùng API thật thay cho mock data.
 
-## Learn More
+Các endpoint CRUD:
 
-To learn more about Next.js, take a look at the following resources:
+- `/api/projects` và `/api/projects/:id`
+- `/api/tasks` và `/api/tasks/:id` — dữ liệu bảng `cong_viec`
+- `/api/subtasks` và `/api/subtasks/:id` — dữ liệu bảng `task`
+- `/api/users` — danh sách tài khoản đang hoạt động
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Mỗi endpoint danh sách hỗ trợ `GET`, endpoint gốc hỗ trợ `POST`, còn endpoint
+theo ID hỗ trợ `GET`, `PUT`, `DELETE`.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Ghi chú giả định khi dựng theo ảnh
 
-## Deploy on Vercel
+- Ảnh mẫu là giao diện **dashboard quản trị nội bộ** (sidebar + bảng dữ liệu), không phải trang thương mại điện tử, nên các phần Header/Banner/Giỏ hàng public không được dựng.
+- Không có ảnh mẫu cho các mục còn lại của sidebar (Ứng dụng, Nhân viên, Kanban, Gantt...) nên các trang này để dạng khung "đang phát triển" (`ComingSoon`), giữ điều hướng hoạt động đầy đủ.
+- Ảnh chân dung nhân sự trong ảnh mẫu không nhìn rõ nên dùng avatar chữ cái đầu (initials) thay thế, đủ để tái sử dụng khi có ảnh thật.
+- Nút xem dạng lưới/bảng và xuất CSV được suy ra hợp lý từ icon có sẵn trong ảnh — đã cài đặt thành tính năng thật, không phải icon chết.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Tự kiểm tra
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `npm run lint`: pass, không cảnh báo/lỗi.
+- `npm run build`: build production thành công, không lỗi TypeScript.
+- Các Route Handler API được kiểm tra trực tiếp ở chế độ chưa có session.
+- Không dùng cấu hình quyền `anon` hiện tại cho production; cần bật lại xác thực
+  và thu hồi các policy `*_anon_dev` trước khi triển khai chính thức.

@@ -1,26 +1,91 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f8fafc;
+  --foreground: #111827;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: var(--font-sans);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db transparent;
+}
+
+.account-table-scroll {
+  scrollbar-width: none;
+  scrollbar-color: transparent transparent;
+}
+
+.account-table-scroll:hover {
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 transparent;
+}
+
+.account-table-scroll::-webkit-scrollbar {
+  height: 0;
+}
+
+.account-table-scroll:hover::-webkit-scrollbar {
+  height: 8px;
+}
+
+.account-table-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #94a3b8;
+}
+
+.icon-button {
+  display: inline-flex;
+  height: 2.25rem;
+  width: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  border: 1px solid #e5e7eb;
+  color: #4b5563;
+  transition: background-color 150ms, color 150ms, transform 150ms;
+}
+
+.icon-button:hover {
+  background: #f9fafb;
+  color: #2563eb;
+}
+
+.icon-button:active {
+  transform: scale(0.94);
+}
+
+@keyframes account-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes account-dialog-in {
+  from { opacity: 0; transform: translateY(10px) scale(.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes account-drawer-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.account-overlay { animation: account-fade-in 160ms ease-out; }
+.account-dialog, .account-menu { animation: account-dialog-in 180ms ease-out; }
+.account-drawer { animation: account-drawer-in 220ms ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .account-overlay, .account-dialog, .account-menu, .account-drawer {
+    animation: none;
+  }
 }

@@ -1,0 +1,121 @@
+-- Bao cao tien do Task co day du anh, file va lien ket nhu bao cao Cong viec.
+
+create table if not exists public.bao_cao_task (
+  id uuid primary key default gen_random_uuid(),
+  task_id uuid not null references public.task(id) on delete cascade,
+  nguoi_bao_cao_id uuid references public.tai_khoan(id) on delete set null,
+  noi_dung text not null check (length(btrim(noi_dung)) > 0),
+  tien_do smallint not null default 0 check (tien_do between 0 and 100),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.bao_cao_task_dinh_kem (
+  id uuid primary key default gen_random_uuid(),
+  bao_cao_id uuid not null references public.bao_cao_task(id) on delete cascade,
+  loai text not null check (loai in ('image', 'file')),
+  ten_file text not null,
+  duong_dan text not null,
+  kieu_file text,
+  kich_thuoc bigint check (kich_thuoc is null or kich_thuoc >= 0),
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.bao_cao_task_lien_ket (
+  id uuid primary key default gen_random_uuid(),
+  bao_cao_id uuid not null references public.bao_cao_task(id) on delete cascade,
+  nhan text,
+  duong_dan text not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists bao_cao_task_task_idx
+  on public.bao_cao_task(task_id, created_at desc);
+create index if not exists bao_cao_task_nguoi_bao_cao_idx
+  on public.bao_cao_task(nguoi_bao_cao_id);
+create index if not exists bao_cao_task_dinh_kem_bao_cao_idx
+  on public.bao_cao_task_dinh_kem(bao_cao_id);
+create index if not exists bao_cao_task_lien_ket_bao_cao_idx
+  on public.bao_cao_task_lien_ket(bao_cao_id);
+
+drop trigger if exists set_bao_cao_task_updated_at on public.bao_cao_task;
+create trigger set_bao_cao_task_updated_at
+before update on public.bao_cao_task
+for each row execute function public.set_updated_at();
+
+alter table public.bao_cao_task enable row level security;
+alter table public.bao_cao_task_dinh_kem enable row level security;
+alter table public.bao_cao_task_lien_ket enable row level security;
+
+do $$
+declare
+  table_name text;
+begin
+  foreach table_name in array array[
+    'bao_cao_task',
+    'bao_cao_task_dinh_kem',
+    'bao_cao_task_lien_ket'
+  ]
+  loop
+    execute format(
+      'drop policy if exists %I on public.%I',
+      table_name || '_select_authenticated',
+      table_name
+    );
+    execute format(
+      'create policy %I on public.%I for select to authenticated using (true)',
+      table_name || '_select_authenticated',
+      table_name
+    );
+    execute format(
+      'drop policy if exists %I on public.%I',
+      table_name || '_insert_authenticated',
+      table_name
+    );
+    execute format(
+      'create policy %I on public.%I for insert to authenticated with check (true)',
+      table_name || '_insert_authenticated',
+      table_name
+    );
+    execute format(
+      'drop policy if exists %I on public.%I',
+      table_name || '_update_authenticated',
+      table_name
+    );
+    execute format(
+      'create policy %I on public.%I for update to authenticated using (true) with check (true)',
+      table_name || '_update_authenticated',
+      table_name
+    );
+    execute format(
+      'drop policy if exists %I on public.%I',
+      table_name || '_delete_authenticated',
+      table_name
+    );
+    execute format(
+      'create policy %I on public.%I for delete to authenticated using (true)',
+      table_name || '_delete_authenticated',
+      table_name
+    );
+    execute format(
+      'drop policy if exists %I on public.%I',
+      table_name || '_all_anon_dev',
+      table_name
+    );
+    execute format(
+      'create policy %I on public.%I for all to anon using (true) with check (true)',
+      table_name || '_all_anon_dev',
+      table_name
+    );
+  end loop;
+end;
+$$;
+
+grant select, insert, update, delete on table
+  public.bao_cao_task,
+  public.bao_cao_task_dinh_kem,
+  public.bao_cao_task_lien_ket
+to anon, authenticated;
+
+comment on table public.bao_cao_task is
+  'Bao cao tien do cua Task; moi ban ghi luu snapshot tien do tai thoi diem bao cao.';
