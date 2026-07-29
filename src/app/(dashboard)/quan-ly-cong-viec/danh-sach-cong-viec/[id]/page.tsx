@@ -41,6 +41,7 @@ import { MemberMultiSelect } from "@/components/ui/MemberMultiSelect";
 import { ProgressReportItem } from "@/components/tasks/ProgressReportItem";
 import { TaskFormModal } from "@/components/tasks/TaskFormModal";
 import { WorkTaskSubtasksPanel } from "@/components/subtasks/WorkTaskSubtasksPanel";
+import { ActivityTimeline } from "@/components/timeline/ActivityTimeline";
 import { cn, formatDateVN } from "@/lib/utils";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
@@ -200,8 +201,8 @@ export default function TaskDetailPage() {
   const overdue = isTaskOverdue(task);
 
   return (
-    <div className="min-h-full bg-white pb-2">
-      <div className="border-b border-gray-100 bg-white">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white">
+      <div className="shrink-0 border-b border-gray-100 bg-white">
         <div className="mx-auto flex max-w-[1320px] items-center justify-between gap-4 px-3 py-3 sm:px-5">
           <div className="flex min-w-0 items-center gap-3">
             <button
@@ -245,7 +246,7 @@ export default function TaskDetailPage() {
         </div>
       </div>
 
-      <div className="mx-auto max-w-[1080px] px-4 pb-8 pt-6 sm:px-6">
+      <div className="mx-auto min-h-0 w-full max-w-[1080px] flex-1 overflow-y-auto px-4 pb-8 pt-6 sm:px-6">
         {tab === "info" ? (
           <div className="space-y-5">
             <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -427,17 +428,27 @@ export default function TaskDetailPage() {
                 icon={RotateCcw}
                 iconClassName="text-emerald-500"
                 title="Timeline hoạt động công việc"
-                subtitle="Nhật ký lịch trình xử lý & báo cáo"
+                subtitle="Danh sách Task của công việc theo thứ tự cập nhật"
               >
-                <div className="flex min-h-36 flex-col items-center justify-center rounded-2xl border border-dashed border-gray-200 px-6 text-center">
-                  <CalendarDays className="h-9 w-9 text-gray-300" />
-                  <p className="mt-3 text-sm font-bold text-gray-800">
-                    Chưa có lịch sử hoạt động
-                  </p>
-                  <p className="mt-1 text-xs text-gray-400">
-                    Các cập nhật trạng thái, phân công và báo cáo
-                  </p>
-                </div>
+                <ActivityTimeline
+                  itemLabel="Task"
+                  items={subtasks.map((item) => ({
+                    id: item.id,
+                    title: item.title,
+                    description: item.description,
+                    href: `/quan-ly-cong-viec/danh-sach-task/${item.id}`,
+                    status: item.status,
+                    priority: item.priority,
+                    assignees: item.assignees,
+                    startDate: item.startDate,
+                    dueDate: item.dueDate,
+                    progress: item.progress,
+                    createdAt: item.createdAt,
+                    updatedAt: item.updatedAt,
+                  }))}
+                  emptyTitle="Công việc chưa có Task"
+                  emptyDescription="Khi thêm Task vào công việc, các Task sẽ được liệt kê tại timeline này."
+                />
               </Panel>
             </section>
           </div>
@@ -477,7 +488,7 @@ export default function TaskDetailPage() {
         )}
       </div>
 
-      <div className="sticky bottom-0 z-20 border-t border-gray-200 bg-white/95 px-4 py-2 backdrop-blur">
+      <div className="z-20 shrink-0 border-t border-gray-200 bg-white px-4 py-2">
         <div className="mx-auto flex max-w-[1080px] gap-2">
           <BottomTab
             active={tab === "info"}

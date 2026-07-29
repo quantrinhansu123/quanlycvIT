@@ -225,10 +225,11 @@ export function WorkTaskSubtasksPanel({
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Tìm task trong công việc..."
-            className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            className="h-9 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-xs text-gray-700 outline-none placeholder:text-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
           />
         </div>
         <FilterSelect
+          compact
           label="Người thực hiện"
           value={assigneeId}
           onChange={setAssigneeId}
@@ -238,6 +239,7 @@ export function WorkTaskSubtasksPanel({
           }))}
         />
         <FilterSelect
+          compact
           label="Độ ưu tiên"
           value={priority}
           onChange={(value) => setPriority(value as TaskPriority | "")}
@@ -247,6 +249,7 @@ export function WorkTaskSubtasksPanel({
           }))}
         />
         <FilterSelect
+          compact
           label="Trạng thái"
           value={status}
           onChange={(value) => setStatus(value as TaskStatus | "")}
@@ -256,7 +259,7 @@ export function WorkTaskSubtasksPanel({
           }))}
         />
         <div className="ml-auto flex items-center gap-2">
-          <Button onClick={() => setFormModal({ mode: "create" })}>
+          <Button size="sm" onClick={() => setFormModal({ mode: "create" })}>
             <Plus className="h-4 w-4" />
             Thêm mới
           </Button>
@@ -265,7 +268,7 @@ export function WorkTaskSubtasksPanel({
               type="button"
               onClick={() => setViewMode("table")}
               className={cn(
-                "flex h-10 w-10 items-center justify-center",
+                "flex h-9 w-9 items-center justify-center",
                 viewMode === "table" ? "bg-gray-100 text-gray-700" : "text-gray-400 hover:bg-gray-50"
               )}
               aria-label="Xem dạng bảng"
@@ -276,7 +279,7 @@ export function WorkTaskSubtasksPanel({
               type="button"
               onClick={() => setViewMode("grid")}
               className={cn(
-                "flex h-10 w-10 items-center justify-center border-l border-gray-200",
+                "flex h-9 w-9 items-center justify-center border-l border-gray-200",
                 viewMode === "grid" ? "bg-gray-100 text-gray-700" : "text-gray-400 hover:bg-gray-50"
               )}
               aria-label="Xem dạng lưới"
@@ -288,7 +291,7 @@ export function WorkTaskSubtasksPanel({
             type="button"
             onClick={handleExportCsv}
             disabled={subtasks.length === 0}
-            className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Xuất file"
           >
             <Download className="h-4 w-4" />

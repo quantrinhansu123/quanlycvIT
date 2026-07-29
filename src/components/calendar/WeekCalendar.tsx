@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
 import {
   getWeekDays,
   rangeOverlapsWeek,
   getBarPosition,
+  toISODateStr,
   WEEKDAY_FULL_LABELS,
   type CalendarDay,
 } from "@/lib/calendar-utils";
@@ -27,6 +28,8 @@ interface WeekTaskBar {
 
 interface WeekCalendarProps {
   weekStart: Date;
+  selectedDate?: Date;
+  mode?: "week" | "day";
   tasks: WorkTask[];
   projectsById: Map<string, Project>;
   membersById: Map<string, ProjectMember>;
@@ -39,9 +42,17 @@ interface WeekCalendarProps {
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const HOUR_HEIGHT = 60; // px per hour row
-const HEADER_HEIGHT = 0; // header is outside the scroll area
-const INITIAL_SCROLL_HOUR = 7; // auto-scroll to 7 AM on mount
+const INITIAL_SCROLL_HOUR = 5.75; // keep the 06:00 label fully visible
 const MAX_ALLDAY_LANES = 3;
+const DAY_VIEW_LABELS = [
+  "Chủ Nhật",
+  "Thứ Hai",
+  "Thứ Ba",
+  "Thứ Tư",
+  "Thứ Năm",
+  "Thứ Sáu",
+  "Thứ Bảy",
+] as const;
 
 /* ------------------------------------------------------------------ */
 /*  Color helpers (same logic as DeadlineCalendar)                     */
@@ -105,7 +116,7 @@ function allocateAllDayLanes(
   bars: WeekTaskBar[]
 ): { lane: number; bar: WeekTaskBar; startCol: number; span: number }[] {
   const weekStart = days[0].dateStr;
-  const weekEnd = days[6].dateStr;
+  const weekEnd = days[days.length - 1].dateStr;
 
   const overlapping = bars.filter((b) =>
     rangeOverlapsWeek(b.task.startDate, b.task.dueDate, weekStart, weekEnd)
@@ -164,17 +175,34 @@ function getCurrentTimePosition(): { hour: number; minuteFraction: number } | nu
 
 export function WeekCalendar({
   weekStart,
+  selectedDate,
+  mode = "week",
   tasks,
   projectsById,
   membersById,
   onTaskClick,
 }: WeekCalendarProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const isDayView = mode === "day";
 
-  const days = useMemo(() => getWeekDays(weekStart), [weekStart]);
+  const days = useMemo(() => {
+    if (!isDayView) return getWeekDays(weekStart);
+
+    const date = selectedDate ?? weekStart;
+    const dateStr = toISODateStr(date);
+    return [
+      {
+        dateStr,
+        day: date.getDate(),
+        isCurrentMonth: true,
+        isToday: dateStr === toISODateStr(new Date()),
+      },
+    ];
+  }, [isDayView, selectedDate, weekStart]);
+  const columnCount = days.length;
 
   const weekStartStr = days[0].dateStr;
-  const weekEndStr = days[6].dateStr;
+  const weekEndStr = days[days.length - 1].dateStr;
 
   // Build task bars for tasks that overlap this week
   const bars: WeekTaskBar[] = useMemo(
@@ -234,19 +262,31 @@ export function WeekCalendar({
   const todayColumnIndex = days.findIndex((d) => d.dateStr === todayStr);
   const timePos = getCurrentTimePosition();
 
-  // Auto-scroll to working hours on mount
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = INITIAL_SCROLL_HOUR * HOUR_HEIGHT;
-    }
-  }, [weekStart]);
+  // Luôn mở lịch ở đầu giờ làm việc sau khi đổi chế độ hoặc đổi ngày.
+  useLayoutEffect(() => {
+    const scrollArea = scrollRef.current;
+    if (!scrollArea) return;
+
+    const targetScrollTop = INITIAL_SCROLL_HOUR * HOUR_HEIGHT;
+    scrollArea.scrollTop = targetScrollTop;
+    const frame = window.requestAnimationFrame(() => {
+      scrollArea.scrollTop = targetScrollTop;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [mode, weekStartStr]);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
+    <div
+      data-calendar-view={mode}
+      className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm"
+    >
       {/* Sticky header */}
-      <div className="border-b border-gray-100">
+      <div className="shrink-0 border-b border-gray-100">
         {/* Day labels row */}
-        <div className="grid" style={{ gridTemplateColumns: "70px repeat(7, 1fr)" }}>
+        <div
+          className="grid"
+          style={{ gridTemplateColumns: `76px repeat(${columnCount}, minmax(0, 1fr))` }}
+        >
           {/* Time gutter header */}
           <div className="border-r border-gray-100" />
           {/* Day columns */}
@@ -258,11 +298,19 @@ export function WeekCalendar({
               }`}
             >
               <div
-                className={`text-xs font-semibold tracking-wide ${
-                  i === 0 || i === 6 ? "text-rose-400" : "text-gray-500"
+                className={`font-semibold tracking-wide ${
+                  isDayView
+                    ? "text-sm text-gray-900"
+                    : `text-xs ${
+                        i === 0 || i === 6
+                          ? "text-rose-400"
+                          : "text-gray-500"
+                      }`
                 }`}
               >
-                {WEEKDAY_FULL_LABELS[i]} {day.day}/{(new Date(day.dateStr).getMonth() + 1)}
+                {isDayView
+                  ? DAY_VIEW_LABELS[(selectedDate ?? weekStart).getDay()]
+                  : `${WEEKDAY_FULL_LABELS[i]} ${day.day}/${Number(day.dateStr.slice(5, 7))}`}
               </div>
             </div>
           ))}
@@ -271,7 +319,7 @@ export function WeekCalendar({
         {/* All-day row */}
         <div
           className="grid border-t border-gray-100"
-          style={{ gridTemplateColumns: "70px repeat(7, 1fr)" }}
+          style={{ gridTemplateColumns: `76px repeat(${columnCount}, minmax(0, 1fr))` }}
         >
           {/* Label */}
           <div className="flex items-center justify-center border-r border-gray-100 px-1 py-2">
@@ -279,16 +327,18 @@ export function WeekCalendar({
           </div>
           {/* All-day content area */}
           <div
-            className="relative col-span-7"
+            className="relative"
             style={{
+              gridColumn: `span ${columnCount} / span ${columnCount}`,
               minHeight:
-                allDayVisibleLanes > 0
-                  ? `${allDayVisibleLanes * 28 + 8}px`
-                  : "32px",
+                `${Math.max(56, allDayVisibleLanes * 28 + 8)}px`,
             }}
           >
             {/* Background columns */}
-            <div className="pointer-events-none absolute inset-0 grid grid-cols-7">
+            <div
+              className="pointer-events-none absolute inset-0 grid"
+              style={{ gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))` }}
+            >
               {days.map((day) => (
                 <div
                   key={day.dateStr}
@@ -311,8 +361,8 @@ export function WeekCalendar({
                 const bgClass = getProjectBgClass(projectColor);
                 const hoverClass = getProjectHoverClass(projectColor);
                 const hexColor = getProjectHex(projectColor);
-                const leftPercent = (startCol / 7) * 100;
-                const widthPercent = (span / 7) * 100;
+                const leftPercent = (startCol / columnCount) * 100;
+                const widthPercent = (span / columnCount) * 100;
 
                 return (
                   <div
@@ -401,8 +451,7 @@ export function WeekCalendar({
       {/* Scrollable hourly grid */}
       <div
         ref={scrollRef}
-        className="overflow-y-auto"
-        style={{ maxHeight: "calc(100vh - 320px)" }}
+        className="min-h-0 flex-1 overflow-y-auto"
       >
         <div className="relative" style={{ height: `${24 * HOUR_HEIGHT}px` }}>
           {/* Grid lines and hour labels */}
@@ -413,12 +462,20 @@ export function WeekCalendar({
               style={{
                 top: `${hour * HOUR_HEIGHT}px`,
                 height: `${HOUR_HEIGHT}px`,
-                gridTemplateColumns: "70px repeat(7, 1fr)",
+                gridTemplateColumns: `76px repeat(${columnCount}, minmax(0, 1fr))`,
               }}
             >
               {/* Hour label */}
-              <div className="flex items-start justify-end border-r border-gray-100 pr-2 pt-0">
-                <span className="relative -top-[9px] text-[11px] font-medium text-gray-400">
+              <div
+                className={`flex items-start justify-end border-r border-gray-100 pr-2 ${
+                  hour === 0 ? "pt-2" : "pt-0"
+                }`}
+              >
+                <span
+                  className={`text-[11px] font-medium text-gray-400 ${
+                    hour === 0 ? "" : "relative -top-[9px]"
+                  }`}
+                >
                   {String(hour).padStart(2, "0")} giờ
                 </span>
               </div>
@@ -442,8 +499,8 @@ export function WeekCalendar({
                 className="pointer-events-none absolute z-10"
                 style={{
                   top: `${(timePos.hour + timePos.minuteFraction) * HOUR_HEIGHT}px`,
-                  left: `calc(70px + ${(todayColumnIndex / 7) * 100}% * (100% - 70px) / 100%)`,
-                  width: `calc((100% - 70px) / 7)`,
+                  left: `calc(76px + (100% - 76px) * ${todayColumnIndex} / ${columnCount})`,
+                  width: `calc((100% - 76px) / ${columnCount})`,
                   /* We use a more precise calc below */
                 }}
               />
@@ -452,7 +509,7 @@ export function WeekCalendar({
                 className="pointer-events-none absolute z-20 flex items-center"
                 style={{
                   top: `${(timePos.hour + timePos.minuteFraction) * HOUR_HEIGHT - 4}px`,
-                  left: "70px",
+                  left: "76px",
                   right: 0,
                 }}
               >
@@ -460,12 +517,15 @@ export function WeekCalendar({
                 {todayColumnIndex > 0 && (
                   <div
                     style={{
-                      width: `${(todayColumnIndex / 7) * 100}%`,
+                      width: `${(todayColumnIndex / columnCount) * 100}%`,
                     }}
                   />
                 )}
                 {/* Red dot */}
-                <div className="relative flex items-center" style={{ width: `${(1 / 7) * 100}%` }}>
+                <div
+                  className="relative flex items-center"
+                  style={{ width: `${(1 / columnCount) * 100}%` }}
+                >
                   <div className="absolute -left-1.5 h-3 w-3 rounded-full bg-red-500 shadow-sm" />
                   <div className="h-[2px] w-full bg-red-500" />
                 </div>
@@ -495,8 +555,8 @@ export function WeekCalendar({
                   className="absolute z-10 px-0.5"
                   style={{
                     top: `${topPx}px`,
-                    left: `calc(70px + ${(dayIdx / 7) * 100}% * (1 - 70px / 100%))`,
-                    width: `calc((100% - 70px) / 7)`,
+                    left: `calc(76px + (100% - 76px) * ${dayIdx} / ${columnCount})`,
+                    width: `calc((100% - 76px) / ${columnCount})`,
                     height: "26px",
                   }}
                 >

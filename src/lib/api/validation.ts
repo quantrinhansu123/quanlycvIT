@@ -156,22 +156,6 @@ export function parseWorkTaskInput(body: Record<string, unknown>): WorkTaskInput
   };
 }
 
-export function parseTaskMoveInput(body: Record<string, unknown>): {
-  status: TaskStatus;
-  position: number;
-} {
-  const status = taskStatus(body);
-  const position = body.position;
-  if (
-    typeof position !== "number" ||
-    !Number.isInteger(position) ||
-    position < 0
-  ) {
-    throw new ApiException("Vị trí phải là số nguyên không âm.", 400);
-  }
-  return { status, position };
-}
-
 /** Chỉ chấp nhận link http/https để tránh javascript: và data: URL. */
 function reportLinkUrl(value: string): string {
   let parsed: URL;

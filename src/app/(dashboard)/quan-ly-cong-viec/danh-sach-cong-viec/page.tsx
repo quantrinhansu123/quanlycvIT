@@ -25,16 +25,13 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import { TaskTable } from "@/components/tasks/TaskTable";
 import { TaskCard } from "@/components/tasks/TaskCard";
 import { TaskFormModal } from "@/components/tasks/TaskFormModal";
-import { TaskQuickViewModal } from "@/components/tasks/TaskQuickViewModal";
-import { TaskReportDrawer } from "@/components/tasks/TaskReportDrawer";
+import { ListPaginationFooter } from "@/components/ui/ListPaginationFooter";
 import { cn, formatDateVN } from "@/lib/utils";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 
 type ViewMode = "table" | "grid";
 type FormModalState = { mode: "create" } | { mode: "edit"; task: WorkTask } | null;
-type QuickViewState = { task: WorkTask; tab: "info" | "reports" | "timeline" } | null;
-type ReportDrawerState = { task: WorkTask } | null;
 
 export default function TaskListPage() {
   const router = useRouter();
@@ -55,12 +52,18 @@ export default function TaskListPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("table");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [formModal, setFormModal] = useState<FormModalState>(null);
-  const [quickView, setQuickView] = useState<QuickViewState>(null);
-  const [reportDrawer, setReportDrawer] = useState<ReportDrawerState>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pageSize, setPageSize] = useState(50);
+  const [page, setPage] = useState(1);
 
   const projectsById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
   const membersById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
+  const pageCount = Math.max(1, Math.ceil(tasks.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const visibleTasks = useMemo(
+    () => tasks.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+    [currentPage, pageSize, tasks]
+  );
 
   const loadTasks = useCallback(async (filters: TaskFilters) => {
     setLoading(true);
@@ -127,7 +130,13 @@ export default function TaskListPage() {
   }
 
   function toggleSelectAll() {
-    setSelectedIds((prev) => (prev.length === tasks.length ? [] : tasks.map((t) => t.id)));
+    const visibleIds = visibleTasks.map((task) => task.id);
+    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+    setSelectedIds((current) =>
+      allVisibleSelected
+        ? current.filter((id) => !visibleIds.includes(id))
+        : [...new Set([...current, ...visibleIds])]
+    );
   }
 
   async function handleDelete(task: WorkTask) {
@@ -187,47 +196,55 @@ export default function TaskListPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mb-5 flex flex-wrap items-center gap-2.5">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-gray-100 px-3 py-2 xl:flex-nowrap">
         <button
           type="button"
           onClick={() => router.back()}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
           aria-label="Quay lại"
         >
           <ArrowLeft className="h-4 w-4" />
         </button>
 
-        <div className="relative min-w-[200px] flex-1">
+        <div className="relative min-w-[180px] max-w-[525px] flex-1 xl:min-w-0">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <input
             type="search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Tìm công việc..."
-            className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            className="h-9 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-xs text-gray-700 outline-none placeholder:text-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
           />
         </div>
 
         <FilterSelect
+          compact
+          className="w-[80px] shrink-0"
           label="Dự án"
           value={projectId}
           onChange={setProjectId}
           options={projects.map((p) => ({ value: p.id, label: p.code }))}
         />
         <FilterSelect
+          compact
+          className="w-[112px] shrink-0 2xl:w-[126px]"
           label="Người phụ trách"
           value={assigneeId}
           onChange={setAssigneeId}
           options={members.map((m) => ({ value: m.id, label: m.name }))}
         />
         <FilterSelect
+          compact
+          className="w-[112px] shrink-0 2xl:w-[124px]"
           label="Mức độ ưu tiên"
           value={priority}
           onChange={(value) => setPriority(value as TaskPriority | "")}
           options={TASK_PRIORITY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
         />
         <FilterSelect
+          compact
+          className="w-[92px] shrink-0 2xl:w-[104px]"
           label="Trạng thái"
           value={status}
           onChange={(value) => setStatus(value as TaskStatus | "")}
@@ -237,7 +254,7 @@ export default function TaskListPage() {
           type="button"
           onClick={() => setOverdueOnly((prev) => !prev)}
           className={cn(
-            "flex h-10 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium",
+            "flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 text-xs font-medium",
             overdueOnly ? "border-rose-300 bg-rose-50 text-rose-600" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
           )}
         >
@@ -245,8 +262,8 @@ export default function TaskListPage() {
           Việc trễ hạn
         </button>
 
-        <div className="ml-auto flex items-center gap-2">
-          <Button onClick={() => setFormModal({ mode: "create" })}>
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <Button size="sm" className="whitespace-nowrap px-2.5" onClick={() => setFormModal({ mode: "create" })}>
             <Plus className="h-4 w-4" />
             Thêm mới
           </Button>
@@ -254,7 +271,7 @@ export default function TaskListPage() {
             <button
               type="button"
               onClick={() => setViewMode("table")}
-              className={cn("flex h-10 w-10 items-center justify-center", viewMode === "table" ? "bg-gray-100 text-gray-700" : "text-gray-400 hover:bg-gray-50")}
+              className={cn("flex h-9 w-9 items-center justify-center", viewMode === "table" ? "bg-gray-100 text-gray-700" : "text-gray-400 hover:bg-gray-50")}
               aria-label="Xem dạng bảng"
             >
               <TableIcon className="h-4 w-4" />
@@ -262,7 +279,7 @@ export default function TaskListPage() {
             <button
               type="button"
               onClick={() => setViewMode("grid")}
-              className={cn("flex h-10 w-10 items-center justify-center border-l border-gray-200", viewMode === "grid" ? "bg-gray-100 text-gray-700" : "text-gray-400 hover:bg-gray-50")}
+              className={cn("flex h-9 w-9 items-center justify-center border-l border-gray-200", viewMode === "grid" ? "bg-gray-100 text-gray-700" : "text-gray-400 hover:bg-gray-50")}
               aria-label="Xem dạng lưới"
             >
               <LayoutGrid className="h-4 w-4" />
@@ -272,7 +289,7 @@ export default function TaskListPage() {
             type="button"
             onClick={handleExportCsv}
             disabled={tasks.length === 0}
-            className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Xuất file"
           >
             <Download className="h-4 w-4" />
@@ -280,7 +297,8 @@ export default function TaskListPage() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-gray-100 bg-white shadow-sm">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
+        <div className="account-table-scroll min-h-0 flex-1 overflow-auto">
         {loading ? (
           <TableSkeleton rows={5} />
         ) : error ? (
@@ -299,7 +317,7 @@ export default function TaskListPage() {
           />
         ) : viewMode === "table" ? (
           <TaskTable
-            tasks={tasks}
+            tasks={visibleTasks}
             projectsById={projectsById}
             membersById={membersById}
             selectedIds={selectedIds}
@@ -308,14 +326,12 @@ export default function TaskListPage() {
             onOpenTask={(task) =>
               router.push(`/quan-ly-cong-viec/danh-sach-cong-viec/${task.id}`)
             }
-            onReport={(task) => setReportDrawer({ task })}
-            onViewReports={(task) => setQuickView({ task, tab: "reports" })}
             onEdit={(task) => setFormModal({ mode: "edit", task })}
             onDelete={handleDelete}
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3">
-            {tasks.map((task) => (
+            {visibleTasks.map((task) => (
               <TaskCard
                 key={task.id}
                 task={task}
@@ -324,28 +340,25 @@ export default function TaskListPage() {
                 onOpen={(task) =>
                   router.push(`/quan-ly-cong-viec/danh-sach-cong-viec/${task.id}`)
                 }
-                onReport={(t) => setReportDrawer({ task: t })}
-                onViewReports={(t) => setQuickView({ task: t, tab: "reports" })}
                 onEdit={(t) => setFormModal({ mode: "edit", task: t })}
                 onDelete={handleDelete}
               />
             ))}
           </div>
         )}
+        </div>
 
-        {!loading && !error && tasks.length > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 px-6 py-3 text-sm text-gray-500">
-            <span>Tổng: {tasks.length} bản ghi</span>
-            <div className="flex items-center gap-2">
-              <span>Hiển thị</span>
-              <select className="rounded-md border border-gray-200 px-2 py-1 text-sm text-gray-600" defaultValue={100}>
-                <option value={20}>20</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-              </select>
-              <span>/ trang</span>
-            </div>
-          </div>
+        {!loading && !error && (
+          <ListPaginationFooter
+            total={tasks.length}
+            page={currentPage}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setPage(1);
+            }}
+          />
         )}
       </div>
 
@@ -364,25 +377,6 @@ export default function TaskListPage() {
         />
       )}
 
-      {quickView && (
-        <TaskQuickViewModal
-          task={quickView.task}
-          project={projectsById.get(quickView.task.projectId)}
-          assignee={membersById.get(quickView.task.assigneeId)}
-          initialTab={quickView.tab}
-          onClose={() => setQuickView(null)}
-          onReportAdded={() => loadTasks(currentFilters())}
-        />
-      )}
-
-      {reportDrawer && (
-        <TaskReportDrawer
-          task={reportDrawer.task}
-          assignee={membersById.get(reportDrawer.task.assigneeId)}
-          onClose={() => setReportDrawer(null)}
-          onSubmitted={() => loadTasks(currentFilters())}
-        />
-      )}
     </div>
   );
 }

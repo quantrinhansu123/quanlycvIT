@@ -1,54 +1,89 @@
-# Goal App – Quản lý công việc (Next.js)
+# Hệ thống quản lý nhân sự và công việc
 
-Giao diện được dựng lại từ ảnh chụp màn hình "Goal App": Sidebar quản trị + Danh sách dự án (bảng/lưới) + Modal thêm/sửa dự án + Trang chi tiết dự án.
+Ứng dụng quản trị nội bộ giúp doanh nghiệp quản lý tập trung:
+
+- Hồ sơ nhân sự, tài khoản, phòng ban và chức vụ.
+- Dự án, công việc, task, người phụ trách và báo cáo tiến độ.
+- Dashboard thống kê và lịch hạn chót.
+
+Một số phân hệ trên menu vẫn đang trong giai đoạn phát triển.
 
 ## Công nghệ
 
-Next.js 16 (App Router, Turbopack) · TypeScript · Tailwind CSS v4 · React 19 · Lucide React.
+- Next.js 16 (App Router), React 19, TypeScript
+- Tailwind CSS 4
+- Supabase (PostgreSQL, Auth)
+- Cloudinary (lưu ảnh đại diện)
 
-## Cài đặt & chạy
+## Yêu cầu
+
+- Node.js 20 trở lên
+- npm
+- Một dự án Supabase
+- Tài khoản Cloudinary nếu sử dụng chức năng tải ảnh đại diện
+
+## Cấu hình
+
+Sao chép file môi trường mẫu:
+
+```bash
+cp .env.example .env.local
+```
+
+Trên Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env.local
+```
+
+Điền các biến trong `.env.local`:
+
+| Biến | Mô tả |
+| --- | --- |
+| `NEXT_PUBLIC_API_BASE_URL` | Đường dẫn API, mặc định là `/api` |
+| `NEXT_PUBLIC_SUPABASE_URL` | URL của dự án Supabase |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Publishable/anon key của Supabase |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service role key dùng ở backend để quản trị tài khoản và mật khẩu |
+| `CLOUDINARY_CLOUD_NAME` | Cloud name của Cloudinary |
+| `CLOUDINARY_API_KEY` | API key của Cloudinary |
+| `CLOUDINARY_API_SECRET` | API secret của Cloudinary |
+
+> Không commit `.env.local` hoặc đưa `SUPABASE_SERVICE_ROLE_KEY` và `CLOUDINARY_API_SECRET` ra phía client.
+
+### Khởi tạo cơ sở dữ liệu
+
+Liên kết Supabase CLI với dự án, sau đó chạy migration:
+
+```bash
+npx supabase login
+npx supabase link --project-ref <PROJECT_REF>
+npx supabase db push
+```
+
+Nếu cần dữ liệu mẫu cho môi trường phát triển, chạy nội dung file `supabase/seed.sql` trong Supabase Dashboard → SQL Editor.
+
+## Cài đặt và chạy
 
 ```bash
 npm install
 npm run dev
-npm run lint
-npm run build
 ```
 
-Mặc định chạy ở `http://localhost:3002` (đổi cổng bằng `next dev -p <port>` nếu cần).
+Mở [http://localhost:3002](http://localhost:3002).
 
-## Kết nối Supabase và API
+Chạy bản production:
 
-1. Sao chép `.env.example` thành `.env.local`, sau đó điền
-   `NEXT_PUBLIC_SUPABASE_URL` và `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
-2. Chạy `npx supabase db push` để áp dụng toàn bộ migration.
-3. API nằm tại `/api`. Trong giai đoạn hiện tại, ba màn hình Dự án, Công việc
-   và Task gọi API trực tiếp, chưa yêu cầu đăng nhập hay session.
-4. Migration `20260729000300_dev_anon_project_api.sql` cấp quyền `anon` tạm
-   thời cho các bảng của ba màn hình và chỉ các cột danh bạ cần hiển thị.
-5. Ba service dự án, công việc và task đã dùng API thật thay cho mock data.
+```bash
+npm run build
+npm run start
+```
 
-Các endpoint CRUD:
+Kiểm tra mã nguồn:
 
-- `/api/projects` và `/api/projects/:id`
-- `/api/tasks` và `/api/tasks/:id` — dữ liệu bảng `cong_viec`
-- `/api/subtasks` và `/api/subtasks/:id` — dữ liệu bảng `task`
-- `/api/users` — danh sách tài khoản đang hoạt động
+```bash
+npm run lint
+```
 
-Mỗi endpoint danh sách hỗ trợ `GET`, endpoint gốc hỗ trợ `POST`, còn endpoint
-theo ID hỗ trợ `GET`, `PUT`, `DELETE`.
+## Lưu ý triển khai
 
-## Ghi chú giả định khi dựng theo ảnh
-
-- Ảnh mẫu là giao diện **dashboard quản trị nội bộ** (sidebar + bảng dữ liệu), không phải trang thương mại điện tử, nên các phần Header/Banner/Giỏ hàng public không được dựng.
-- Không có ảnh mẫu cho các mục còn lại của sidebar (Ứng dụng, Nhân viên, Kanban, Gantt...) nên các trang này để dạng khung "đang phát triển" (`ComingSoon`), giữ điều hướng hoạt động đầy đủ.
-- Ảnh chân dung nhân sự trong ảnh mẫu không nhìn rõ nên dùng avatar chữ cái đầu (initials) thay thế, đủ để tái sử dụng khi có ảnh thật.
-- Nút xem dạng lưới/bảng và xuất CSV được suy ra hợp lý từ icon có sẵn trong ảnh — đã cài đặt thành tính năng thật, không phải icon chết.
-
-## Tự kiểm tra
-
-- `npm run lint`: pass, không cảnh báo/lỗi.
-- `npm run build`: build production thành công, không lỗi TypeScript.
-- Các Route Handler API được kiểm tra trực tiếp ở chế độ chưa có session.
-- Không dùng cấu hình quyền `anon` hiện tại cho production; cần bật lại xác thực
-  và thu hồi các policy `*_anon_dev` trước khi triển khai chính thức.
+Các migration có hậu tố `dev_anon` cấp quyền tạm cho role `anon` để phục vụ phát triển. Trước khi đưa lên production, cần rà soát lại RLS/policy, chuyển quyền phù hợp sang role `authenticated` và bảo vệ các API theo phiên đăng nhập.

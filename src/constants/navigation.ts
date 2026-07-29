@@ -12,7 +12,6 @@ import {
   Layers,
   ListChecks,
   ListTodo,
-  Kanban,
   CalendarClock,
   GanttChartSquare,
   Archive,
@@ -24,6 +23,7 @@ export interface NavChild {
   label: string;
   href: string;
   icon: LucideIcon;
+  disabled?: boolean;
 }
 
 export interface NavItem {
@@ -31,6 +31,7 @@ export interface NavItem {
   href: string;
   icon: LucideIcon;
   children?: NavChild[];
+  disabled?: boolean;
 }
 
 export const NAV_ITEMS: NavItem[] = [
@@ -43,7 +44,7 @@ export const NAV_ITEMS: NavItem[] = [
     children: [
       {
         label: "Thống kê nhân sự",
-        href: "/nhan-vien#thong-ke-nhan-su",
+        href: "/nhan-vien/thong-ke-nhan-su",
         icon: ChartNoAxesColumnIncreasing,
       },
       {
@@ -53,22 +54,24 @@ export const NAV_ITEMS: NavItem[] = [
       },
       {
         label: "Phòng Ban & Chức Vụ",
-        href: "/nhan-vien#phong-ban-chuc-vu",
+        href: "/nhan-vien/phong-ban-chuc-vu",
         icon: Building2,
       },
       {
         label: "Sơ đồ tổ chức",
-        href: "/nhan-vien#so-do-to-chuc",
+        href: "/nhan-vien/so-do-to-chuc",
         icon: Network,
+        disabled: true,
       },
       {
         label: "Phân Quyền",
-        href: "/nhan-vien#phan-quyen",
+        href: "/nhan-vien/phan-quyen",
         icon: ShieldCheck,
+        disabled: true,
       },
     ],
   },
-  { label: "Quản lý công", href: "/quan-ly-cong", icon: Settings2 },
+  { label: "Quản lý công", href: "/quan-ly-cong", icon: Settings2, disabled: true },
   {
     label: "Quản lý công việc",
     href: "/quan-ly-cong-viec",
@@ -90,11 +93,6 @@ export const NAV_ITEMS: NavItem[] = [
         icon: ListTodo,
       },
       {
-        label: "Bảng Kanban",
-        href: "/quan-ly-cong-viec/bang-kanban",
-        icon: Kanban,
-      },
-      {
         label: "Lịch hạn chót",
         href: "/quan-ly-cong-viec/lich-han-chot",
         icon: CalendarClock,
@@ -103,12 +101,13 @@ export const NAV_ITEMS: NavItem[] = [
         label: "Biểu đồ Gantt",
         href: "/quan-ly-cong-viec/bieu-do-gantt",
         icon: GanttChartSquare,
+        disabled: true,
       },
     ],
   },
-  { label: "Quản lý tài sản", href: "/quan-ly-tai-san", icon: Archive },
-  { label: "Tài liệu", href: "/tai-lieu", icon: BookOpen },
-  { label: "Hệ thống", href: "/he-thong", icon: Cog },
+  { label: "Quản lý tài sản", href: "/quan-ly-tai-san", icon: Archive, disabled: true },
+  { label: "Tài liệu", href: "/tai-lieu", icon: BookOpen, disabled: true },
+  { label: "Hệ thống", href: "/he-thong", icon: Cog, disabled: true },
 ];
 
 export const BREADCRUMB_LABELS: Record<string, string> = {
@@ -116,11 +115,20 @@ export const BREADCRUMB_LABELS: Record<string, string> = {
   "danh-sach-du-an": "Danh sách dự án",
   "danh-sach-cong-viec": "Danh sách công việc",
   "danh-sach-task": "Danh sách Task",
-  "bang-kanban": "Bảng Kanban",
   "lich-han-chot": "Lịch hạn chót",
   "bieu-do-gantt": "Biểu đồ Gantt",
   "ung-dung": "Ứng dụng",
   "nhan-vien": "Nhân viên",
+  "phong-ban-chuc-vu": "Phòng Ban & Chức Vụ",
+  "thong-ke-nhan-su": "Thống kê nhân sự",
+  "so-do-to-chuc": "Sơ đồ tổ chức",
+  "phan-quyen": "Phân quyền",
+  "cham-cong": "Chấm Công",
+  "thong-ke-cong": "Thống Kê Công",
+  "duyet-cong": "Duyệt Công",
+  "nghi-phep": "Nghỉ Phép",
+  "ban-do-nhan-vien": "Bản Đồ Nhân Viên",
+  "cau-hinh-ngay-le": "Cấu Hình Ngày Lễ",
   "quan-ly-cong": "Quản lý công",
   "quan-ly-tai-san": "Quản lý tài sản",
   "tai-lieu": "Tài liệu",

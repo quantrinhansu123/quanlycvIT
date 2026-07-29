@@ -7,5 +7,7 @@ export const accountService = {
   create: (input: AccountInput) => apiClient.post<EmployeeAccount>("/accounts", input),
   update: (id: string, input: AccountInput) =>
     apiClient.put<EmployeeAccount>(`/accounts/${id}`, input),
+  updatePassword: (id: string, newPassword: string) =>
+    apiClient.post<boolean>(`/accounts/${id}/password`, { newPassword }),
   delete: (id: string) => apiClient.delete<boolean>(`/accounts/${id}`),
 };

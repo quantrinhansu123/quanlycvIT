@@ -1,15 +1,14 @@
 "use client";
 
-import { CalendarDays } from "lucide-react";
+import { CalendarDays, FilePenLine, History, Pencil, Trash2 } from "lucide-react";
 import type { Subtask } from "@/types/subtask";
 import { isSubtaskOverdue } from "@/types/subtask";
 import type { WorkTask } from "@/types/task";
 import type { ProjectMember } from "@/types/project";
 import { Avatar, AvatarStack } from "@/components/ui/Avatar";
-import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { TaskPriorityBadge, TaskStatusBadge, OverdueTag } from "@/components/tasks/TaskBadges";
-import { TaskActionMenu } from "@/components/tasks/TaskActionMenu";
+import { ActionIconButton } from "@/components/ui/ActionIconButton";
 import { formatDateVN } from "@/lib/utils";
 
 interface SubtaskTableProps {
@@ -44,11 +43,24 @@ export function SubtaskTable({
   const allSelected = subtasks.length > 0 && selectedIds.length === subtasks.length;
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[1080px] border-collapse text-sm">
-        <thead>
-          <tr className="border-b border-gray-100 bg-gray-50/70 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-            <th className="w-12 px-6 py-3">
+    <div className="min-w-0">
+      <table
+        className={`w-full ${hideWorkTaskColumn ? "min-w-[820px]" : "min-w-[900px]"} table-fixed border-collapse text-xs xl:min-w-0`}
+      >
+        <colgroup>
+          <col className="w-9" />
+          <col className={hideWorkTaskColumn ? "w-[25%]" : "w-[18%]"} />
+          {!hideWorkTaskColumn && <col className="w-[12%]" />}
+          <col className="w-[14%]" />
+          <col className="w-[12%]" />
+          <col className="w-[11%]" />
+          <col className="w-[9%]" />
+          <col className="w-[8%]" />
+          <col className="w-[176px]" />
+        </colgroup>
+        <thead className="sticky top-0 z-10 bg-gray-50">
+          <tr className="border-b border-gray-100 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+            <th className="px-2 py-3">
               <input
                 type="checkbox"
                 checked={allSelected}
@@ -57,14 +69,14 @@ export function SubtaskTable({
                 aria-label="Chọn tất cả"
               />
             </th>
-            <th className="px-3 py-3">Tên task</th>
-            {!hideWorkTaskColumn && <th className="px-3 py-3">Thuộc công việc</th>}
-            <th className="px-3 py-3">Người thực hiện</th>
-            <th className="px-3 py-3">Hạn hoàn thành</th>
-            <th className="px-3 py-3">Tiến độ</th>
-            <th className="px-3 py-3">Ưu tiên</th>
-            <th className="px-3 py-3">Trạng thái</th>
-            <th className="w-40 px-3 py-3 text-right">Thao tác</th>
+            <th className="whitespace-nowrap px-2 py-3">Tên task</th>
+            {!hideWorkTaskColumn && <th className="whitespace-nowrap px-2 py-3">Thuộc công việc</th>}
+            <th className="whitespace-nowrap px-2 py-3">Người thực hiện</th>
+            <th className="whitespace-nowrap px-2 py-3">Hạn hoàn thành</th>
+            <th className="whitespace-nowrap px-2 py-3">Tiến độ</th>
+            <th className="whitespace-nowrap px-2 py-3">Ưu tiên</th>
+            <th className="whitespace-nowrap px-1.5 py-3">Trạng thái</th>
+            <th className="whitespace-nowrap px-3 py-3 text-left">Thao tác</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
@@ -74,8 +86,8 @@ export function SubtaskTable({
             const overdue = isSubtaskOverdue(subtask);
 
             return (
-              <tr key={subtask.id} className="group transition-colors hover:bg-gray-50/60">
-                <td className="px-6 py-4 align-top">
+              <tr key={subtask.id} className="data-table-row group">
+                <td className="px-2 py-3 align-top">
                   <input
                     type="checkbox"
                     checked={selectedIds.includes(subtask.id)}
@@ -84,11 +96,11 @@ export function SubtaskTable({
                     aria-label={`Chọn task ${subtask.title}`}
                   />
                 </td>
-                <td className="max-w-xs px-3 py-4 align-top">
+                <td className="min-w-0 px-2 py-3 align-top">
                   <button
                     type="button"
                     onClick={() => onOpenSubtask(subtask)}
-                    className="block truncate text-left text-sm font-semibold text-gray-800 hover:text-blue-600"
+                    className="block w-full truncate text-left text-xs font-semibold text-gray-800 hover:text-blue-600"
                   >
                     {subtask.title}
                   </button>
@@ -97,26 +109,26 @@ export function SubtaskTable({
                   )}
                 </td>
                 {!hideWorkTaskColumn && (
-                  <td className="max-w-[180px] px-3 py-4 align-top">
-                    <span className="block truncate text-sm text-gray-600">{workTask?.title ?? "--"}</span>
+                  <td className="min-w-0 px-2 py-3 align-top">
+                    <span className="block truncate text-xs text-gray-600">{workTask?.title ?? "--"}</span>
                   </td>
                 )}
-                <td className="px-3 py-4 align-top">
+                <td className="min-w-0 px-2 py-3 align-top">
                   {subtask.assignees.length > 1 ? (
-                    <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 items-center gap-1.5">
                       <AvatarStack people={subtask.assignees} max={3} />
-                      <span className="text-sm text-gray-600">
+                      <span className="truncate text-xs text-gray-600">
                         {subtask.assignees.length} người
                       </span>
                     </div>
                   ) : assignee ?? subtask.assignees[0] ? (
-                    <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 items-center gap-1.5">
                       <Avatar
                         name={(assignee ?? subtask.assignees[0]).name}
                         color={(assignee ?? subtask.assignees[0]).avatarColor}
                         size="sm"
                       />
-                      <span className="text-sm text-gray-600">
+                      <span className="truncate text-xs text-gray-600">
                         {(assignee ?? subtask.assignees[0]).name}
                       </span>
                     </div>
@@ -124,33 +136,47 @@ export function SubtaskTable({
                     "--"
                   )}
                 </td>
-                <td className="px-3 py-4 align-top">
-                  <div className="flex items-center gap-1.5 text-sm text-gray-500">
-                    <CalendarDays className="h-4 w-4 text-gray-300" />
+                <td className="px-2 py-3 align-top">
+                  <div className="flex items-center gap-1 whitespace-nowrap text-xs text-gray-500">
+                    <CalendarDays className="hidden h-3.5 w-3.5 shrink-0 text-gray-300 2xl:block" />
                     {formatDateVN(subtask.dueDate)}
                   </div>
                   {overdue && <OverdueTag className="mt-1" />}
                 </td>
-                <td className="px-3 py-4 align-top">
-                  <ProgressBar value={subtask.progress} />
+                <td className="px-2 py-3 align-top">
+                  <ProgressBar value={subtask.progress} className="w-12 2xl:w-16" />
                 </td>
-                <td className="px-3 py-4 align-top">
-                  <TaskPriorityBadge priority={subtask.priority} />
+                <td className="px-2 py-3 align-top">
+                  <TaskPriorityBadge priority={subtask.priority} className="px-1.5 py-0.5 text-[11px]" />
                 </td>
-                <td className="px-3 py-4 align-top">
-                  <TaskStatusBadge status={subtask.status} />
+                <td className="px-1.5 py-3 align-top">
+                  <TaskStatusBadge status={subtask.status} className="px-1.5 py-0.5 text-[10px]" />
                 </td>
-                <td className="px-3 py-4 align-top">
-                  <div className="flex items-center justify-end gap-2">
+                <td className="px-3 py-3 align-top">
+                  <div className="flex min-w-[152px] items-center justify-start gap-1.5">
                     {subtask.status !== "done" && (
-                      <Button size="sm" variant="secondary" onClick={() => onReport(subtask)}>
-                        Báo cáo
-                      </Button>
+                      <ActionIconButton
+                        icon={FilePenLine}
+                        label="Báo cáo tiến độ"
+                        onClick={() => onReport(subtask)}
+                      />
                     )}
-                    <TaskActionMenu
-                      onViewReports={() => onViewReports(subtask)}
-                      onEdit={() => onEdit(subtask)}
-                      onDelete={() => onDelete(subtask)}
+                    <ActionIconButton
+                      icon={History}
+                      label="Lịch sử báo cáo"
+                      onClick={() => onViewReports(subtask)}
+                    />
+                    <ActionIconButton
+                      icon={Pencil}
+                      label="Chỉnh sửa"
+                      tone="warning"
+                      onClick={() => onEdit(subtask)}
+                    />
+                    <ActionIconButton
+                      icon={Trash2}
+                      label="Xóa task"
+                      tone="danger"
+                      onClick={() => onDelete(subtask)}
                     />
                   </div>
                 </td>

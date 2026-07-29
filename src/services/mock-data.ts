@@ -42,9 +42,16 @@ export const DIRECTORY: ProjectMember[] = [
 export interface ProjectTask {
   id: string;
   title: string;
+  description?: string;
   status: "todo" | "inProgress" | "review" | "done";
   assignee: ProjectMember;
+  assignees?: ProjectMember[];
+  priority?: "low" | "medium" | "high" | "urgent";
+  startDate?: string;
   dueDate: string;
+  progress?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export const TASK_STATUS_LABEL: Record<ProjectTask["status"], string> = {
@@ -121,6 +128,7 @@ export const INITIAL_PROJECTS: Project[] = [
     steps: DEFAULT_PROJECT_STEPS,
     startDate: "2025-03-01",
     endDate: "2025-12-30",
+    status: "done",
     managers: [DIRECTORY[0]],
     manager: DIRECTORY[0],
     members: [DIRECTORY[0], DIRECTORY[1], DIRECTORY[2]],
@@ -136,6 +144,7 @@ export const INITIAL_PROJECTS: Project[] = [
     steps: DEFAULT_PROJECT_STEPS,
     startDate: "2026-01-10",
     endDate: "2026-08-30",
+    status: "inProgress",
     managers: [DIRECTORY[1]],
     manager: DIRECTORY[1],
     members: [DIRECTORY[1], DIRECTORY[3], DIRECTORY[4]],

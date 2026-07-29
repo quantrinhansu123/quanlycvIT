@@ -14,6 +14,17 @@ export const DEFAULT_PROJECT_STEPS: ProjectStepConfig[] = [
 ];
 
 export type ProjectColor = "purple" | "green" | "orange" | "red" | "blue";
+export type ProjectStatus = "notStarted" | "inProgress" | "overdue" | "done";
+
+export const PROJECT_STATUS_META: Record<
+  ProjectStatus,
+  { label: string; badge: string }
+> = {
+  notStarted: { label: "Chưa bắt đầu", badge: "bg-gray-100 text-gray-600" },
+  inProgress: { label: "Đang thực hiện", badge: "bg-blue-100 text-blue-700" },
+  overdue: { label: "Trễ hạn", badge: "bg-rose-100 text-rose-600" },
+  done: { label: "Hoàn thành", badge: "bg-emerald-100 text-emerald-700" },
+};
 
 export const PROJECT_COLORS: { value: ProjectColor; hex: string }[] = [
   { value: "purple", hex: "#7C5CFC" },
@@ -47,6 +58,7 @@ export interface Project {
   steps: ProjectStepConfig[];
   startDate: string;
   endDate: string;
+  status: ProjectStatus;
   managers: ProjectMember[];
   /** Người quản lý chính, giữ lại để tương thích với dữ liệu/API cũ. */
   manager: ProjectMember;

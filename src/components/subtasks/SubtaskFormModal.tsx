@@ -182,19 +182,23 @@ export function SubtaskFormModal({
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end">
-      <div
-        className="absolute inset-0 bg-gray-900/40"
-        onClick={submitting ? undefined : onClose}
-        aria-hidden="true"
-      />
-
+    <div
+      className="account-overlay fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 p-4"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !submitting) onClose();
+      }}
+    >
       <form
         onSubmit={handleSubmit}
-        className="relative flex h-full w-full max-w-md flex-col overflow-hidden bg-white shadow-2xl sm:max-w-lg"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="subtask-form-title"
+        className="account-dialog flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
       >
-        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
-          <h2 className="text-lg font-bold text-gray-900">{mode === "edit" ? "Chỉnh sửa task" : "Thêm task mới"}</h2>
+        <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-6 py-4">
+          <h2 id="subtask-form-title" className="text-lg font-bold text-gray-900">
+            {mode === "edit" ? "Chỉnh sửa task" : "Thêm task mới"}
+          </h2>
           <button
             type="button"
             onClick={onClose}
@@ -393,7 +397,7 @@ export function SubtaskFormModal({
           {submitError && <p className="text-sm text-rose-500">{submitError}</p>}
         </div>
 
-        <div className="flex items-center justify-end gap-3 border-t border-gray-100 px-6 py-4">
+        <div className="flex shrink-0 items-center justify-end gap-3 border-t border-gray-100 px-6 py-4">
           <Button type="button" variant="secondary" onClick={onClose} disabled={submitting}>
             Hủy
           </Button>

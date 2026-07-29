@@ -141,7 +141,7 @@ function allocateLanes(
   return result;
 }
 
-const MAX_VISIBLE_LANES = 3;
+const MAX_VISIBLE_LANES = 2;
 
 export function DeadlineCalendar({
   year,
@@ -167,9 +167,12 @@ export function DeadlineCalendar({
   const weekLanes = useMemo(() => allocateLanes(weeks, bars), [weeks, bars]);
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-gray-100 bg-white shadow-sm">
+    <div
+      data-calendar-view="month"
+      className="flex h-full min-h-0 flex-col overflow-x-auto rounded-xl border border-gray-100 bg-white shadow-sm"
+    >
       {/* Header row */}
-      <div className="grid grid-cols-7 border-b border-gray-100">
+      <div className="grid shrink-0 grid-cols-7 border-b border-gray-100">
         {WEEKDAY_LABELS.map((label, i) => (
           <div
             key={label}
@@ -183,15 +186,16 @@ export function DeadlineCalendar({
       </div>
 
       {/* Calendar body */}
-      {weeks.map((week, wi) => {
-        const lanes = weekLanes.get(wi) ?? [];
-        const maxLane = lanes.reduce((max, l) => Math.max(max, l.lane), -1);
-        const totalLanes = maxLane + 1;
-        const visibleLanes = Math.min(totalLanes, MAX_VISIBLE_LANES);
-        const hiddenCount = totalLanes - visibleLanes;
+      <div className="grid min-h-0 flex-1 grid-rows-6">
+        {weeks.map((week, wi) => {
+          const lanes = weekLanes.get(wi) ?? [];
+          const maxLane = lanes.reduce((max, l) => Math.max(max, l.lane), -1);
+          const totalLanes = maxLane + 1;
+          const visibleLanes = Math.min(totalLanes, MAX_VISIBLE_LANES);
+          const hiddenCount = totalLanes - visibleLanes;
 
-        return (
-          <div key={wi} className="border-b border-gray-50 last:border-b-0">
+          return (
+          <div key={wi} className="flex min-h-0 flex-col overflow-hidden border-b border-gray-50 last:border-b-0">
             {/* Date numbers row */}
             <div className="grid grid-cols-7">
               {week.map((day) => (
@@ -221,7 +225,7 @@ export function DeadlineCalendar({
             </div>
 
             {/* Task bars area */}
-            <div className="relative" style={{ minHeight: visibleLanes > 0 ? `${visibleLanes * 28 + 8}px` : "20px" }}>
+            <div className="relative min-h-0 flex-1 overflow-hidden">
               {/* Background columns to show cell borders */}
               <div className="pointer-events-none absolute inset-0 grid grid-cols-7">
                 {week.map((day) => (
@@ -261,10 +265,10 @@ export function DeadlineCalendar({
                       key={`${bar.task.id}-w${wi}`}
                       className="absolute px-0.5"
                       style={{
-                        top: `${lane * 28 + 4}px`,
+                        top: `${lane * 25 + 3}px`,
                         left: `${leftPercent}%`,
                         width: `${widthPercent}%`,
-                        height: "24px",
+                        height: "22px",
                       }}
                     >
                       <button
@@ -331,17 +335,15 @@ export function DeadlineCalendar({
 
               {/* Show "+N more" indicator if tasks overflow */}
               {hiddenCount > 0 && (
-                <div
-                  className="absolute right-2 text-[10px] font-medium text-gray-400"
-                  style={{ top: `${visibleLanes * 28 + 4}px` }}
-                >
+                <div className="absolute bottom-1 right-2 text-[10px] font-medium text-gray-400">
                   +{hiddenCount} khác
                 </div>
               )}
             </div>
           </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }

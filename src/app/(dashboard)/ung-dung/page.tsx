@@ -1,5 +1,5 @@
-import { ComingSoon } from "@/components/ui/ComingSoon";
+import { ApplicationHubPage } from "@/components/applications/ApplicationHubPage";
 
 export default function Page() {
-  return <ComingSoon title="Ứng dụng" />;
+  return <ApplicationHubPage />;
 }

@@ -1,8 +1,26 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
+export const APP_TIME_ZONE = "Asia/Ho_Chi_Minh";
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
+}
+
+/** Trả về ngày YYYY-MM-DD theo múi giờ nghiệp vụ của ứng dụng. */
+export function getAppDateKey(date: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: APP_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const values = Object.fromEntries(
+    parts
+      .filter((part) => part.type === "year" || part.type === "month" || part.type === "day")
+      .map((part) => [part.type, part.value])
+  );
+  return `${values.year}-${values.month}-${values.day}`;
 }
 
 export function formatDateVN(isoDate: string): string {
@@ -21,15 +39,6 @@ export function toDateInputValue(isoDate: string): string {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const year = date.getFullYear();
   return `${year}-${month}-${day}`;
-}
-
-/** Dạng ngắn dd/MM dùng trên thẻ Kanban. */
-export function formatDayMonth(isoDate: string): string {
-  const date = new Date(isoDate);
-  if (Number.isNaN(date.getTime())) return "--/--";
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  return `${day}/${month}`;
 }
 
 /**

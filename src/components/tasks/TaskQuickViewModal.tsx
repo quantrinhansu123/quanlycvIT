@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Building2,
@@ -9,27 +9,19 @@ import {
   Clock,
   History,
   ListChecks,
-  MessageSquare,
-  Plus,
   User,
   X,
   type LucideIcon,
 } from "lucide-react";
-import type { TaskReport, WorkTask } from "@/types/task";
+import type { WorkTask } from "@/types/task";
 import { TASK_STATUS_META } from "@/types/task";
 import type { Subtask } from "@/types/subtask";
 import type { Project, ProjectMember } from "@/types/project";
-import { taskService } from "@/services/task-service";
 import { subtaskService } from "@/services/subtask-service";
-import { Button } from "@/components/ui/Button";
 import { TaskStatusBadge, TaskPriorityBadge } from "@/components/tasks/TaskBadges";
-import { TaskReportDrawer } from "@/components/tasks/TaskReportDrawer";
-import { ProgressReportItem } from "@/components/tasks/ProgressReportItem";
 import { formatDateVN, cn } from "@/lib/utils";
-import { useFeedback } from "@/components/ui/FeedbackProvider";
-import { getErrorMessage } from "@/lib/errors";
 
-type QuickViewTab = "info" | "reports" | "timeline";
+type QuickViewTab = "info" | "timeline";
 
 interface TaskQuickViewModalProps {
   task: WorkTask;
@@ -37,7 +29,6 @@ interface TaskQuickViewModalProps {
   assignee?: ProjectMember;
   initialTab?: QuickViewTab;
   onClose: () => void;
-  onReportAdded?: () => void;
 }
 
 export function TaskQuickViewModal({
@@ -46,18 +37,11 @@ export function TaskQuickViewModal({
   assignee,
   initialTab = "info",
   onClose,
-  onReportAdded,
 }: TaskQuickViewModalProps) {
   const router = useRouter();
-  const { notify } = useFeedback();
   const [tab, setTab] = useState<QuickViewTab>(initialTab);
-  const [reports, setReports] = useState<TaskReport[]>([]);
-  const [reportsLoaded, setReportsLoaded] = useState(false);
-  const [reportDrawerOpen, setReportDrawerOpen] = useState(false);
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [subtasksLoaded, setSubtasksLoaded] = useState(false);
-  // Tiến độ đổi ngay sau khi gửi báo cáo nên giữ bản sao cục bộ.
-  const [progress, setProgress] = useState(task.progress);
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -65,35 +49,6 @@ export function TaskQuickViewModal({
       document.body.style.overflow = "";
     };
   }, []);
-
-  const notifyLoadError = useCallback(
-    (reportError: unknown) => {
-      notify({
-        type: "error",
-        title: "Không thể tải lịch sử báo cáo",
-        description: getErrorMessage(reportError, "Vui lòng thử lại."),
-      });
-    },
-    [notify]
-  );
-
-  useEffect(() => {
-    let active = true;
-    taskService
-      .getTaskReports(task.id)
-      .then((data) => {
-        if (!active) return;
-        setReports(data);
-        setReportsLoaded(true);
-      })
-      .catch((reportError) => {
-        if (!active) return;
-        notifyLoadError(reportError);
-      });
-    return () => {
-      active = false;
-    };
-  }, [notifyLoadError, task.id]);
 
   // Tải danh sách task con
   useEffect(() => {
@@ -113,16 +68,6 @@ export function TaskQuickViewModal({
       active = false;
     };
   }, [task.id]);
-
-  const reloadReports = useCallback(() => {
-    taskService
-      .getTaskReports(task.id)
-      .then((data) => {
-        setReports(data);
-        setReportsLoaded(true);
-      })
-      .catch(notifyLoadError);
-  }, [notifyLoadError, task.id]);
 
   return (
     <>
@@ -173,12 +118,6 @@ export function TaskQuickViewModal({
                 label="Thông tin"
               />
               <TabButton
-                active={tab === "reports"}
-                onClick={() => setTab("reports")}
-                icon={MessageSquare}
-                label={`Báo cáo (${reportsLoaded ? reports.length : 0})`}
-              />
-              <TabButton
                 active={tab === "timeline"}
                 onClick={() => setTab("timeline")}
                 icon={History}
@@ -202,12 +141,12 @@ export function TaskQuickViewModal({
                 <div className="rounded-xl border border-gray-200 px-4 py-3.5">
                   <div className="mb-2.5 flex items-center justify-between">
                     <p className="text-sm font-semibold text-gray-700">Tiến độ thực tế</p>
-                    <span className="text-sm font-bold text-blue-600">{progress}%</span>
+                    <span className="text-sm font-bold text-blue-600">{task.progress}%</span>
                   </div>
                   <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
                     <div
                       className="h-full rounded-full bg-blue-600 transition-all"
-                      style={{ width: `${progress}%` }}
+                      style={{ width: `${task.progress}%` }}
                     />
                   </div>
                 </div>
@@ -320,41 +259,6 @@ export function TaskQuickViewModal({
               </div>
             )}
 
-            {tab === "reports" && (
-              <div>
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-base font-bold text-gray-900">Báo cáo từ nhân sự</p>
-                  <Button onClick={() => setReportDrawerOpen(true)}>
-                    <Plus className="h-4 w-4" />
-                    Báo cáo tiến độ
-                  </Button>
-                </div>
-
-                {!reportsLoaded ? (
-                  <DashedPanel>
-                    <p className="text-sm text-gray-400">Đang tải lịch sử báo cáo...</p>
-                  </DashedPanel>
-                ) : reports.length === 0 ? (
-                  <DashedPanel>
-                    <MessageSquare className="h-9 w-9 text-gray-300" />
-                    <p className="mt-3 text-sm font-semibold text-gray-700">
-                      Chưa có báo cáo tiến độ
-                    </p>
-                    <p className="mt-1 max-w-sm text-sm text-gray-400">
-                      Báo cáo tiến trình làm việc hàng ngày của bạn và thành viên sẽ được
-                      tổng hợp ở đây.
-                    </p>
-                  </DashedPanel>
-                ) : (
-                  <ul className="space-y-3">
-                    {reports.map((report) => (
-                      <ProgressReportItem key={report.id} report={report} />
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
-
             {tab === "timeline" && (
               <DashedPanel>
                 <CalendarDays className="h-9 w-9 text-gray-300" />
@@ -370,19 +274,6 @@ export function TaskQuickViewModal({
         </div>
       </div>
 
-      {reportDrawerOpen && (
-        <TaskReportDrawer
-          task={{ ...task, progress }}
-          assignee={assignee}
-          onClose={() => setReportDrawerOpen(false)}
-          onSubmitted={(report) => {
-            setProgress(report.progress);
-            setTab("reports");
-            reloadReports();
-            onReportAdded?.();
-          }}
-        />
-      )}
     </>
   );
 }

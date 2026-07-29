@@ -32,10 +32,11 @@ export default function DeadlineCalendarPage() {
   const router = useRouter();
   const { notify } = useFeedback();
 
-  const today = new Date();
-  const [year, setYear] = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth()); // 0-indexed
-  const [weekStart, setWeekStart] = useState<Date>(() => getWeekRange(today).weekStart);
+  const [cursorDate, setCursorDate] = useState<Date>(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today;
+  });
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [members, setMembers] = useState<ProjectMember[]>([]);
@@ -50,6 +51,13 @@ export default function DeadlineCalendarPage() {
 
   const [formModal, setFormModal] = useState<FormModalState>(null);
   const [quickView, setQuickView] = useState<QuickViewState>(null);
+
+  const year = cursorDate.getFullYear();
+  const month = cursorDate.getMonth();
+  const { weekStart, weekEnd } = useMemo(
+    () => getWeekRange(cursorDate),
+    [cursorDate]
+  );
 
   const projectsById = useMemo(
     () => new Map(projects.map((p) => [p.id, p])),
@@ -128,47 +136,53 @@ export default function DeadlineCalendarPage() {
 
   function goToday() {
     const now = new Date();
-    setYear(now.getFullYear());
-    setMonth(now.getMonth());
-    setWeekStart(getWeekRange(now).weekStart);
+    now.setHours(0, 0, 0, 0);
+    setCursorDate(now);
+  }
+
+  function shiftMonth(date: Date, amount: number) {
+    const next = new Date(date);
+    const currentDay = next.getDate();
+    next.setDate(1);
+    next.setMonth(next.getMonth() + amount);
+    const lastDayOfTargetMonth = new Date(
+      next.getFullYear(),
+      next.getMonth() + 1,
+      0
+    ).getDate();
+    next.setDate(Math.min(currentDay, lastDayOfTargetMonth));
+    return next;
+  }
+
+  function moveCalendar(direction: -1 | 1) {
+    setCursorDate((current) => {
+      if (viewMode === "month") {
+        return shiftMonth(current, direction);
+      }
+
+      const next = new Date(current);
+      next.setDate(next.getDate() + direction * (viewMode === "week" ? 7 : 1));
+      return next;
+    });
   }
 
   function goPrev() {
-    if (viewMode === "week") {
-      const prev = new Date(weekStart);
-      prev.setDate(prev.getDate() - 7);
-      setWeekStart(prev);
-    } else {
-      if (month === 0) {
-        setYear((y) => y - 1);
-        setMonth(11);
-      } else {
-        setMonth((m) => m - 1);
-      }
-    }
+    moveCalendar(-1);
   }
 
   function goNext() {
-    if (viewMode === "week") {
-      const next = new Date(weekStart);
-      next.setDate(next.getDate() + 7);
-      setWeekStart(next);
-    } else {
-      if (month === 11) {
-        setYear((y) => y + 1);
-        setMonth(0);
-      } else {
-        setMonth((m) => m + 1);
-      }
-    }
+    moveCalendar(1);
   }
 
-  // Compute week end for header display
-  const weekEnd = useMemo(() => {
-    const end = new Date(weekStart);
-    end.setDate(end.getDate() + 6);
-    return end;
-  }, [weekStart]);
+  const navigationUnit =
+    viewMode === "month" ? "Tháng" : viewMode === "week" ? "Tuần" : "Ngày";
+
+  const calendarTitle =
+    viewMode === "month"
+      ? `${MONTH_NAMES[month + 1]} năm ${year}`
+      : viewMode === "week"
+        ? formatWeekHeader(weekStart, weekEnd)
+        : `${cursorDate.getDate()} ${MONTH_NAMES[month + 1]}, ${year}`;
 
   /** Click vào task bar trên lịch → mở Quick View */
   function handleTaskClick(task: WorkTask) {
@@ -176,13 +190,13 @@ export default function DeadlineCalendarPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8">
+    <div className="mx-auto flex h-full w-full max-w-[1600px] flex-col overflow-hidden px-4 py-4 sm:px-5">
       {/* Top filter bar */}
-      <div className="mb-5 flex flex-wrap items-center gap-2.5">
+      <div className="mb-4 flex shrink-0 flex-wrap items-center gap-2.5">
         <button
           type="button"
           onClick={() => router.back()}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
           aria-label="Quay lại"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -195,23 +209,26 @@ export default function DeadlineCalendarPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Tìm công việc..."
-            className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            className="h-9 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-xs text-gray-700 outline-none placeholder:text-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
           />
         </div>
 
         <FilterSelect
+          compact
           label="Dự án"
           value={projectId}
           onChange={setProjectId}
           options={projects.map((p) => ({ value: p.id, label: p.code }))}
         />
         <FilterSelect
+          compact
           label="Người phụ trách"
           value={assigneeId}
           onChange={setAssigneeId}
           options={members.map((m) => ({ value: m.id, label: m.name }))}
         />
         <FilterSelect
+          compact
           label="Mức độ ưu tiên"
           value={priority}
           onChange={(v) => setPriority(v as TaskPriority | "")}
@@ -222,7 +239,7 @@ export default function DeadlineCalendarPage() {
         />
 
         <div className="ml-auto">
-          <Button onClick={() => setFormModal({ mode: "create" })}>
+          <Button size="sm" onClick={() => setFormModal({ mode: "create" })}>
             <Plus className="h-4 w-4" />
             Thêm công việc
           </Button>
@@ -230,13 +247,13 @@ export default function DeadlineCalendarPage() {
       </div>
 
       {/* Calendar navigation bar */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={goPrev}
             className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 transition-colors"
-            aria-label="Tháng trước"
+            aria-label={`${navigationUnit} trước`}
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
@@ -244,7 +261,7 @@ export default function DeadlineCalendarPage() {
             type="button"
             onClick={goNext}
             className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 transition-colors"
-            aria-label="Tháng sau"
+            aria-label={`${navigationUnit} sau`}
           >
             <ChevronRight className="h-4 w-4" />
           </button>
@@ -258,9 +275,7 @@ export default function DeadlineCalendarPage() {
         </div>
 
         <h2 className="text-lg font-bold text-gray-900">
-          {viewMode === "week"
-            ? formatWeekHeader(weekStart, weekEnd)
-            : `${MONTH_NAMES[month + 1]} năm ${year}`}
+          {calendarTitle}
         </h2>
 
         <div className="flex overflow-hidden rounded-lg border border-gray-200 bg-white">
@@ -269,6 +284,7 @@ export default function DeadlineCalendarPage() {
               key={mode}
               type="button"
               onClick={() => setViewMode(mode)}
+              aria-pressed={viewMode === mode}
               className={`flex h-9 items-center px-3.5 text-sm font-medium transition-colors ${
                 idx > 0 ? "border-l border-gray-200" : ""
               } ${
@@ -284,31 +300,35 @@ export default function DeadlineCalendarPage() {
       </div>
 
       {/* Calendar content */}
-      {loading ? (
-        <div className="flex h-96 items-center justify-center rounded-xl border border-gray-100 bg-white shadow-sm">
-          <div className="flex flex-col items-center gap-3">
-            <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-gray-200 border-t-blue-500" />
-            <span className="text-sm text-gray-400">Đang tải lịch...</span>
+      <div className="min-h-0 flex-1">
+        {loading ? (
+          <div className="flex h-full items-center justify-center rounded-xl border border-gray-100 bg-white shadow-sm">
+            <div className="flex flex-col items-center gap-3">
+              <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-gray-200 border-t-blue-500" />
+              <span className="text-sm text-gray-400">Đang tải lịch...</span>
+            </div>
           </div>
-        </div>
-      ) : viewMode === "week" ? (
-        <WeekCalendar
-          weekStart={weekStart}
-          tasks={tasks}
-          projectsById={projectsById}
-          membersById={membersById}
-          onTaskClick={handleTaskClick}
-        />
-      ) : (
-        <DeadlineCalendar
-          year={year}
-          month={month}
-          tasks={tasks}
-          projectsById={projectsById}
-          membersById={membersById}
-          onTaskClick={handleTaskClick}
-        />
-      )}
+        ) : viewMode === "week" || viewMode === "day" ? (
+          <WeekCalendar
+            weekStart={weekStart}
+            selectedDate={cursorDate}
+            mode={viewMode}
+            tasks={tasks}
+            projectsById={projectsById}
+            membersById={membersById}
+            onTaskClick={handleTaskClick}
+          />
+        ) : (
+          <DeadlineCalendar
+            year={year}
+            month={month}
+            tasks={tasks}
+            projectsById={projectsById}
+            membersById={membersById}
+            onTaskClick={handleTaskClick}
+          />
+        )}
+      </div>
 
       {/* Modal tạo/sửa công việc */}
       {formModal && (
@@ -334,7 +354,6 @@ export default function DeadlineCalendarPage() {
           assignee={membersById.get(quickView.task.assigneeId)}
           initialTab="info"
           onClose={() => setQuickView(null)}
-          onReportAdded={() => loadTasks(currentFilters())}
         />
       )}
     </div>

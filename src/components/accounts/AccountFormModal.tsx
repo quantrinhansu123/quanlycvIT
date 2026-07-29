@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Building2, Landmark, UserRound, X } from "lucide-react";
+import { Building2, ImageUp, Landmark, LoaderCircle, UserRound, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { BankCombobox } from "@/components/accounts/BankCombobox";
 import { cn } from "@/lib/utils";
 import type {
   AccountInput,
@@ -50,6 +51,8 @@ function fromAccount(account?: EmployeeAccount): AccountInput {
 export function AccountFormModal({ account, departments, onClose, onSave }: Props) {
   const [form, setForm] = useState<AccountInput>(() => fromAccount(account));
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarError, setAvatarError] = useState("");
   const [error, setError] = useState("");
   const positions = useMemo(() => {
     const selected = departments.find((item) => item.id === form.departmentId);
@@ -73,6 +76,31 @@ export function AccountFormModal({ account, departments, onClose, onSave }: Prop
 
   function set<K extends keyof AccountInput>(key: K, value: AccountInput[K]) {
     setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function uploadAvatar(file?: File) {
+    if (!file) return;
+
+    setAvatarError("");
+    setUploadingAvatar(true);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const response = await fetch("/api/media/avatar", { method: "POST", body });
+      const payload = await response.json() as {
+        success?: boolean;
+        message?: string;
+        data?: { url?: string };
+      };
+      if (!response.ok || !payload.success || !payload.data?.url) {
+        throw new Error(payload.message ?? "Không thể tải ảnh lên.");
+      }
+      set("avatarUrl", payload.data.url);
+    } catch (reason) {
+      setAvatarError(reason instanceof Error ? reason.message : "Không thể tải ảnh lên.");
+    } finally {
+      setUploadingAvatar(false);
+    }
   }
 
   async function submit(event: React.FormEvent) {
@@ -138,8 +166,32 @@ export function AccountFormModal({ account, departments, onClose, onSave }: Prop
               <Field label="Số điện thoại">
                 <input className={inputClass} value={form.phone ?? ""} onChange={(e) => set("phone", e.target.value)} placeholder="Nhập số điện thoại" />
               </Field>
-              <Field label="Ảnh đại diện (URL)">
-                <input className={inputClass} value={form.avatarUrl ?? ""} onChange={(e) => set("avatarUrl", e.target.value)} placeholder="https://..." />
+              <Field label="Ảnh đại diện">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    {form.avatarUrl ? (
+                      <img src={form.avatarUrl} alt="Ảnh đại diện xem trước" className="h-10 w-10 shrink-0 rounded-full border border-gray-200 object-cover" />
+                    ) : (
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-semibold text-blue-600">AV</div>
+                    )}
+                    <label className={cn("flex h-10 cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-xs font-medium text-gray-700 transition hover:bg-gray-50", uploadingAvatar && "cursor-wait opacity-60")}>
+                      {uploadingAvatar ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ImageUp className="h-4 w-4" />}
+                      {uploadingAvatar ? "Đang tải..." : "Tải ảnh lên"}
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/avif"
+                        className="sr-only"
+                        disabled={uploadingAvatar}
+                        onChange={(event) => {
+                          void uploadAvatar(event.target.files?.[0]);
+                          event.target.value = "";
+                        }}
+                      />
+                    </label>
+                  </div>
+                  <p className="text-[11px] text-gray-500">Hỗ trợ JPG, PNG, WEBP, AVIF; tối đa 5 MB.</p>
+                  {avatarError && <p role="alert" className="text-xs text-rose-600">{avatarError}</p>}
+                </div>
               </Field>
               <Field label="Ngày sinh">
                 <input type="date" className={inputClass} value={form.birthDate ?? ""} onChange={(e) => set("birthDate", e.target.value)} />
@@ -202,7 +254,7 @@ export function AccountFormModal({ account, departments, onClose, onSave }: Prop
                 <input className={inputClass} value={form.bankAccount ?? ""} onChange={(e) => set("bankAccount", e.target.value)} />
               </Field>
               <Field label="Ngân hàng">
-                <input className={inputClass} value={form.bankName ?? ""} onChange={(e) => set("bankName", e.target.value)} />
+                <BankCombobox value={form.bankName ?? ""} onChange={(value) => set("bankName", value)} />
               </Field>
               <div className="sm:col-span-2">
                 <Field label="Ghi chú">

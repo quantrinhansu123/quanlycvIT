@@ -16,10 +16,6 @@ interface TaskCardProps {
   project?: Project;
   assignee?: ProjectMember;
   onOpen: (task: WorkTask) => void;
-  /** Nút "Báo cáo": mở form gửi báo cáo tiến độ. */
-  onReport: (task: WorkTask) => void;
-  /** Menu "Lịch sử báo cáo": xem các báo cáo đã gửi. Mặc định dùng onReport. */
-  onViewReports?: (task: WorkTask) => void;
   onEdit: (task: WorkTask) => void;
   onDelete: (task: WorkTask) => void;
 }
@@ -29,8 +25,6 @@ export function TaskCard({
   project,
   assignee,
   onOpen,
-  onReport,
-  onViewReports,
   onEdit,
   onDelete,
 }: TaskCardProps) {
@@ -41,7 +35,6 @@ export function TaskCard({
       <div className="flex items-start justify-between gap-2">
         {project ? <Badge color={project.color}>{project.code}</Badge> : <span />}
         <TaskActionMenu
-          onViewReports={() => (onViewReports ?? onReport)(task)}
           onEdit={() => onEdit(task)}
           onDelete={() => onDelete(task)}
         />

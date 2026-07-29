@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { CalendarDays } from "lucide-react";
-import type { Project } from "@/types/project";
+import { PROJECT_STATUS_META, type Project } from "@/types/project";
 import { AvatarStack } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { ActionMenu } from "@/components/projects/ActionMenu";
@@ -22,7 +22,14 @@ export function ProjectCard({ project, onEdit, onDelete }: ProjectCardProps) {
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
       <div className="flex items-start justify-between gap-2">
-        <Badge color={project.color}>{project.code}</Badge>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge color={project.color}>{project.code}</Badge>
+          <span
+            className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${PROJECT_STATUS_META[project.status].badge}`}
+          >
+            {PROJECT_STATUS_META[project.status].label}
+          </span>
+        </div>
         <ActionMenu
           onView={() => router.push(`/quan-ly-cong-viec/danh-sach-du-an/${project.id}`)}
           onEdit={() => onEdit(project)}

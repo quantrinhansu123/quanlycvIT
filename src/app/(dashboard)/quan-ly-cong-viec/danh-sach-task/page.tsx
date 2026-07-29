@@ -29,6 +29,7 @@ import { SubtaskCard } from "@/components/subtasks/SubtaskCard";
 import { SubtaskFormModal } from "@/components/subtasks/SubtaskFormModal";
 import { SubtaskQuickViewModal } from "@/components/subtasks/SubtaskQuickViewModal";
 import { TaskReportDrawer } from "@/components/tasks/TaskReportDrawer";
+import { ListPaginationFooter } from "@/components/ui/ListPaginationFooter";
 import { cn, formatDateVN } from "@/lib/utils";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
@@ -59,9 +60,17 @@ export default function SubtaskListPage() {
   const [quickView, setQuickView] = useState<QuickViewState>(null);
   const [reportDrawer, setReportDrawer] = useState<Subtask | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pageSize, setPageSize] = useState(50);
+  const [page, setPage] = useState(1);
 
   const workTasksById = useMemo(() => new Map(workTasks.map((t) => [t.id, t])), [workTasks]);
   const membersById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
+  const pageCount = Math.max(1, Math.ceil(subtasks.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const visibleSubtasks = useMemo(
+    () => subtasks.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+    [currentPage, pageSize, subtasks]
+  );
 
   const loadSubtasks = useCallback(async (filters: SubtaskFilters) => {
     setLoading(true);
@@ -128,7 +137,13 @@ export default function SubtaskListPage() {
   }
 
   function toggleSelectAll() {
-    setSelectedIds((prev) => (prev.length === subtasks.length ? [] : subtasks.map((t) => t.id)));
+    const visibleIds = visibleSubtasks.map((subtask) => subtask.id);
+    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+    setSelectedIds((current) =>
+      allVisibleSelected
+        ? current.filter((id) => !visibleIds.includes(id))
+        : [...new Set([...current, ...visibleIds])]
+    );
   }
 
   async function handleDelete(subtask: Subtask) {
@@ -188,47 +203,55 @@ export default function SubtaskListPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mb-5 flex flex-wrap items-center gap-2.5">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-gray-100 px-3 py-2 xl:flex-nowrap">
         <button
           type="button"
           onClick={() => router.back()}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
           aria-label="Quay lại"
         >
           <ArrowLeft className="h-4 w-4" />
         </button>
 
-        <div className="relative min-w-[200px] flex-1">
+        <div className="relative min-w-[180px] max-w-[525px] flex-1 xl:min-w-0">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <input
             type="search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Tìm task..."
-            className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            className="h-9 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-xs text-gray-700 outline-none placeholder:text-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
           />
         </div>
 
         <FilterSelect
+          compact
+          className="w-[92px] shrink-0 2xl:w-[104px]"
           label="Công việc"
           value={workTaskId}
           onChange={setWorkTaskId}
           options={workTasks.map((t) => ({ value: t.id, label: t.title }))}
         />
         <FilterSelect
+          compact
+          className="w-[112px] shrink-0 2xl:w-[126px]"
           label="Người thực hiện"
           value={assigneeId}
           onChange={setAssigneeId}
           options={members.map((m) => ({ value: m.id, label: m.name }))}
         />
         <FilterSelect
+          compact
+          className="w-[112px] shrink-0 2xl:w-[124px]"
           label="Mức độ ưu tiên"
           value={priority}
           onChange={(value) => setPriority(value as TaskPriority | "")}
           options={TASK_PRIORITY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
         />
         <FilterSelect
+          compact
+          className="w-[92px] shrink-0 2xl:w-[104px]"
           label="Trạng thái"
           value={status}
           onChange={(value) => setStatus(value as TaskStatus | "")}
@@ -238,7 +261,7 @@ export default function SubtaskListPage() {
           type="button"
           onClick={() => setOverdueOnly((prev) => !prev)}
           className={cn(
-            "flex h-10 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium",
+            "flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 text-xs font-medium",
             overdueOnly ? "border-rose-300 bg-rose-50 text-rose-600" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
           )}
         >
@@ -246,8 +269,8 @@ export default function SubtaskListPage() {
           Task trễ hạn
         </button>
 
-        <div className="ml-auto flex items-center gap-2">
-          <Button onClick={() => setFormModal({ mode: "create" })}>
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <Button size="sm" className="whitespace-nowrap px-2.5" onClick={() => setFormModal({ mode: "create" })}>
             <Plus className="h-4 w-4" />
             Thêm mới
           </Button>
@@ -255,7 +278,7 @@ export default function SubtaskListPage() {
             <button
               type="button"
               onClick={() => setViewMode("table")}
-              className={cn("flex h-10 w-10 items-center justify-center", viewMode === "table" ? "bg-gray-100 text-gray-700" : "text-gray-400 hover:bg-gray-50")}
+              className={cn("flex h-9 w-9 items-center justify-center", viewMode === "table" ? "bg-gray-100 text-gray-700" : "text-gray-400 hover:bg-gray-50")}
               aria-label="Xem dạng bảng"
             >
               <TableIcon className="h-4 w-4" />
@@ -263,7 +286,7 @@ export default function SubtaskListPage() {
             <button
               type="button"
               onClick={() => setViewMode("grid")}
-              className={cn("flex h-10 w-10 items-center justify-center border-l border-gray-200", viewMode === "grid" ? "bg-gray-100 text-gray-700" : "text-gray-400 hover:bg-gray-50")}
+              className={cn("flex h-9 w-9 items-center justify-center border-l border-gray-200", viewMode === "grid" ? "bg-gray-100 text-gray-700" : "text-gray-400 hover:bg-gray-50")}
               aria-label="Xem dạng lưới"
             >
               <LayoutGrid className="h-4 w-4" />
@@ -273,7 +296,7 @@ export default function SubtaskListPage() {
             type="button"
             onClick={handleExportCsv}
             disabled={subtasks.length === 0}
-            className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Xuất file"
           >
             <Download className="h-4 w-4" />
@@ -281,7 +304,8 @@ export default function SubtaskListPage() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-gray-100 bg-white shadow-sm">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
+        <div className="account-table-scroll min-h-0 flex-1 overflow-auto">
         {loading ? (
           <TableSkeleton rows={5} />
         ) : error ? (
@@ -300,7 +324,7 @@ export default function SubtaskListPage() {
           />
         ) : viewMode === "table" ? (
           <SubtaskTable
-            subtasks={subtasks}
+            subtasks={visibleSubtasks}
             workTasksById={workTasksById}
             membersById={membersById}
             selectedIds={selectedIds}
@@ -316,7 +340,7 @@ export default function SubtaskListPage() {
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3">
-            {subtasks.map((subtask) => (
+            {visibleSubtasks.map((subtask) => (
               <SubtaskCard
                 key={subtask.id}
                 subtask={subtask}
@@ -333,20 +357,19 @@ export default function SubtaskListPage() {
             ))}
           </div>
         )}
+        </div>
 
-        {!loading && !error && subtasks.length > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 px-6 py-3 text-sm text-gray-500">
-            <span>Tổng: {subtasks.length} bản ghi</span>
-            <div className="flex items-center gap-2">
-              <span>Hiển thị</span>
-              <select className="rounded-md border border-gray-200 px-2 py-1 text-sm text-gray-600" defaultValue={100}>
-                <option value={20}>20</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-              </select>
-              <span>/ trang</span>
-            </div>
-          </div>
+        {!loading && !error && (
+          <ListPaginationFooter
+            total={subtasks.length}
+            page={currentPage}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setPage(1);
+            }}
+          />
         )}
       </div>
 

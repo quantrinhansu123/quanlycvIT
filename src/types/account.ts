@@ -10,6 +10,7 @@ export interface Department {
 
 export interface EmployeeAccount {
   id: string;
+  authUserId?: string;
   employeeCode: string;
   name: string;
   phone?: string;

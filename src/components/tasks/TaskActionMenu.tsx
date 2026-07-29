@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { MoreHorizontal, History, Pencil, Trash2 } from "lucide-react";
 
 interface TaskActionMenuProps {
-  onViewReports: () => void;
+  onViewReports?: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }
@@ -23,7 +23,7 @@ export function TaskActionMenu({ onViewReports, onEdit, onDelete }: TaskActionMe
 
     const rect = button.getBoundingClientRect();
     const menuWidth = 208;
-    const menuHeight = 136;
+    const menuHeight = onViewReports ? 136 : 96;
     const gap = 4;
     const viewportPadding = 8;
     const openUpward =
@@ -37,7 +37,7 @@ export function TaskActionMenu({ onViewReports, onEdit, onDelete }: TaskActionMe
         window.innerWidth - menuWidth - viewportPadding
       ),
     });
-  }, []);
+  }, [onViewReports]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -95,18 +95,20 @@ export function TaskActionMenu({ onViewReports, onEdit, onDelete }: TaskActionMe
           style={{ top: position.top, left: position.left }}
           role="menu"
         >
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              onViewReports();
-            }}
-            className="flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm text-gray-600 hover:bg-gray-50"
-          >
-            <History className="h-4 w-4" />
-            Lịch sử báo cáo
-          </button>
+          {onViewReports && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                onViewReports();
+              }}
+              className="flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm text-gray-600 hover:bg-gray-50"
+            >
+              <History className="h-4 w-4" />
+              Lịch sử báo cáo
+            </button>
+          )}
           <button
             type="button"
             role="menuitem"

@@ -19,6 +19,7 @@ import type {
   WorkTaskInput,
 } from "@/types/task";
 import type { ProjectTask } from "@/services/mock-data";
+import { getAppDateKey } from "@/lib/utils";
 
 interface AccountRow {
   id: string;
@@ -63,6 +64,8 @@ interface WorkTaskRow {
   id: string;
   ten_cv: string;
   mo_ta: string | null;
+  created_at: string;
+  updated_at: string;
   du_an_id: string;
   nguoi_phu_trach_id: string | null;
   trang_thai: string;
@@ -72,13 +75,14 @@ interface WorkTaskRow {
   tien_do_thuc_te: number;
   nhan_tag: string[] | null;
   cong_viec_tien_de_id: string | null;
-  thu_tu: number;
 }
 
 interface SubtaskRow {
   id: string;
   ten_task: string;
   mo_ta: string | null;
+  created_at: string;
+  updated_at: string;
   ngay_bat_dau: string | null;
   ngay_ket_thuc: string | null;
   nguoi_phu_trach_id: string | null;
@@ -88,6 +92,11 @@ interface SubtaskRow {
   nhan_tag: string[] | null;
   task_tien_de_id: string | null;
   cong_viec_id: string;
+}
+
+interface WorkTaskProgressRow {
+  cong_viec_id: string;
+  tien_do_thuc_te: number;
 }
 
 export interface WorkTaskFilters {
@@ -129,9 +138,9 @@ const ACCOUNT_SELECT = "id,ma_nv,ten_nv,chuc_vu,email,avatar_url";
 const PROJECT_SELECT =
   "id,ma_da,ten_da,hop_mau,mo_ta,ngay_bd,ngay_kt,nguoi_ql_id,steps";
 const WORK_TASK_SELECT =
-  "id,ten_cv,mo_ta,du_an_id,nguoi_phu_trach_id,trang_thai,uu_tien,ngay_bat_dau,ngay_hoan_thanh,tien_do_thuc_te,nhan_tag,cong_viec_tien_de_id,thu_tu";
+  "id,ten_cv,mo_ta,created_at,updated_at,du_an_id,nguoi_phu_trach_id,trang_thai,uu_tien,ngay_bat_dau,ngay_hoan_thanh,tien_do_thuc_te,nhan_tag,cong_viec_tien_de_id";
 const SUBTASK_SELECT =
-  "id,ten_task,mo_ta,ngay_bat_dau,ngay_ket_thuc,nguoi_phu_trach_id,trang_thai,uu_tien,tien_do_thuc_te,nhan_tag,task_tien_de_id,cong_viec_id";
+  "id,ten_task,mo_ta,created_at,updated_at,ngay_bat_dau,ngay_ket_thuc,nguoi_phu_trach_id,trang_thai,uu_tien,tien_do_thuc_te,nhan_tag,task_tien_de_id,cong_viec_id";
 
 function avatarColor(value: string): string {
   const colors = ["#F59E0B", "#1F2937", "#DC2626", "#0EA5E9", "#16A34A", "#7C5CFC"];
@@ -288,7 +297,7 @@ async function hydrateProjects(
     ...memberships.map((row) => row.tai_khoan_id),
   ]);
   const accounts = await loadAccounts(supabase, accountIds);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getAppDateKey();
 
   return rows.map((row) => {
     const projectTasks = taskStats.filter((task) => task.du_an_id === row.id);
@@ -319,6 +328,18 @@ async function hydrateProjects(
       .filter((account): account is AccountRow => Boolean(account))
       .map(toProjectMember);
 
+    const doneTaskCount = projectTasks.filter(
+      (task) => task.trang_thai === "done"
+    ).length;
+    const status: Project["status"] =
+      projectTasks.length > 0 && doneTaskCount === projectTasks.length
+        ? "done"
+        : row.ngay_kt && row.ngay_kt < today
+          ? "overdue"
+          : row.ngay_bd && row.ngay_bd > today
+            ? "notStarted"
+            : "inProgress";
+
     return {
       id: row.id,
       code: row.ma_da,
@@ -328,12 +349,13 @@ async function hydrateProjects(
       steps: projectSteps(row.steps),
       startDate: row.ngay_bd ?? "",
       endDate: row.ngay_kt ?? "",
+      status,
       managers,
       manager: managers[0] ?? emptyProjectMember(),
       members,
       stats: {
         total: projectTasks.length,
-        done: projectTasks.filter((task) => task.trang_thai === "done").length,
+        done: doneTaskCount,
         inProgress: projectTasks.filter((task) => task.trang_thai === "in_progress")
           .length,
         overdue: projectTasks.filter(
@@ -636,7 +658,8 @@ async function hydrateWorkTasks(
 ): Promise<WorkTask[]> {
   if (rows.length === 0) return [];
 
-  const [accounts, assignments] = await Promise.all([
+  const [accounts, assignments, { data: progressData, error: progressError }] =
+    await Promise.all([
     loadAccounts(supabase, uniqueValues(rows.map((row) => row.nguoi_phu_trach_id))),
     loadAssignments(
       supabase,
@@ -644,7 +667,23 @@ async function hydrateWorkTasks(
       "cong_viec_id",
       rows.map((row) => row.id)
     ),
+    supabase
+      .from("task")
+      .select("cong_viec_id,tien_do_thuc_te")
+      .in("cong_viec_id", rows.map((row) => row.id)),
   ]);
+  throwDatabaseError(progressError);
+
+  const progressByWorkTask = new Map<string, { total: number; count: number }>();
+  for (const item of (progressData ?? []) as WorkTaskProgressRow[]) {
+    const current = progressByWorkTask.get(item.cong_viec_id) ?? {
+      total: 0,
+      count: 0,
+    };
+    current.total += item.tien_do_thuc_te;
+    current.count += 1;
+    progressByWorkTask.set(item.cong_viec_id, current);
+  }
 
   return rows.map((row) => {
     const legacy = row.nguoi_phu_trach_id
@@ -652,11 +691,17 @@ async function hydrateWorkTasks(
       : undefined;
     const assignees = assignments.get(row.id) ?? [];
     const primary = assignees[0] ?? (legacy ? toProjectMember(legacy) : undefined);
+    const taskProgress = progressByWorkTask.get(row.id);
+    const progress = taskProgress
+      ? Math.round(taskProgress.total / taskProgress.count)
+      : 0;
 
     return {
       id: row.id,
       title: row.ten_cv,
       description: row.mo_ta ?? undefined,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
       projectId: row.du_an_id,
       assigneeId: primary?.id ?? "",
       assignees: assignees.length > 0 ? assignees : primary ? [primary] : [],
@@ -664,28 +709,11 @@ async function hydrateWorkTasks(
       priority: toPriority(row.uu_tien),
       startDate: row.ngay_bat_dau ?? "",
       dueDate: row.ngay_hoan_thanh ?? "",
-      progress: row.tien_do_thuc_te,
+      progress,
       tags: row.nhan_tag ?? [],
       dependsOnTaskId: row.cong_viec_tien_de_id ?? undefined,
-      order: row.thu_tu,
     };
   });
-}
-
-/** Thẻ mới luôn rơi xuống cuối cột trạng thái tương ứng. */
-async function nextOrderForStatus(
-  supabase: ApiSupabaseClient,
-  status: TaskStatus
-): Promise<number> {
-  const { data, error } = await supabase
-    .from("cong_viec")
-    .select("thu_tu")
-    .eq("trang_thai", toDatabaseStatus(status))
-    .order("thu_tu", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  throwDatabaseError(error);
-  return data ? (data.thu_tu as number) + 1 : 0;
 }
 
 export async function listWorkTasks(
@@ -714,7 +742,7 @@ export async function listWorkTasks(
   if (filters.overdueOnly) {
     query = query
       .neq("trang_thai", "done")
-      .lt("ngay_hoan_thanh", new Date().toISOString().slice(0, 10));
+      .lt("ngay_hoan_thanh", getAppDateKey());
   }
 
   const { data, error } = await query;
@@ -850,7 +878,6 @@ async function workTaskPayload(input: WorkTaskInput, primaryAccountId: string) {
     uu_tien: input.priority,
     ngay_bat_dau: input.startDate,
     ngay_hoan_thanh: input.dueDate,
-    tien_do_thuc_te: input.progress,
     nhan_tag: input.tags,
     cong_viec_tien_de_id: input.dependsOnTaskId ?? null,
   };
@@ -870,10 +897,7 @@ export async function createWorkTask(
   const payload = await workTaskPayload(input, assigneeIds[0]);
   const { data, error } = await supabase
     .from("cong_viec")
-    .insert({
-      ...payload,
-      thu_tu: await nextOrderForStatus(supabase, input.status),
-    })
+    .insert(payload)
     .select("id")
     .single();
   throwDatabaseError(error);
@@ -911,15 +935,9 @@ export async function updateWorkTask(
   await assertSubtaskAssigneesStillValid(supabase, id, assigneeIds);
 
   const payload = await workTaskPayload(input, assigneeIds[0]);
-  // Đổi trạng thái qua form cũng là chuyển cột, nên xếp thẻ xuống cuối cột mới.
-  const orderPayload =
-    current.status === input.status
-      ? {}
-      : { thu_tu: await nextOrderForStatus(supabase, input.status) };
-
   const { data, error } = await supabase
     .from("cong_viec")
-    .update({ ...payload, ...orderPayload })
+    .update(payload)
     .eq("id", id)
     .select("id")
     .maybeSingle();
@@ -975,30 +993,6 @@ async function assertSubtaskAssigneesStillValid(
   }
 }
 
-/** Kéo thả Kanban: đổi cột và vị trí, đánh số lại hai cột trong một transaction. */
-export async function moveWorkTask(
-  supabase: ApiSupabaseClient,
-  id: string,
-  status: TaskStatus,
-  position: number
-): Promise<WorkTask> {
-  const { error } = await supabase.rpc("di_chuyen_cong_viec", {
-    p_id: id,
-    p_trang_thai: toDatabaseStatus(status),
-    p_vi_tri: position,
-  });
-  if (error) {
-    if (error.message?.includes("Khong tim thay cong viec")) {
-      throw new ApiException("Không tìm thấy công việc.", 404);
-    }
-    throwDatabaseError(error);
-  }
-
-  const task = await getWorkTask(supabase, id);
-  if (!task) throw new ApiException("Không tìm thấy công việc.", 404);
-  return task;
-}
-
 export async function deleteWorkTask(
   supabase: ApiSupabaseClient,
   id: string
@@ -1024,9 +1018,16 @@ export async function listProjectTasks(
   return tasks.map((task) => ({
     id: task.id,
     title: task.title,
+    description: task.description,
     status: task.status,
     assignee: members.get(task.assigneeId) ?? emptyProjectMember(),
+    assignees: task.assignees,
+    priority: task.priority,
+    startDate: task.startDate,
     dueDate: task.dueDate,
+    progress: task.progress,
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
   }));
 }
 
@@ -1057,6 +1058,8 @@ async function hydrateSubtasks(
       id: row.id,
       title: row.ten_task,
       description: row.mo_ta ?? undefined,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
       workTaskId: row.cong_viec_id,
       assigneeId: primary?.id ?? "",
       assignees: assignees.length > 0 ? assignees : primary ? [primary] : [],
@@ -1096,7 +1099,7 @@ export async function listSubtasks(
   if (filters.overdueOnly) {
     query = query
       .neq("trang_thai", "done")
-      .lt("ngay_ket_thuc", new Date().toISOString().slice(0, 10));
+      .lt("ngay_ket_thuc", getAppDateKey());
   }
 
   const { data, error } = await query;

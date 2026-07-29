@@ -1,4 +1,5 @@
 import type { ProjectMember } from "@/types/project";
+import { getAppDateKey } from "@/lib/utils";
 
 export type TaskStatus = "todo" | "inProgress" | "review" | "done";
 export type TaskPriority = "low" | "medium" | "high" | "urgent";
@@ -15,14 +16,6 @@ export const TASK_STATUS_META: Record<TaskStatus, { label: string; badge: string
   inProgress: { label: "Đang làm", badge: "bg-sky-100 text-sky-600", dot: "bg-sky-500" },
   review: { label: "Chờ đánh giá", badge: "bg-amber-100 text-amber-600", dot: "bg-amber-500" },
   done: { label: "Hoàn thành", badge: "bg-emerald-100 text-emerald-600", dot: "bg-emerald-500" },
-};
-
-/** Tiến độ mặc định khi công việc được kéo sang một cột Kanban khác. */
-export const KANBAN_PROGRESS_BY_STATUS: Record<TaskStatus, number> = {
-  todo: 0,
-  inProgress: 30,
-  review: 70,
-  done: 100,
 };
 
 export const TASK_PRIORITY_OPTIONS: { value: TaskPriority; label: string }[] = [
@@ -43,6 +36,8 @@ export interface WorkTask {
   id: string;
   title: string;
   description?: string;
+  createdAt?: string;
+  updatedAt?: string;
   projectId: string;
   /** Người phụ trách chính; giữ lại cho bộ lọc và dữ liệu cũ. */
   assigneeId: string;
@@ -55,8 +50,6 @@ export interface WorkTask {
   progress: number;
   tags: string[];
   dependsOnTaskId?: string;
-  /** Thứ tự thẻ trong cột Kanban, tính từ 0 trong phạm vi mỗi trạng thái. */
-  order: number;
 }
 
 export interface WorkTaskInput {
@@ -127,6 +120,6 @@ export const TASK_REPORT_IMAGE_MIME_TYPES = [
 
 export function isTaskOverdue(task: WorkTask, referenceDate: Date = new Date()): boolean {
   if (task.status === "done") return false;
-  const due = new Date(task.dueDate);
-  return due.getTime() < referenceDate.setHours(0, 0, 0, 0);
+  const dueDate = task.dueDate.slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(dueDate) && dueDate < getAppDateKey(referenceDate);
 }

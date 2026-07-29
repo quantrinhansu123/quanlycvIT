@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Download, LayoutGrid, Plus, Search, Table as TableIcon, FolderOpen } from "lucide-react";
 import { projectService } from "@/services/project-service";
@@ -15,6 +15,7 @@ import { ProjectFormModal } from "@/components/projects/ProjectFormModal";
 import { formatDateVN } from "@/lib/utils";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
+import { ListPaginationFooter } from "@/components/ui/ListPaginationFooter";
 
 type ViewMode = "table" | "grid";
 type ModalState = { mode: "create" } | { mode: "edit"; project: Project } | null;
@@ -31,6 +32,14 @@ export default function ProjectListPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [modalState, setModalState] = useState<ModalState>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pageSize, setPageSize] = useState(50);
+  const [page, setPage] = useState(1);
+  const pageCount = Math.max(1, Math.ceil(projects.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const visibleProjects = useMemo(
+    () => projects.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+    [currentPage, pageSize, projects]
+  );
 
   const loadProjects = useCallback(async (query?: string) => {
     setLoading(true);
@@ -74,7 +83,13 @@ export default function ProjectListPage() {
   }
 
   function toggleSelectAll() {
-    setSelectedIds((prev) => (prev.length === projects.length ? [] : projects.map((p) => p.id)));
+    const visibleIds = visibleProjects.map((project) => project.id);
+    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+    setSelectedIds((current) =>
+      allVisibleSelected
+        ? current.filter((id) => !visibleIds.includes(id))
+        : [...new Set([...current, ...visibleIds])]
+    );
   }
 
   async function handleDelete(project: Project) {
@@ -132,30 +147,30 @@ export default function ProjectListPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mb-5 flex flex-wrap items-center gap-3">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-gray-100 px-3 py-2">
         <button
           type="button"
           onClick={() => router.back()}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
           aria-label="Quay lại"
         >
           <ArrowLeft className="h-4 w-4" />
         </button>
 
-        <div className="relative min-w-[220px] flex-1">
+        <div className="relative min-w-[220px] max-w-[525px] flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <input
             type="search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Tìm dự án..."
-            className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            className="h-9 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-xs text-gray-700 outline-none placeholder:text-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
           />
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
-          <Button onClick={() => setModalState({ mode: "create" })}>
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <Button size="sm" onClick={() => setModalState({ mode: "create" })}>
             <Plus className="h-4 w-4" />
             Thêm mới
           </Button>
@@ -163,7 +178,7 @@ export default function ProjectListPage() {
             <button
               type="button"
               onClick={() => setViewMode("table")}
-              className={`flex h-10 w-10 items-center justify-center ${
+              className={`flex h-9 w-9 items-center justify-center ${
                 viewMode === "table" ? "bg-gray-100 text-gray-700" : "text-gray-400 hover:bg-gray-50"
               }`}
               aria-label="Xem dạng bảng"
@@ -173,7 +188,7 @@ export default function ProjectListPage() {
             <button
               type="button"
               onClick={() => setViewMode("grid")}
-              className={`flex h-10 w-10 items-center justify-center border-l border-gray-200 ${
+              className={`flex h-9 w-9 items-center justify-center border-l border-gray-200 ${
                 viewMode === "grid" ? "bg-gray-100 text-gray-700" : "text-gray-400 hover:bg-gray-50"
               }`}
               aria-label="Xem dạng lưới"
@@ -185,7 +200,7 @@ export default function ProjectListPage() {
             type="button"
             onClick={handleExportCsv}
             disabled={projects.length === 0}
-            className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Xuất file"
           >
             <Download className="h-4 w-4" />
@@ -193,7 +208,8 @@ export default function ProjectListPage() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-gray-100 bg-white shadow-sm">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
+        <div className="account-table-scroll min-h-0 flex-1 overflow-auto">
         {loading ? (
           <TableSkeleton rows={4} />
         ) : error ? (
@@ -212,7 +228,7 @@ export default function ProjectListPage() {
           />
         ) : viewMode === "table" ? (
           <ProjectTable
-            projects={projects}
+            projects={visibleProjects}
             selectedIds={selectedIds}
             onToggleSelect={toggleSelect}
             onToggleSelectAll={toggleSelectAll}
@@ -221,7 +237,7 @@ export default function ProjectListPage() {
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3">
-            {projects.map((project) => (
+            {visibleProjects.map((project) => (
               <ProjectCard
                 key={project.id}
                 project={project}
@@ -231,20 +247,19 @@ export default function ProjectListPage() {
             ))}
           </div>
         )}
+        </div>
 
-        {!loading && !error && projects.length > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 px-6 py-3 text-sm text-gray-500">
-            <span>Tổng: {projects.length} bản ghi</span>
-            <div className="flex items-center gap-2">
-              <span>Hiển thị</span>
-              <select className="rounded-md border border-gray-200 px-2 py-1 text-sm text-gray-600" defaultValue={100}>
-                <option value={20}>20</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-              </select>
-              <span>/ trang</span>
-            </div>
-          </div>
+        {!loading && !error && (
+          <ListPaginationFooter
+            total={projects.length}
+            page={currentPage}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setPage(1);
+            }}
+          />
         )}
       </div>
 

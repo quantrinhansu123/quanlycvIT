@@ -5,6 +5,11 @@
   --foreground: #111827;
 }
 
+html[data-theme="dark"] {
+  --background: #0f172a;
+  --foreground: #e5e7eb;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -14,6 +19,92 @@
 body {
   background: var(--background);
   color: var(--foreground);
+}
+
+.login-intro {
+  background:
+    radial-gradient(circle at 12% 10%, rgb(191 219 254 / 72%), transparent 34%),
+    radial-gradient(circle at 68% 62%, rgb(219 234 254 / 78%), transparent 36%),
+    linear-gradient(135deg, #eef6ff 0%, #f8fbff 62%, #ffffff 100%);
+}
+
+.login-grid {
+  background-image: radial-gradient(rgb(37 99 235 / 10%) 0.7px, transparent 0.7px);
+  background-size: 23px 23px;
+}
+
+.login-logo {
+  background: linear-gradient(145deg, #2dd4bf 0%, #2563eb 58%, #1d4ed8 100%);
+}
+
+html[data-theme="dark"] .login-page {
+  background-color: #0b1220 !important;
+}
+
+html[data-theme="dark"] .login-intro {
+  background:
+    radial-gradient(circle at 12% 10%, rgb(30 64 175 / 32%), transparent 34%),
+    radial-gradient(circle at 68% 62%, rgb(15 118 110 / 18%), transparent 36%),
+    linear-gradient(135deg, #111827 0%, #0f172a 62%, #0b1220 100%);
+  border-color: #1e293b;
+}
+
+html[data-theme="dark"] .login-grid {
+  background-image: radial-gradient(rgb(148 163 184 / 11%) 0.7px, transparent 0.7px);
+}
+
+html[data-theme="dark"] .bg-white {
+  background-color: #111827 !important;
+}
+
+html[data-theme="dark"] .bg-gray-50,
+html[data-theme="dark"] .bg-slate-50 {
+  background-color: #0f172a !important;
+}
+
+html[data-theme="dark"] .bg-gray-100,
+html[data-theme="dark"] .bg-slate-100 {
+  background-color: #1e293b !important;
+}
+
+html[data-theme="dark"] .text-gray-950,
+html[data-theme="dark"] .text-gray-900,
+html[data-theme="dark"] .text-gray-800,
+html[data-theme="dark"] .text-slate-950,
+html[data-theme="dark"] .text-slate-900 {
+  color: #f8fafc !important;
+}
+
+html[data-theme="dark"] .text-gray-700,
+html[data-theme="dark"] .text-gray-600,
+html[data-theme="dark"] .text-gray-500,
+html[data-theme="dark"] .text-slate-700,
+html[data-theme="dark"] .text-slate-600,
+html[data-theme="dark"] .text-slate-500 {
+  color: #cbd5e1 !important;
+}
+
+html[data-theme="dark"] .border-gray-100,
+html[data-theme="dark"] .border-gray-200,
+html[data-theme="dark"] .border-slate-100,
+html[data-theme="dark"] .border-slate-200 {
+  border-color: #334155 !important;
+}
+
+html[data-theme="dark"] input,
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea {
+  border-color: #475569;
+  background-color: #111827;
+  color: #e5e7eb;
+}
+
+html[data-theme="dark"] .data-table-row > td {
+  background-color: #111827;
+}
+
+html[data-theme="dark"] .data-table-row:hover > td {
+  background-color: #1e3a5f;
 }
 
 * {
@@ -42,6 +133,16 @@ body {
 .account-table-scroll::-webkit-scrollbar-thumb {
   border-radius: 999px;
   background: #94a3b8;
+}
+
+/* Keep every cell in a data row, including sticky edge cells, on one hover timeline. */
+.data-table-row > td {
+  background-color: #ffffff;
+  transition: background-color 150ms ease-out;
+}
+
+.data-table-row:hover > td {
+  background-color: #eff6ff;
 }
 
 .icon-button {
@@ -85,6 +186,10 @@ body {
 .account-drawer { animation: account-drawer-in 220ms ease-out; }
 
 @media (prefers-reduced-motion: reduce) {
+  .data-table-row > td {
+    transition: none;
+  }
+
   .account-overlay, .account-dialog, .account-menu, .account-drawer {
     animation: none;
   }

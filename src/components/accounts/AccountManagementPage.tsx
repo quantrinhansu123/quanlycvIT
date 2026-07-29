@@ -3,21 +3,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ArrowDownUp, ArrowLeft, ChevronDown, ChevronLeft, ChevronRight,
+  ArrowDownUp, ArrowLeft, Building2, ChevronDown, ChevronLeft, ChevronRight,
   ChevronsLeft, ChevronsRight, Download, Eye, FileUp, FilterX, LockKeyhole,
-  MoreHorizontal, Pencil, Plus, RefreshCw, Search, Trash2, UnlockKeyhole, UsersRound, X,
+  Pencil, Plus, RefreshCw, Search, ShieldCheck, Trash2, UnlockKeyhole, UsersRound, X,
 } from "lucide-react";
 import { AccountFormModal } from "@/components/accounts/AccountFormModal";
 import { Avatar } from "@/components/ui/Avatar";
+import { ActionIconButton } from "@/components/ui/ActionIconButton";
 import { Button } from "@/components/ui/Button";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { accountService } from "@/services/account-service";
 import { getErrorMessage } from "@/lib/errors";
+import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { AccountInput, Department, EmployeeAccount } from "@/types/account";
 
 const ROLE_LABEL = { admin: "Quản trị", manager: "Quản lý", member: "Nhân viên" };
 const PAGE_SIZES = [20, 50, 100];
+const DEPARTMENT_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4", "#ef4444"];
 type SortKey = "employeeCode" | "name" | "username" | "birthDate" | "startDate" | "createdAt";
 
 function asInput(account: EmployeeAccount): AccountInput {
@@ -57,14 +60,22 @@ export function AccountManagementPage() {
   const [pageSize, setPageSize] = useState(50);
   const [selected, setSelected] = useState<string[]>([]);
   const [editing, setEditing] = useState<EmployeeAccount | "new" | null>(null);
-  const [menuId, setMenuId] = useState<string | null>(null);
+  const [showDetails, setShowDetails] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function load() {
     setLoading(true);
     try {
-      const result = await accountService.getAll();
-      setAccounts(result.accounts);
+      const supabase = createClient();
+      const [result, { data: authData }] = await Promise.all([
+        accountService.getAll(),
+        supabase.auth.getUser(),
+      ]);
+      setAccounts(
+        result.accounts.filter(
+          (account) => !authData.user || account.authUserId !== authData.user.id
+        )
+      );
       setDepartments(result.departments);
     } catch (error) {
       notify({ type: "error", title: "Không thể tải tài khoản", description: getErrorMessage(error, "Vui lòng thử lại.") });
@@ -83,13 +94,28 @@ export function AccountManagementPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(1);
   }, [search, department, position, role, status, pageSize]);
-  useEffect(() => {
-    const close = () => setMenuId(null);
-    window.addEventListener("click", close);
-    return () => window.removeEventListener("click", close);
-  }, []);
 
   const positions = useMemo(() => [...new Set(accounts.map((item) => item.position).filter(Boolean) as string[])].sort(), [accounts]);
+  const statistics = useMemo(() => {
+    const activeCount = accounts.filter((account) => account.status === "active").length;
+    const adminCount = accounts.filter((account) => account.role === "admin").length;
+    const departmentStats = departments
+      .map((item, index) => ({
+        id: item.id,
+        name: item.name,
+        count: accounts.filter((account) => account.departmentId === item.id).length,
+        color: DEPARTMENT_COLORS[index % DEPARTMENT_COLORS.length],
+      }))
+      .filter((item) => item.count > 0)
+      .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name, "vi"));
+
+    return {
+      activeCount,
+      adminCount,
+      departmentStats,
+      assignedCount: departmentStats.reduce((total, item) => total + item.count, 0),
+    };
+  }, [accounts, departments]);
   const filtered = useMemo(() => {
     const keyword = search.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
     return accounts.filter((account) => {
@@ -213,11 +239,75 @@ export function AccountManagementPage() {
       <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 text-sm">
         <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
           <span className="flex items-center gap-2 font-bold text-gray-900"><UsersRound className="h-4 w-4 text-blue-600" /> {accounts.length} nhân viên</span>
-          <span className="text-gray-500"><b>{accounts.filter((a) => a.status === "active").length}</b> hoạt động · <b>{accounts.filter((a) => a.status === "inactive").length}</b> khóa</span>
-          <span className="text-gray-500"><b>{accounts.filter((a) => a.role === "admin").length}</b> quản trị · <b>{accounts.filter((a) => a.role !== "admin").length}</b> nhân viên</span>
+          <span className="text-gray-500"><b>{statistics.activeCount}</b> hoạt động · <b>{accounts.length - statistics.activeCount}</b> khóa</span>
+          <span className="text-gray-500"><b>{statistics.adminCount}</b> quản trị · <b>{accounts.length - statistics.adminCount}</b> nhân viên</span>
         </div>
-        <button className="flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-blue-600">Chi tiết <ChevronDown className="h-3.5 w-3.5" /></button>
+        <button
+          type="button"
+          aria-expanded={showDetails}
+          onClick={() => setShowDetails((current) => !current)}
+          className="flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-blue-600"
+        >
+          Chi tiết <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", showDetails && "rotate-180")} />
+        </button>
       </div>
+
+      {showDetails && (
+        <section className="shrink-0 space-y-3 border-b border-gray-200 bg-white px-4 py-3" aria-label="Thống kê tài khoản">
+          <div className="grid gap-2.5 md:grid-cols-3">
+            <StatisticsCard
+              icon={UsersRound}
+              iconClassName="bg-blue-600 text-white"
+              value={accounts.length}
+              label="Tổng nhân viên"
+              description={`${statistics.activeCount} hoạt động`}
+            />
+            <StatisticsCard
+              icon={ShieldCheck}
+              iconClassName="bg-violet-500 text-white"
+              value={statistics.adminCount}
+              label="Quản trị viên"
+            />
+            <StatisticsCard
+              icon={Building2}
+              iconClassName="bg-emerald-500 text-white"
+              value={statistics.departmentStats.length}
+              label="Phòng ban"
+              description={statistics.departmentStats[0]?.name ?? "Chưa có dữ liệu"}
+            />
+          </div>
+
+          <div>
+            <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-gray-500">
+              <Building2 className="h-3.5 w-3.5" /> Phòng ban
+            </div>
+            {statistics.assignedCount > 0 ? (
+              <>
+                <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-gray-100">
+                  {statistics.departmentStats.map((item) => (
+                    <div
+                      key={item.id}
+                      title={`${item.name}: ${item.count}`}
+                      className="h-full border-r border-white last:border-r-0"
+                      style={{ width: `${(item.count / statistics.assignedCount) * 100}%`, backgroundColor: item.color }}
+                    />
+                  ))}
+                </div>
+                <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-gray-600">
+                  {statistics.departmentStats.map((item) => (
+                    <span key={item.id} className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
+                      {item.name}: <b>{item.count}</b>
+                    </span>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p className="text-xs text-gray-400">Chưa có nhân viên thuộc phòng ban.</p>
+            )}
+          </div>
+        </section>
+      )}
 
       <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-b border-gray-100 px-2 py-2">
         <button type="button" onClick={() => history.back()} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50"><ArrowLeft className="h-4 w-4" /></button>
@@ -258,15 +348,15 @@ export function AccountManagementPage() {
               <SortTh label="Ngày sinh" column="birthDate" sort={sort} onSort={toggleSort} />
               <SortTh label="Ngày vào làm" column="startDate" sort={sort} onSort={toggleSort} />
               <SortTh label="Ngày tạo" column="createdAt" sort={sort} onSort={toggleSort} />
-              <th className="sticky right-0 z-20 w-24 border-l border-gray-200 bg-gray-50 px-4 py-3">Thao tác</th>
+              <th className="sticky right-0 z-20 min-w-[180px] border-l border-gray-200 bg-gray-50 px-4 py-3">Thao tác</th>
             </tr>
           </thead>
           <tbody>
             {loading ? <LoadingRows /> : visible.length === 0 ? (
               <tr><td colSpan={16} className="py-24 text-center text-gray-400">Không tìm thấy tài khoản phù hợp.</td></tr>
             ) : visible.map((account) => (
-              <tr key={account.id} className="group border-b border-gray-200 bg-white transition-colors hover:bg-blue-50/40">
-                <td className="sticky left-0 z-[2] bg-white px-4 py-3 group-hover:bg-blue-50"><input type="checkbox" checked={selected.includes(account.id)} onChange={() => setSelected((current) => current.includes(account.id) ? current.filter((id) => id !== account.id) : [...current, account.id])} /></td>
+              <tr key={account.id} className="data-table-row group border-b border-gray-200">
+                <td className="sticky left-0 z-[2] px-4 py-3"><input type="checkbox" checked={selected.includes(account.id)} onChange={() => setSelected((current) => current.includes(account.id) ? current.filter((id) => id !== account.id) : [...current, account.id])} /></td>
                 <td className="px-4 py-3 font-medium text-gray-600">{account.employeeCode}</td>
                 <td className="px-4 py-2.5"><button onClick={() => router.push(`/nhan-vien/${account.id}`)} className="flex items-center gap-3 text-left hover:text-blue-600">
                   {account.avatarUrl ? (
@@ -284,20 +374,17 @@ export function AccountManagementPage() {
                 <td className="px-4 py-3">{account.phone ?? "—"}</td><td className="px-4 py-3">{account.bankAccount ?? "—"}</td><td className="px-4 py-3">{account.bankName ?? "—"}</td><td className="max-w-[230px] truncate px-4 py-3">{account.address ?? "—"}</td>
                 <td className="px-4 py-3">{formatDate(account.birthDate)}</td><td className="px-4 py-3">{formatDate(account.startDate)}</td><td className="px-4 py-3">{formatDate(account.createdAt)}</td>
                 <td
-                  className={cn(
-                    "sticky right-0 border-l border-gray-100 bg-white px-4 py-3 group-hover:bg-blue-50",
-                    menuId === account.id ? "z-40" : "z-[2]"
-                  )}
+                  className="sticky right-0 z-[2] border-l border-gray-100 px-4 py-3"
                 >
-                  <div className="relative">
-                    <button onClick={(e) => { e.stopPropagation(); setMenuId((id) => id === account.id ? null : account.id); }} className="rounded-lg p-2 hover:bg-gray-100"><MoreHorizontal className="h-4 w-4" /></button>
-                    {menuId === account.id && <div onClick={(e) => e.stopPropagation()} className="absolute right-0 z-30 mt-1 w-48 overflow-hidden rounded-xl border border-gray-200 bg-white p-1.5 shadow-xl account-menu">
-                      <MenuButton icon={Eye} label="Xem chi tiết" onClick={() => { router.push(`/nhan-vien/${account.id}`); setMenuId(null); }} />
-                      <MenuButton icon={Pencil} label="Chỉnh sửa" onClick={() => { setEditing(account); setMenuId(null); }} />
-                      <MenuButton icon={account.status === "active" ? LockKeyhole : UnlockKeyhole} label={account.status === "active" ? "Khóa tài khoản" : "Mở khóa"} onClick={() => { void toggleStatus(account); setMenuId(null); }} />
-                      <div className="my-1 border-t border-gray-100" />
-                      <MenuButton icon={Trash2} label="Xóa tài khoản" danger onClick={() => { void remove(account); setMenuId(null); }} />
-                    </div>}
+                  <div className="flex items-center justify-center gap-1.5">
+                    <ActionIconButton icon={Eye} label="Xem chi tiết" onClick={() => router.push(`/nhan-vien/${account.id}`)} />
+                    <ActionIconButton icon={Pencil} label="Chỉnh sửa" tone="warning" onClick={() => setEditing(account)} />
+                    <ActionIconButton
+                      icon={account.status === "active" ? LockKeyhole : UnlockKeyhole}
+                      label={account.status === "active" ? "Khóa tài khoản" : "Mở khóa tài khoản"}
+                      onClick={() => void toggleStatus(account)}
+                    />
+                    <ActionIconButton icon={Trash2} label="Xóa tài khoản" tone="danger" onClick={() => void remove(account)} />
                   </div>
                 </td>
               </tr>
@@ -328,12 +415,29 @@ function Filter({ value, onChange, label, options, count }: { value: string; onC
   return <label className="relative w-[112px] shrink-0"><select value={value} onChange={(e) => onChange(e.target.value)} className={cn("h-9 w-full appearance-none truncate rounded-xl border bg-white pl-8 pr-7 text-xs outline-none hover:bg-gray-50 focus:ring-2 focus:ring-blue-100", value ? "border-blue-400 text-blue-600" : "border-gray-200 text-gray-600")}><option value="">{label}</option>{options.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select><ArrowDownUp className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />{count ? <span className="pointer-events-none absolute right-6 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-blue-600 text-[10px] text-white">{count}</span> : <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />}</label>;
 }
 
-function SortTh({ label, column, sort, onSort, width }: { label: string; column: SortKey; sort: { key: SortKey; direction: string }; onSort: (key: SortKey) => void; width?: string }) {
-  return <th style={{ minWidth: width }} className="px-4 py-3"><button onClick={() => onSort(column)} className="flex items-center gap-2 hover:text-blue-600">{label}<ArrowDownUp className={cn("h-3.5 w-3.5", sort.key === column && "text-blue-600")} /></button></th>;
+function StatisticsCard({ icon: Icon, iconClassName, value, label, description }: {
+  icon: React.ElementType;
+  iconClassName: string;
+  value: number;
+  label: string;
+  description?: string;
+}) {
+  return (
+    <div className="flex min-h-20 items-center gap-3 rounded-2xl border border-gray-200 px-4 py-3">
+      <span className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-xl", iconClassName)}>
+        <Icon className="h-5 w-5" />
+      </span>
+      <span className="min-w-0">
+        <b className="block text-lg leading-5 text-gray-950">{value}</b>
+        <span className="block text-xs font-medium text-gray-600">{label}</span>
+        {description && <span className="block truncate text-[11px] text-gray-400">{description}</span>}
+      </span>
+    </div>
+  );
 }
 
-function MenuButton({ icon: Icon, label, onClick, danger }: { icon: React.ElementType; label: string; onClick: () => void; danger?: boolean }) {
-  return <button onClick={onClick} className={cn("flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm hover:bg-gray-50", danger ? "text-rose-600" : "text-gray-700")}><Icon className="h-4 w-4" />{label}</button>;
+function SortTh({ label, column, sort, onSort, width }: { label: string; column: SortKey; sort: { key: SortKey; direction: string }; onSort: (key: SortKey) => void; width?: string }) {
+  return <th style={{ minWidth: width }} className="px-4 py-3"><button onClick={() => onSort(column)} className="flex items-center gap-2 hover:text-blue-600">{label}<ArrowDownUp className={cn("h-3.5 w-3.5", sort.key === column && "text-blue-600")} /></button></th>;
 }
 
 function PageButton({ icon: Icon, ...props }: { icon: React.ElementType } & React.ButtonHTMLAttributes<HTMLButtonElement>) {

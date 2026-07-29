@@ -12,7 +12,6 @@ import {
   TASK_REPORT_MAX_FILE_SIZE,
 } from "@/types/task";
 import type { ProjectMember } from "@/types/project";
-import { taskService } from "@/services/task-service";
 import { Button } from "@/components/ui/Button";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
@@ -22,7 +21,7 @@ interface TaskReportDrawerProps {
   task: Pick<WorkTask, "id" | "title" | "progress" | "assigneeId">;
   assignee?: ProjectMember;
   entityLabel?: string;
-  submitReport?: (input: ProgressReportSubmission) => Promise<ProgressReport>;
+  submitReport: (input: ProgressReportSubmission) => Promise<ProgressReport>;
   onClose: () => void;
   onSubmitted?: (report: ProgressReport) => void;
 }
@@ -218,9 +217,7 @@ export function TaskReportDrawer({
           url: link.url,
         })),
       };
-      const report = submitReport
-        ? await submitReport(submission)
-        : await taskService.addTaskReport(task.id, submission);
+      const report = await submitReport(submission);
       notify({
         type: "success",
         title: "Đã gửi báo cáo tiến độ",
@@ -243,20 +240,19 @@ export function TaskReportDrawer({
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex justify-end">
-      <div
-        className="absolute inset-0 bg-gray-900/40"
-        onClick={() => !submitting && onClose()}
-        aria-hidden="true"
-      />
-
+    <div
+      className="account-overlay fixed inset-0 z-[60] flex items-center justify-center bg-gray-950/45 p-4"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !submitting) onClose();
+      }}
+    >
       <div
         role="dialog"
         aria-modal="true"
         aria-label={`Báo cáo tiến độ ${entityLabel}`}
-        className="relative flex h-full w-full max-w-[560px] flex-col bg-white shadow-2xl"
+        className="account-dialog flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
       >
-        <div className="flex items-start justify-between gap-3 border-b border-gray-100 px-6 py-5">
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-gray-100 px-6 py-5">
           <div>
             <h2 className="flex items-center gap-2 text-lg font-bold text-gray-900">
               <span className="h-2 w-2 rounded-full bg-blue-600" />
@@ -506,7 +502,7 @@ export function TaskReportDrawer({
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3 border-t border-gray-100 px-6 py-4">
+        <div className="flex shrink-0 items-center justify-end gap-3 border-t border-gray-100 px-6 py-4">
           <Button variant="secondary" onClick={onClose} disabled={submitting}>
             Hủy bỏ
           </Button>

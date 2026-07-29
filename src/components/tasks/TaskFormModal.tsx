@@ -33,7 +33,6 @@ interface FormState {
   priority: WorkTaskInput["priority"];
   startDate: string;
   dueDate: string;
-  progress: number;
   tagsText: string;
   dependsOnTaskId: string;
 }
@@ -65,7 +64,6 @@ function buildInitialState(
       priority: task.priority,
       startDate: toDateInputValue(task.startDate),
       dueDate: toDateInputValue(task.dueDate),
-      progress: task.progress,
       tagsText: task.tags.join(", "),
       dependsOnTaskId: task.dependsOnTaskId ?? "",
     };
@@ -79,7 +77,6 @@ function buildInitialState(
     priority: "low",
     startDate: toDateInputValue(new Date().toISOString()),
     dueDate: "",
-    progress: 0,
     tagsText: "",
     dependsOnTaskId: "",
   };
@@ -172,7 +169,7 @@ export function TaskFormModal({
       priority: form.priority,
       startDate: form.startDate,
       dueDate: form.dueDate,
-      progress: Math.min(100, Math.max(0, Number(form.progress) || 0)),
+      progress: task?.progress ?? 0,
       tags: form.tagsText
         .split(",")
         .map((tag) => tag.trim())
@@ -202,19 +199,21 @@ export function TaskFormModal({
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end">
-      <div
-        className="absolute inset-0 bg-gray-900/40"
-        onClick={submitting ? undefined : onClose}
-        aria-hidden="true"
-      />
-
+    <div
+      className="account-overlay fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 p-4"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !submitting) onClose();
+      }}
+    >
       <form
         onSubmit={handleSubmit}
-        className="relative flex h-full w-full max-w-md flex-col overflow-hidden bg-white shadow-2xl sm:max-w-lg"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="task-form-title"
+        className="account-dialog flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
       >
-        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
-          <h2 className="text-lg font-bold text-gray-900">
+        <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-6 py-4">
+          <h2 id="task-form-title" className="text-lg font-bold text-gray-900">
             {mode === "edit" ? "Chỉnh sửa công việc" : "Thêm công việc mới"}
           </h2>
           <button
@@ -387,28 +386,15 @@ export function TaskFormModal({
             </div>
           </div>
 
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Tiến độ thực tế (%)</label>
-              <input
-                type="number"
-                min={0}
-                max={100}
-                value={form.progress}
-                onChange={(event) => setForm((prev) => ({ ...prev, progress: Number(event.target.value) }))}
-                className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-              />
-            </div>
-            <div className="flex-1">
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Nhãn tags (Cách nhau bằng dấu phẩy)</label>
-              <input
-                type="text"
-                value={form.tagsText}
-                onChange={(event) => setForm((prev) => ({ ...prev, tagsText: event.target.value }))}
-                placeholder="VD: Frontend, UI/UX, API"
-                className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-              />
-            </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">Nhãn tags (Cách nhau bằng dấu phẩy)</label>
+            <input
+              type="text"
+              value={form.tagsText}
+              onChange={(event) => setForm((prev) => ({ ...prev, tagsText: event.target.value }))}
+              placeholder="VD: Frontend, UI/UX, API"
+              className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            />
           </div>
 
           <div>
@@ -432,7 +418,7 @@ export function TaskFormModal({
           {submitError && <p className="text-sm text-rose-500">{submitError}</p>}
         </div>
 
-        <div className="flex items-center justify-end gap-3 border-t border-gray-100 px-6 py-4">
+        <div className="flex shrink-0 items-center justify-end gap-3 border-t border-gray-100 px-6 py-4">
           <Button type="button" variant="secondary" onClick={onClose} disabled={submitting}>
             Hủy
           </Button>

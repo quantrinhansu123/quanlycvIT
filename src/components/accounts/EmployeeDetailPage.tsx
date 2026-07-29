@@ -13,7 +13,6 @@ import { Button } from "@/components/ui/Button";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
 import { accountService } from "@/services/account-service";
 import type { AccountInput, Department, EmployeeAccount } from "@/types/account";
 
@@ -37,10 +36,8 @@ export function EmployeeDetailPage({ employeeId }: { employeeId: string }) {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [tab, setTab] = useState<"information" | "password">("information");
-  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
@@ -92,29 +89,9 @@ export function EmployeeDetailPage({ employeeId }: { employeeId: string }) {
       notify({ type: "error", title: "Xác nhận mật khẩu mới không khớp" });
       return;
     }
-    if (currentPassword === newPassword) {
-      notify({ type: "error", title: "Mật khẩu mới phải khác mật khẩu hiện tại" });
-      return;
-    }
-
     setChangingPassword(true);
     try {
-      const supabase = createClient();
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: account.email,
-        password: currentPassword,
-      });
-      if (signInError) {
-        notify({ type: "error", title: "Mật khẩu hiện tại không đúng" });
-        return;
-      }
-
-      const { error: updateError } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
-      if (updateError) throw updateError;
-
-      setCurrentPassword("");
+      await accountService.updatePassword(employeeId, newPassword);
       setNewPassword("");
       setConfirmPassword("");
       notify({ type: "success", title: "Đổi mật khẩu thành công" });
@@ -241,27 +218,18 @@ export function EmployeeDetailPage({ employeeId }: { employeeId: string }) {
             )}
           </div>
         ) : (
-          <section className="max-w-xl rounded-2xl border border-gray-200 bg-white p-7 shadow-sm">
+          <section className="mx-auto max-w-xl rounded-2xl border border-gray-200 bg-white p-7 shadow-sm">
             <div className="flex items-center gap-3">
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
                 <LockKeyhole className="h-5 w-5" />
               </span>
               <div>
                 <h2 className="text-lg font-bold text-gray-900">Đổi mật khẩu</h2>
-                <p className="mt-0.5 text-sm text-gray-500">Thay đổi mật khẩu đăng nhập của bạn</p>
+                <p className="mt-0.5 text-sm text-gray-500">Đặt mật khẩu đăng nhập mới cho nhân viên</p>
               </div>
             </div>
 
             <form className="mt-8 space-y-4" onSubmit={(event) => void changePassword(event)}>
-              <PasswordField
-                label="Mật khẩu hiện tại"
-                value={currentPassword}
-                onChange={setCurrentPassword}
-                visible={showCurrentPassword}
-                onToggle={() => setShowCurrentPassword((visible) => !visible)}
-                autoComplete="current-password"
-                placeholder="Nhập mật khẩu hiện tại"
-              />
               <PasswordField
                 label="Mật khẩu mới"
                 value={newPassword}
@@ -361,7 +329,7 @@ function PasswordField({
   onChange: (value: string) => void;
   visible: boolean;
   onToggle: () => void;
-  autoComplete: "current-password" | "new-password";
+  autoComplete: "new-password";
   placeholder: string;
 }) {
   return (

@@ -14,7 +14,6 @@ export const INITIAL_TASKS: WorkTask[] = [
     progress: 90,
     tags: ["Hạ tầng", "Mạng"],
     assignees: [],
-    order: 0,
   },
   {
     id: "cv-2",
@@ -29,7 +28,6 @@ export const INITIAL_TASKS: WorkTask[] = [
     progress: 0,
     tags: ["Thi công"],
     assignees: [],
-    order: 0,
   },
   {
     id: "cv-3",
@@ -44,7 +42,6 @@ export const INITIAL_TASKS: WorkTask[] = [
     progress: 80,
     tags: ["Thi công", "Mạng"],
     assignees: [],
-    order: 0,
   },
   {
     id: "cv-4",
@@ -59,7 +56,6 @@ export const INITIAL_TASKS: WorkTask[] = [
     progress: 100,
     tags: ["Khảo sát"],
     assignees: [],
-    order: 0,
   },
   {
     id: "cv-5",
@@ -74,7 +70,6 @@ export const INITIAL_TASKS: WorkTask[] = [
     progress: 100,
     tags: ["UI/UX"],
     assignees: [],
-    order: 1,
   },
 ];
 

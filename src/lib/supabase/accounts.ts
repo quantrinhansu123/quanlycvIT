@@ -8,7 +8,7 @@ import type {
 } from "@/types/account";
 
 const ACCOUNT_SELECT = `
-  id,ma_nv,ten_nv,sdt,dia_chi,avatar_url,ngay_sinh,ngay_vao_lam,ngay_nghi_viec,
+  id,auth_user_id,ma_nv,ten_nv,sdt,dia_chi,avatar_url,ngay_sinh,ngay_vao_lam,ngay_nghi_viec,
   so_tai_khoan,ten_ngan_hang,ghi_chu,username,email,phong_ban_id,chuc_vu,role,status,
   created_at,updated_at,
   phong_ban:phong_ban_id(id,ma_pb,ten_pb,chuc_vu)
@@ -39,6 +39,7 @@ function mapAccount(row: Record<string, unknown>): EmployeeAccount {
     : undefined;
   return {
     id: String(row.id),
+    authUserId: (row.auth_user_id as string | null) ?? undefined,
     employeeCode: String(row.ma_nv),
     name: String(row.ten_nv),
     phone: (row.sdt as string | null) ?? undefined,
