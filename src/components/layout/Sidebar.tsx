@@ -42,17 +42,22 @@ export function Sidebar({ collapsed }: SidebarProps) {
       )}
     >
       <div className="flex h-16 items-center gap-2 px-5">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-100">
+        <div
+          className={cn(
+            "flex h-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-100",
+            collapsed ? "w-9" : "w-12"
+          )}
+        >
           <img
             src="/logo-viet-nhat-ipt.png"
             alt="Việt Nhật IPT"
-            className="h-full w-full object-contain p-1"
+            className="h-full w-full object-contain px-1 py-1.5"
           />
         </div>
         {!collapsed && (
           <div className="leading-tight">
-            <p className="text-sm font-bold text-gray-900">Goal App</p>
-            <p className="text-[11px] text-gray-400">Goal App</p>
+            <p className="text-sm font-bold text-gray-900">IT Việt Nhật</p>
+            <p className="text-[11px] text-gray-400">Trang Quản Trị</p>
           </div>
         )}
       </div>

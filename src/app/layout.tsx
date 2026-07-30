@@ -10,15 +10,15 @@ const beVietnamPro = Be_Vietnam_Pro({
 
 export const metadata: Metadata = {
   title: {
-    default: "Goal App - Quản lý công việc",
-    template: "%s | Goal App",
+    default: "IT Việt Nhật - Quản lý công việc",
+    template: "%s | IT Việt Nhật",
   },
   description:
-    "Goal App - Nền tảng quản trị dự án, công việc và tiến độ đội nhóm.",
+    "IT Việt Nhật - Nền tảng quản trị dự án, công việc và tiến độ đội nhóm.",
   openGraph: {
-    title: "Goal App - Quản lý công việc",
+    title: "IT Việt Nhật - Quản lý công việc",
     description:
-      "Goal App - Nền tảng quản trị dự án, công việc và tiến độ đội nhóm.",
+      "IT Việt Nhật - Nền tảng quản trị dự án, công việc và tiến độ đội nhóm.",
     type: "website",
   },
 };

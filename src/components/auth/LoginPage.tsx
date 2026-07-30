@@ -150,7 +150,7 @@ export function LoginPage() {
                 />
               </span>
               <div>
-                <p className="text-base font-bold tracking-tight text-gray-900">Goal App</p>
+                <p className="text-base font-bold tracking-tight text-gray-900">IT Việt Nhật</p>
                 <p className="text-[11px] text-gray-500">Quản trị doanh nghiệp</p>
               </div>
             </div>
@@ -186,7 +186,7 @@ export function LoginPage() {
             </div>
 
             <p className="text-[11px] text-gray-400">
-              © {new Date().getFullYear()} Goal App. All rights reserved.
+              © {new Date().getFullYear()} IT Việt Nhật. All rights reserved.
             </p>
           </div>
         </section>
@@ -212,14 +212,14 @@ export function LoginPage() {
                 />
               </span>
               <div>
-                <p className="text-sm font-bold text-gray-900">Goal App</p>
+                <p className="text-sm font-bold text-gray-900">IT Việt Nhật</p>
                 <p className="text-[10px] text-gray-500">Quản trị doanh nghiệp</p>
               </div>
             </div>
 
             <div>
               <h2 className="text-xl font-bold tracking-tight text-gray-950">Đăng nhập</h2>
-              <p className="mt-1.5 text-xs text-gray-500">Chào mừng bạn quay trở lại Goal App</p>
+              <p className="mt-1.5 text-xs text-gray-500">Chào mừng bạn quay trở lại IT Việt Nhật</p>
             </div>
 
             <form className="mt-8 space-y-5" onSubmit={handleSubmit} noValidate>
@@ -305,7 +305,7 @@ export function LoginPage() {
 
             <div className="mt-12 border-t border-gray-100 pt-5 text-center">
               <p className="text-[10px] text-gray-400">
-                © {new Date().getFullYear()} Goal App
+                © {new Date().getFullYear()} IT Việt Nhật
               </p>
             </div>
           </div>
