@@ -32,6 +32,18 @@ export const TASK_PRIORITY_META: Record<TaskPriority, { label: string; badge: st
   urgent: { label: "Khẩn cấp", badge: "bg-rose-100 text-rose-600" },
 };
 
+/** Tệp đính kèm đã tải lên Google Drive. */
+export interface TaskFileAttachment {
+  name: string;
+  url: string;
+}
+
+/** Liên kết ngoài đính kèm. */
+export interface TaskLinkAttachment {
+  label?: string;
+  url: string;
+}
+
 export interface WorkTask {
   id: string;
   title: string;
@@ -50,6 +62,12 @@ export interface WorkTask {
   progress: number;
   tags: string[];
   dependsOnTaskId?: string;
+  /** Tệp đính kèm, đã tải lên Google Drive. */
+  files: TaskFileAttachment[];
+  /** Liên kết ngoài đính kèm. */
+  links: TaskLinkAttachment[];
+  /** Danh sách URL ảnh minh họa của công việc. */
+  images: string[];
 }
 
 export interface WorkTaskInput {
@@ -65,6 +83,12 @@ export interface WorkTaskInput {
   progress: number;
   tags: string[];
   dependsOnTaskId?: string;
+  /** Tối đa 10 tệp, mỗi tệp là link Google Drive. */
+  files: TaskFileAttachment[];
+  /** Tối đa 10 liên kết ngoài. */
+  links: TaskLinkAttachment[];
+  /** Tối đa 10 URL ảnh đã tải lên Cloudinary. */
+  images: string[];
 }
 
 export type TaskReportAttachmentKind = "image" | "file";

@@ -1,3 +1,5 @@
+import type { TaskFileAttachment, TaskLinkAttachment } from "@/types/task";
+
 export type ProjectStepKey = "todo" | "inProgress" | "review" | "done";
 
 export interface ProjectStepConfig {
@@ -64,6 +66,12 @@ export interface Project {
   manager: ProjectMember;
   members: ProjectMember[];
   stats: ProjectStats;
+  /** Tệp đính kèm, đã tải lên Google Drive. */
+  files: TaskFileAttachment[];
+  /** Liên kết ngoài đính kèm. */
+  links: TaskLinkAttachment[];
+  /** Danh sách URL ảnh minh họa của dự án. */
+  images: string[];
 }
 
 export interface ProjectInput {
@@ -76,6 +84,12 @@ export interface ProjectInput {
   endDate: string;
   managerIds: string[];
   memberIds: string[];
+  /** Tối đa 10 tệp, mỗi tệp là link Google Drive. */
+  files: TaskFileAttachment[];
+  /** Tối đa 10 liên kết ngoài. */
+  links: TaskLinkAttachment[];
+  /** Tối đa 10 URL ảnh đã tải lên Cloudinary. */
+  images: string[];
 }
 
 export interface ApiResponse<T> {

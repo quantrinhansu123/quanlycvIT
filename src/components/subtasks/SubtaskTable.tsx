@@ -4,7 +4,7 @@ import { CalendarDays, FilePenLine, History, Pencil, Trash2 } from "lucide-react
 import type { Subtask } from "@/types/subtask";
 import { isSubtaskOverdue } from "@/types/subtask";
 import type { WorkTask } from "@/types/task";
-import type { ProjectMember } from "@/types/project";
+import type { Project, ProjectMember } from "@/types/project";
 import { Avatar, AvatarStack } from "@/components/ui/Avatar";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { TaskPriorityBadge, TaskStatusBadge, OverdueTag } from "@/components/tasks/TaskBadges";
@@ -24,6 +24,8 @@ interface SubtaskTableProps {
   onEdit: (subtask: Subtask) => void;
   onDelete: (subtask: Subtask) => void;
   hideWorkTaskColumn?: boolean;
+  /** Truyền vào để hiện thêm cột "Dự án" ngay sau cột "Thuộc công việc". */
+  projectsById?: Map<string, Project>;
 }
 
 export function SubtaskTable({
@@ -39,18 +41,21 @@ export function SubtaskTable({
   onEdit,
   onDelete,
   hideWorkTaskColumn = false,
+  projectsById,
 }: SubtaskTableProps) {
   const allSelected = subtasks.length > 0 && selectedIds.length === subtasks.length;
+  const showProjectColumn = !hideWorkTaskColumn && Boolean(projectsById);
 
   return (
     <div className="min-w-0">
       <table
-        className={`w-full ${hideWorkTaskColumn ? "min-w-[820px]" : "min-w-[900px]"} table-fixed border-collapse text-xs xl:min-w-0`}
+        className={`w-full ${hideWorkTaskColumn ? "min-w-[820px]" : showProjectColumn ? "min-w-[980px]" : "min-w-[900px]"} table-fixed border-collapse text-xs xl:min-w-0`}
       >
         <colgroup>
           <col className="w-9" />
-          <col className={hideWorkTaskColumn ? "w-[25%]" : "w-[18%]"} />
-          {!hideWorkTaskColumn && <col className="w-[12%]" />}
+          <col className={hideWorkTaskColumn ? "w-[25%]" : "w-[16%]"} />
+          {!hideWorkTaskColumn && <col className="w-[11%]" />}
+          {showProjectColumn && <col className="w-[10%]" />}
           <col className="w-[14%]" />
           <col className="w-[12%]" />
           <col className="w-[11%]" />
@@ -71,6 +76,7 @@ export function SubtaskTable({
             </th>
             <th className="whitespace-nowrap px-2 py-3">Tên task</th>
             {!hideWorkTaskColumn && <th className="whitespace-nowrap px-2 py-3">Thuộc công việc</th>}
+            {showProjectColumn && <th className="whitespace-nowrap px-2 py-3">Dự án</th>}
             <th className="whitespace-nowrap px-2 py-3">Người thực hiện</th>
             <th className="whitespace-nowrap px-2 py-3">Hạn hoàn thành</th>
             <th className="whitespace-nowrap px-2 py-3">Tiến độ</th>
@@ -110,7 +116,14 @@ export function SubtaskTable({
                 </td>
                 {!hideWorkTaskColumn && (
                   <td className="min-w-0 px-2 py-3 align-top">
-                    <span className="block truncate text-xs text-gray-600">{workTask?.title ?? "--"}</span>
+                    <span className="block break-words text-xs text-gray-600">{workTask?.title ?? "--"}</span>
+                  </td>
+                )}
+                {showProjectColumn && (
+                  <td className="min-w-0 px-2 py-3 align-top">
+                    <span className="block break-words text-xs text-gray-600">
+                      {(workTask && projectsById?.get(workTask.projectId)?.name) ?? "--"}
+                    </span>
                   </td>
                 )}
                 <td className="min-w-0 px-2 py-3 align-top">

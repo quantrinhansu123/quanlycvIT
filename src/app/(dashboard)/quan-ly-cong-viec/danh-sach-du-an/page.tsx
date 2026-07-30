@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Download, LayoutGrid, Plus, Search, Table as TableIcon, FolderOpen } from "lucide-react";
 import { projectService } from "@/services/project-service";
@@ -24,6 +24,7 @@ export default function ProjectListPage() {
   const router = useRouter();
   const { confirm, notify } = useFeedback();
   const [projects, setProjects] = useState<Project[]>([]);
+  const [total, setTotal] = useState(0);
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -34,19 +35,14 @@ export default function ProjectListPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [pageSize, setPageSize] = useState(50);
   const [page, setPage] = useState(1);
-  const pageCount = Math.max(1, Math.ceil(projects.length / pageSize));
-  const currentPage = Math.min(page, pageCount);
-  const visibleProjects = useMemo(
-    () => projects.slice((currentPage - 1) * pageSize, currentPage * pageSize),
-    [currentPage, pageSize, projects]
-  );
 
-  const loadProjects = useCallback(async (query?: string) => {
+  const loadProjects = useCallback(async (query: string | undefined, targetPage: number, size: number) => {
     setLoading(true);
     setError(false);
     try {
-      const data = await projectService.getProjects(query);
-      setProjects(data);
+      const result = await projectService.getProjectsPage(query, targetPage, size);
+      setProjects(result.items);
+      setTotal(result.total);
       setSelectedIds([]);
     } catch (loadError) {
       setError(true);
@@ -72,18 +68,24 @@ export default function ProjectListPage() {
   }, [notify]);
 
   useEffect(() => {
+    // Tìm kiếm thay đổi thì quay về trang đầu để không rơi vào trang trống.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPage(1);
+  }, [search]);
+
+  useEffect(() => {
     const timer = setTimeout(() => {
-      loadProjects(search);
+      loadProjects(search, page, pageSize);
     }, 300);
     return () => clearTimeout(timer);
-  }, [search, loadProjects]);
+  }, [search, page, pageSize, loadProjects]);
 
   function toggleSelect(id: string) {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
   }
 
   function toggleSelectAll() {
-    const visibleIds = visibleProjects.map((project) => project.id);
+    const visibleIds = projects.map((project) => project.id);
     const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
     setSelectedIds((current) =>
       allVisibleSelected
@@ -106,7 +108,7 @@ export default function ProjectListPage() {
       const deleted = await projectService.deleteProject(project.id);
       if (!deleted) throw new Error("Dự án không tồn tại hoặc đã được xóa trước đó.");
       notify({ type: "success", title: "Đã xóa dự án", description: `Dự án “${project.name}” đã được xóa.` });
-      await loadProjects(search);
+      await loadProjects(search, page, pageSize);
     } catch (deleteError) {
       notify({
         type: "error",
@@ -118,25 +120,26 @@ export default function ProjectListPage() {
     }
   }
 
-  function handleExportCsv() {
+  async function handleExportCsv() {
     try {
+      const exportProjects = await projectService.getProjects(search);
       const header = ["Mã dự án", "Tên dự án", "Quản lý (PM)", "Ngày bắt đầu", "Ngày kết thúc"];
-    const rows = projects.map((project) => [
-      project.code,
-      project.name,
-      project.managers.map((manager) => manager.name).join("; "),
-      formatDateVN(project.startDate),
-      formatDateVN(project.endDate),
-    ]);
-    const csvContent = [header, ...rows].map((row) => row.map((cell) => `"${cell}"`).join(",")).join("\n");
-    const blob = new Blob([`﻿${csvContent}`], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "danh-sach-du-an.csv";
-    link.click();
-    URL.revokeObjectURL(url);
-      notify({ type: "success", title: "Đã xuất danh sách dự án", description: `${projects.length} bản ghi đã được xuất.` });
+      const rows = exportProjects.map((project) => [
+        project.code,
+        project.name,
+        project.managers.map((manager) => manager.name).join("; "),
+        formatDateVN(project.startDate),
+        formatDateVN(project.endDate),
+      ]);
+      const csvContent = [header, ...rows].map((row) => row.map((cell) => `"${cell}"`).join(",")).join("\n");
+      const blob = new Blob([`﻿${csvContent}`], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "danh-sach-du-an.csv";
+      link.click();
+      URL.revokeObjectURL(url);
+      notify({ type: "success", title: "Đã xuất danh sách dự án", description: `${exportProjects.length} bản ghi đã được xuất.` });
     } catch (exportError) {
       notify({
         type: "error",
@@ -198,8 +201,8 @@ export default function ProjectListPage() {
           </div>
           <button
             type="button"
-            onClick={handleExportCsv}
-            disabled={projects.length === 0}
+            onClick={() => void handleExportCsv()}
+            disabled={total === 0}
             className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Xuất file"
           >
@@ -213,7 +216,7 @@ export default function ProjectListPage() {
         {loading ? (
           <TableSkeleton rows={4} />
         ) : error ? (
-          <ErrorState onRetry={() => loadProjects(search)} />
+          <ErrorState onRetry={() => loadProjects(search, page, pageSize)} />
         ) : projects.length === 0 ? (
           <EmptyState
             icon={FolderOpen}
@@ -228,7 +231,7 @@ export default function ProjectListPage() {
           />
         ) : viewMode === "table" ? (
           <ProjectTable
-            projects={visibleProjects}
+            projects={projects}
             selectedIds={selectedIds}
             onToggleSelect={toggleSelect}
             onToggleSelectAll={toggleSelectAll}
@@ -237,7 +240,7 @@ export default function ProjectListPage() {
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3">
-            {visibleProjects.map((project) => (
+            {projects.map((project) => (
               <ProjectCard
                 key={project.id}
                 project={project}
@@ -251,8 +254,8 @@ export default function ProjectListPage() {
 
         {!loading && !error && (
           <ListPaginationFooter
-            total={projects.length}
-            page={currentPage}
+            total={total}
+            page={page}
             pageSize={pageSize}
             onPageChange={setPage}
             onPageSizeChange={(size) => {
@@ -271,7 +274,7 @@ export default function ProjectListPage() {
           onClose={() => setModalState(null)}
           onSaved={() => {
             setModalState(null);
-            loadProjects(search);
+            loadProjects(search, page, pageSize);
           }}
         />
       )}

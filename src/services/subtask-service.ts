@@ -27,9 +27,63 @@ function buildQuery(filters: SubtaskFilters): string {
   return query ? `?${query}` : "";
 }
 
+export interface SubtaskListFilters extends SubtaskFilters {
+  projectId?: string;
+  workTaskIds?: string[];
+  assigneeIds?: string[];
+  page: number;
+  pageSize: number;
+}
+
+export interface SubtaskPage {
+  items: Subtask[];
+  total: number;
+}
+
 export const subtaskService = {
+  async uploadImage(file: File): Promise<string> {
+    const formData = new FormData();
+    formData.set("file", file);
+    const uploaded = await apiClient.postFormData<{
+      url: string;
+      publicId: string;
+    }>("/media/task-image", formData);
+    return uploaded.url;
+  },
+
+  /** Tải tệp lên Google Drive qua Apps Script proxy, trả về tên và link Drive. */
+  async uploadFile(file: File): Promise<{ name: string; url: string }> {
+    const formData = new FormData();
+    formData.set("file", file);
+    return apiClient.postFormData<{ name: string; url: string }>(
+      "/media/task-file",
+      formData
+    );
+  },
+
   async getSubtasks(filters: SubtaskFilters = {}): Promise<Subtask[]> {
     return apiClient.get<Subtask[]>(`/subtasks${buildQuery(filters)}`);
+  },
+
+  /** Tải một trang task từ server, có thể lọc theo dự án và nhiều người thực hiện. */
+  async getSubtasksPage(filters: SubtaskListFilters): Promise<SubtaskPage> {
+    const params = new URLSearchParams();
+    if (filters.search) params.set("search", filters.search);
+    if (filters.workTaskId) params.set("workTaskId", filters.workTaskId);
+    if (filters.workTaskIds && filters.workTaskIds.length > 0) {
+      params.set("workTaskIds", filters.workTaskIds.join(","));
+    }
+    if (filters.projectId) params.set("projectId", filters.projectId);
+    if (filters.assigneeId) params.set("assigneeId", filters.assigneeId);
+    if (filters.assigneeIds && filters.assigneeIds.length > 0) {
+      params.set("assigneeIds", filters.assigneeIds.join(","));
+    }
+    if (filters.priority) params.set("priority", filters.priority);
+    if (filters.status) params.set("status", filters.status);
+    if (filters.overdueOnly) params.set("overdueOnly", "true");
+    params.set("page", String(filters.page));
+    params.set("pageSize", String(filters.pageSize));
+    return apiClient.get<SubtaskPage>(`/subtasks?${params.toString()}`);
   },
 
   async getSubtaskById(id: string): Promise<Subtask | null> {

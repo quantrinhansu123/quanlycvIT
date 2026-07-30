@@ -33,7 +33,11 @@ export function TaskCard({
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
       <div className="flex items-start justify-between gap-2">
-        {project ? <Badge color={project.color}>{project.code}</Badge> : <span />}
+        {project ? (
+          <Badge color={project.color} className="max-w-full whitespace-normal leading-4">
+            {project.name}
+          </Badge>
+        ) : <span />}
         <TaskActionMenu
           onEdit={() => onEdit(task)}
           onDelete={() => onDelete(task)}

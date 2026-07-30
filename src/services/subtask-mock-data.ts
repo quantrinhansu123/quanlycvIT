@@ -14,6 +14,9 @@ export const INITIAL_SUBTASKS: Subtask[] = [
     progress: 100,
     tags: ["Lắp đặt"],
     assignees: [],
+    files: [],
+    links: [],
+    images: [],
   },
   {
     id: "tk-2",
@@ -28,6 +31,9 @@ export const INITIAL_SUBTASKS: Subtask[] = [
     progress: 60,
     tags: ["Thi công"],
     assignees: [],
+    files: [],
+    links: [],
+    images: [],
   },
   {
     id: "tk-3",
@@ -42,6 +48,9 @@ export const INITIAL_SUBTASKS: Subtask[] = [
     progress: 0,
     tags: ["Cấu hình"],
     assignees: [],
+    files: [],
+    links: [],
+    images: [],
   },
   {
     id: "tk-4",
@@ -56,6 +65,9 @@ export const INITIAL_SUBTASKS: Subtask[] = [
     progress: 0,
     tags: ["Thi công"],
     assignees: [],
+    files: [],
+    links: [],
+    images: [],
   },
   {
     id: "tk-5",
@@ -70,6 +82,9 @@ export const INITIAL_SUBTASKS: Subtask[] = [
     progress: 0,
     tags: ["Thi công"],
     assignees: [],
+    files: [],
+    links: [],
+    images: [],
   },
   {
     id: "tk-6",
@@ -84,6 +99,9 @@ export const INITIAL_SUBTASKS: Subtask[] = [
     progress: 100,
     tags: ["Thi công"],
     assignees: [],
+    files: [],
+    links: [],
+    images: [],
   },
   {
     id: "tk-7",
@@ -98,6 +116,9 @@ export const INITIAL_SUBTASKS: Subtask[] = [
     progress: 50,
     tags: ["Thi công"],
     assignees: [],
+    files: [],
+    links: [],
+    images: [],
   },
   {
     id: "tk-8",
@@ -112,6 +133,9 @@ export const INITIAL_SUBTASKS: Subtask[] = [
     progress: 100,
     tags: ["Khảo sát"],
     assignees: [],
+    files: [],
+    links: [],
+    images: [],
   },
   {
     id: "tk-9",
@@ -126,6 +150,9 @@ export const INITIAL_SUBTASKS: Subtask[] = [
     progress: 100,
     tags: ["Khảo sát"],
     assignees: [],
+    files: [],
+    links: [],
+    images: [],
   },
   {
     id: "tk-10",
@@ -140,6 +167,9 @@ export const INITIAL_SUBTASKS: Subtask[] = [
     progress: 100,
     tags: ["UI/UX"],
     assignees: [],
+    files: [],
+    links: [],
+    images: [],
   },
   {
     id: "tk-11",
@@ -154,6 +184,9 @@ export const INITIAL_SUBTASKS: Subtask[] = [
     progress: 100,
     tags: ["UI/UX"],
     assignees: [],
+    files: [],
+    links: [],
+    images: [],
   },
 ];
 

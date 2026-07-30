@@ -19,6 +19,8 @@ import type { WorkTask, TaskPriority, TaskStatus } from "@/types/task";
 import { TASK_PRIORITY_OPTIONS, TASK_STATUS_OPTIONS } from "@/types/task";
 import { Button } from "@/components/ui/Button";
 import { FilterSelect } from "@/components/ui/FilterSelect";
+import { SearchableFilterSelect } from "@/components/ui/SearchableFilterSelect";
+import { MemberFilterMultiSelect } from "@/components/ui/MemberFilterMultiSelect";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { TableSkeleton } from "@/components/ui/Skeleton";
@@ -39,12 +41,15 @@ export default function TaskListPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [tasks, setTasks] = useState<WorkTask[]>([]);
+  const [total, setTotal] = useState(0);
+  /** Toàn bộ công việc (không phân trang), chỉ dùng để chọn "công việc tiền đề" trong form. */
+  const [dependencyTasks, setDependencyTasks] = useState<WorkTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   const [search, setSearch] = useState("");
   const [projectId, setProjectId] = useState("");
-  const [assigneeId, setAssigneeId] = useState("");
+  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [priority, setPriority] = useState<TaskPriority | "">("");
   const [status, setStatus] = useState<TaskStatus | "">("");
   const [overdueOnly, setOverdueOnly] = useState(false);
@@ -58,19 +63,25 @@ export default function TaskListPage() {
 
   const projectsById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
   const membersById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
-  const pageCount = Math.max(1, Math.ceil(tasks.length / pageSize));
-  const currentPage = Math.min(page, pageCount);
-  const visibleTasks = useMemo(
-    () => tasks.slice((currentPage - 1) * pageSize, currentPage * pageSize),
-    [currentPage, pageSize, tasks]
-  );
 
-  const loadTasks = useCallback(async (filters: TaskFilters) => {
+  function currentFilters(): TaskFilters {
+    return {
+      search,
+      projectId: projectId || undefined,
+      assigneeIds: assigneeIds.length > 0 ? assigneeIds : undefined,
+      priority: priority || undefined,
+      status: status || undefined,
+      overdueOnly,
+    };
+  }
+
+  const loadTasks = useCallback(async (filters: TaskFilters, targetPage: number, size: number) => {
     setLoading(true);
     setError(false);
     try {
-      const data = await taskService.getTasks(filters);
-      setTasks(data);
+      const result = await taskService.getTasksPage({ ...filters, page: targetPage, pageSize: size });
+      setTasks(result.items);
+      setTotal(result.total);
       setSelectedIds([]);
     } catch (loadError) {
       setError(true);
@@ -83,6 +94,16 @@ export default function TaskListPage() {
       setLoading(false);
     }
   }, [notify]);
+
+  const refreshDependencyTasks = useCallback(() => {
+    taskService.getTasks().then(setDependencyTasks).catch(() => {
+      // Không chặn luồng chính nếu tải danh sách phụ thuộc thất bại.
+    });
+  }, []);
+
+  useEffect(() => {
+    refreshDependencyTasks();
+  }, [refreshDependencyTasks]);
 
   useEffect(() => {
     Promise.all([projectService.getProjects(), projectService.getDirectory()])
@@ -101,36 +122,25 @@ export default function TaskListPage() {
   }, [notify]);
 
   useEffect(() => {
+    // Bộ lọc thay đổi thì quay về trang đầu để không rơi vào trang trống.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPage(1);
+  }, [search, projectId, assigneeIds, priority, status, overdueOnly]);
+
+  useEffect(() => {
     const timer = setTimeout(() => {
-      loadTasks({
-        search,
-        projectId: projectId || undefined,
-        assigneeId: assigneeId || undefined,
-        priority: priority || undefined,
-        status: status || undefined,
-        overdueOnly,
-      });
+      loadTasks(currentFilters(), page, pageSize);
     }, 300);
     return () => clearTimeout(timer);
-  }, [search, projectId, assigneeId, priority, status, overdueOnly, loadTasks]);
-
-  function currentFilters(): TaskFilters {
-    return {
-      search,
-      projectId: projectId || undefined,
-      assigneeId: assigneeId || undefined,
-      priority: priority || undefined,
-      status: status || undefined,
-      overdueOnly,
-    };
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, projectId, assigneeIds, priority, status, overdueOnly, page, pageSize, loadTasks]);
 
   function toggleSelect(id: string) {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
   }
 
   function toggleSelectAll() {
-    const visibleIds = visibleTasks.map((task) => task.id);
+    const visibleIds = tasks.map((task) => task.id);
     const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
     setSelectedIds((current) =>
       allVisibleSelected
@@ -153,7 +163,8 @@ export default function TaskListPage() {
       const deleted = await taskService.deleteTask(task.id);
       if (!deleted) throw new Error("Công việc không tồn tại hoặc đã được xóa trước đó.");
       notify({ type: "success", title: "Đã xóa công việc", description: `Công việc “${task.title}” đã được xóa.` });
-      await loadTasks(currentFilters());
+      await loadTasks(currentFilters(), page, pageSize);
+      refreshDependencyTasks();
     } catch (deleteError) {
       notify({
         type: "error",
@@ -165,27 +176,28 @@ export default function TaskListPage() {
     }
   }
 
-  function handleExportCsv() {
+  async function handleExportCsv() {
     try {
+      const exportTasks = await taskService.getTasks(currentFilters());
       const header = ["Tên công việc", "Dự án", "Người phụ trách", "Hạn hoàn thành", "Tiến độ", "Ưu tiên", "Trạng thái"];
-    const rows = tasks.map((task) => [
-      task.title,
-      projectsById.get(task.projectId)?.code ?? "",
-      membersById.get(task.assigneeId)?.name ?? "",
-      formatDateVN(task.dueDate),
-      `${task.progress}%`,
-      TASK_PRIORITY_OPTIONS.find((o) => o.value === task.priority)?.label ?? "",
-      TASK_STATUS_OPTIONS.find((o) => o.value === task.status)?.label ?? "",
-    ]);
-    const csvContent = [header, ...rows].map((row) => row.map((cell) => `"${cell}"`).join(",")).join("\n");
-    const blob = new Blob([`﻿${csvContent}`], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "danh-sach-cong-viec.csv";
-    link.click();
-    URL.revokeObjectURL(url);
-      notify({ type: "success", title: "Đã xuất danh sách công việc", description: `${tasks.length} bản ghi đã được xuất.` });
+      const rows = exportTasks.map((task) => [
+        task.title,
+        projectsById.get(task.projectId)?.name ?? "",
+        membersById.get(task.assigneeId)?.name ?? "",
+        formatDateVN(task.dueDate),
+        `${task.progress}%`,
+        TASK_PRIORITY_OPTIONS.find((o) => o.value === task.priority)?.label ?? "",
+        TASK_STATUS_OPTIONS.find((o) => o.value === task.status)?.label ?? "",
+      ]);
+      const csvContent = [header, ...rows].map((row) => row.map((cell) => `"${cell}"`).join(",")).join("\n");
+      const blob = new Blob([`﻿${csvContent}`], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "danh-sach-cong-viec.csv";
+      link.click();
+      URL.revokeObjectURL(url);
+      notify({ type: "success", title: "Đã xuất danh sách công việc", description: `${exportTasks.length} bản ghi đã được xuất.` });
     } catch (exportError) {
       notify({
         type: "error",
@@ -218,21 +230,20 @@ export default function TaskListPage() {
           />
         </div>
 
-        <FilterSelect
-          compact
-          className="w-[80px] shrink-0"
+        <SearchableFilterSelect
+          className="w-[110px] shrink-0 2xl:w-[130px]"
           label="Dự án"
+          searchPlaceholder="Tìm dự án..."
           value={projectId}
           onChange={setProjectId}
-          options={projects.map((p) => ({ value: p.id, label: p.code }))}
+          options={projects.map((p) => ({ value: p.id, label: p.name, sublabel: p.code }))}
         />
-        <FilterSelect
-          compact
-          className="w-[112px] shrink-0 2xl:w-[126px]"
+        <MemberFilterMultiSelect
+          className="w-[130px] shrink-0 2xl:w-[150px]"
           label="Người phụ trách"
-          value={assigneeId}
-          onChange={setAssigneeId}
-          options={members.map((m) => ({ value: m.id, label: m.name }))}
+          value={assigneeIds}
+          onChange={setAssigneeIds}
+          options={members}
         />
         <FilterSelect
           compact
@@ -287,8 +298,8 @@ export default function TaskListPage() {
           </div>
           <button
             type="button"
-            onClick={handleExportCsv}
-            disabled={tasks.length === 0}
+            onClick={() => void handleExportCsv()}
+            disabled={total === 0}
             className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Xuất file"
           >
@@ -302,7 +313,7 @@ export default function TaskListPage() {
         {loading ? (
           <TableSkeleton rows={5} />
         ) : error ? (
-          <ErrorState onRetry={() => loadTasks(currentFilters())} />
+          <ErrorState onRetry={() => loadTasks(currentFilters(), page, pageSize)} />
         ) : tasks.length === 0 ? (
           <EmptyState
             icon={ListChecks}
@@ -317,7 +328,7 @@ export default function TaskListPage() {
           />
         ) : viewMode === "table" ? (
           <TaskTable
-            tasks={visibleTasks}
+            tasks={tasks}
             projectsById={projectsById}
             membersById={membersById}
             selectedIds={selectedIds}
@@ -331,7 +342,7 @@ export default function TaskListPage() {
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3">
-            {visibleTasks.map((task) => (
+            {tasks.map((task) => (
               <TaskCard
                 key={task.id}
                 task={task}
@@ -350,8 +361,8 @@ export default function TaskListPage() {
 
         {!loading && !error && (
           <ListPaginationFooter
-            total={tasks.length}
-            page={currentPage}
+            total={total}
+            page={page}
             pageSize={pageSize}
             onPageChange={setPage}
             onPageSizeChange={(size) => {
@@ -368,11 +379,12 @@ export default function TaskListPage() {
           task={formModal.mode === "edit" ? formModal.task : undefined}
           projects={projects}
           members={members}
-          otherTasks={tasks}
+          otherTasks={dependencyTasks}
           onClose={() => setFormModal(null)}
           onSaved={() => {
             setFormModal(null);
-            loadTasks(currentFilters());
+            loadTasks(currentFilters(), page, pageSize);
+            refreshDependencyTasks();
           }}
         />
       )}

@@ -170,6 +170,8 @@ export function AccountFormModal({ account, departments, onClose, onSave }: Prop
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     {form.avatarUrl ? (
+                      // Ảnh xem trước có thể là blob URL cục bộ, không phù hợp với bộ tối ưu ảnh của Next.js.
+                      // eslint-disable-next-line @next/next/no-img-element
                       <img src={form.avatarUrl} alt="Ảnh đại diện xem trước" className="h-10 w-10 shrink-0 rounded-full border border-gray-200 object-cover" />
                     ) : (
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-semibold text-blue-600">AV</div>

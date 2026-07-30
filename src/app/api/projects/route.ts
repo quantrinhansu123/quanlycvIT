@@ -2,15 +2,32 @@ import type { NextRequest } from "next/server";
 import { apiSuccess, handleApiError, readJsonObject } from "@/lib/api/response";
 import { parseProjectInput } from "@/lib/api/validation";
 import { createApiSupabaseClient } from "@/lib/supabase/api";
-import { createProject, listProjects } from "@/lib/supabase/data";
+import { createProject, listProjects, listProjectsPage } from "@/lib/supabase/data";
 
 export async function GET(request: NextRequest) {
   try {
     const supabase = createApiSupabaseClient(request);
-    const projects = await listProjects(
-      supabase,
-      request.nextUrl.searchParams.get("q") ?? undefined
-    );
+    const params = request.nextUrl.searchParams;
+    const search = params.get("q") ?? undefined;
+    const page = params.get("page");
+    const pageSize = params.get("pageSize");
+
+    if (page && pageSize) {
+      const managerIdsParam = params.get("managerIds");
+      const managerIds = managerIdsParam
+        ? managerIdsParam.split(",").filter(Boolean)
+        : undefined;
+
+      const result = await listProjectsPage(supabase, {
+        search,
+        managerIds,
+        page: Number(page),
+        pageSize: Number(pageSize),
+      });
+      return apiSuccess(result);
+    }
+
+    const projects = await listProjects(supabase, search);
     return apiSuccess(projects);
   } catch (error) {
     return handleApiError(error);

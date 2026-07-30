@@ -14,6 +14,7 @@ export interface TaskFilters {
   search?: string;
   projectId?: string;
   assigneeId?: string;
+  assigneeIds?: string[];
   priority?: TaskPriority;
   status?: TaskStatus;
   overdueOnly?: boolean;
@@ -24,6 +25,9 @@ function buildQuery(filters: TaskFilters): string {
   if (filters.search) params.set("search", filters.search);
   if (filters.projectId) params.set("projectId", filters.projectId);
   if (filters.assigneeId) params.set("assigneeId", filters.assigneeId);
+  if (filters.assigneeIds && filters.assigneeIds.length > 0) {
+    params.set("assigneeIds", filters.assigneeIds.join(","));
+  }
   if (filters.priority) params.set("priority", filters.priority);
   if (filters.status) params.set("status", filters.status);
   if (filters.overdueOnly) params.set("overdueOnly", "true");
@@ -31,9 +35,53 @@ function buildQuery(filters: TaskFilters): string {
   return query ? `?${query}` : "";
 }
 
+export interface TaskPage {
+  items: WorkTask[];
+  total: number;
+}
+
 export const taskService = {
+  async uploadImage(file: File): Promise<string> {
+    const formData = new FormData();
+    formData.set("file", file);
+    const uploaded = await apiClient.postFormData<{
+      url: string;
+      publicId: string;
+    }>("/media/task-image", formData);
+    return uploaded.url;
+  },
+
+  /** Tải tệp lên Google Drive qua Apps Script proxy, trả về tên và link Drive. */
+  async uploadFile(file: File): Promise<{ name: string; url: string }> {
+    const formData = new FormData();
+    formData.set("file", file);
+    return apiClient.postFormData<{ name: string; url: string }>(
+      "/media/task-file",
+      formData
+    );
+  },
+
   async getTasks(filters: TaskFilters = {}): Promise<WorkTask[]> {
     return apiClient.get<WorkTask[]>(`/tasks${buildQuery(filters)}`);
+  },
+
+  /** Tải một trang công việc từ server thay vì toàn bộ tập kết quả khớp bộ lọc. */
+  async getTasksPage(
+    filters: TaskFilters & { page: number; pageSize: number }
+  ): Promise<TaskPage> {
+    const params = new URLSearchParams();
+    if (filters.search) params.set("search", filters.search);
+    if (filters.projectId) params.set("projectId", filters.projectId);
+    if (filters.assigneeId) params.set("assigneeId", filters.assigneeId);
+    if (filters.assigneeIds && filters.assigneeIds.length > 0) {
+      params.set("assigneeIds", filters.assigneeIds.join(","));
+    }
+    if (filters.priority) params.set("priority", filters.priority);
+    if (filters.status) params.set("status", filters.status);
+    if (filters.overdueOnly) params.set("overdueOnly", "true");
+    params.set("page", String(filters.page));
+    params.set("pageSize", String(filters.pageSize));
+    return apiClient.get<TaskPage>(`/tasks?${params.toString()}`);
   },
 
   async getTaskById(id: string): Promise<WorkTask | null> {

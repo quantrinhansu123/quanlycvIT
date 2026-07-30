@@ -1,6 +1,15 @@
 import type { ProjectMember } from "@/types/project";
-import type { ProgressReport, TaskPriority, TaskStatus } from "@/types/task";
+import type {
+  ProgressReport,
+  TaskFileAttachment,
+  TaskLinkAttachment,
+  TaskPriority,
+  TaskStatus,
+} from "@/types/task";
 import { getAppDateKey } from "@/lib/utils";
+
+/** Định nghĩa thật ở task.ts, dùng chung cho công việc, dự án và task. */
+export type { TaskFileAttachment, TaskLinkAttachment };
 
 export interface Subtask {
   id: string;
@@ -19,6 +28,12 @@ export interface Subtask {
   dueDate: string;
   progress: number;
   tags: string[];
+  /** Tệp đính kèm, đã tải lên Google Drive. */
+  files: TaskFileAttachment[];
+  /** Liên kết ngoài đính kèm. */
+  links: TaskLinkAttachment[];
+  /** Danh sách URL ảnh minh họa của Task. */
+  images: string[];
 }
 
 export interface SubtaskInput {
@@ -33,6 +48,12 @@ export interface SubtaskInput {
   dueDate: string;
   progress: number;
   tags: string[];
+  /** Tối đa 10 tệp, mỗi tệp là link Google Drive. */
+  files: TaskFileAttachment[];
+  /** Tối đa 10 liên kết ngoài. */
+  links: TaskLinkAttachment[];
+  /** Tối đa 10 URL ảnh đã tải lên Cloudinary. */
+  images: string[];
 }
 
 export interface SubtaskReport extends ProgressReport {

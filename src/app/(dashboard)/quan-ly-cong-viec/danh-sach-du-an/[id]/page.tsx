@@ -138,9 +138,16 @@ export default function ProjectDetailPage() {
   const statusMeta = PROJECT_STATUS_META[project.status];
 
   return (
-    <div className="min-h-full bg-white pb-2">
-      <div className="border-b border-gray-100 bg-white">
-        <div className="mx-auto flex max-w-[1320px] items-center justify-between gap-4 px-3 py-3 sm:px-5">
+    <div
+      className={cn(
+        "bg-white",
+        tab === "tasks"
+          ? "flex h-full min-h-0 flex-col overflow-hidden"
+          : "min-h-full pb-2"
+      )}
+    >
+      <div className="shrink-0 border-b border-gray-100 bg-white">
+        <div className="mx-auto flex w-full max-w-none items-center justify-between gap-4 px-3 py-3 sm:px-5">
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
@@ -174,7 +181,14 @@ export default function ProjectDetailPage() {
         </div>
       </div>
 
-      <div className="mx-auto max-w-[1080px] px-4 pb-8 pt-6 sm:px-6">
+      <div
+        className={cn(
+          "mx-auto",
+          tab === "tasks"
+            ? "flex min-h-0 w-full max-w-none flex-1 px-3 pb-3 pt-3 sm:px-5"
+            : "w-full max-w-none px-3 pb-8 pt-4 sm:px-5"
+        )}
+      >
         {tab === "info" ? (
           <div className="space-y-5">
             <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -260,8 +274,8 @@ export default function ProjectDetailPage() {
                 <div className="mb-4">
                   <Badge color={project.color}>{project.code}</Badge>
                 </div>
-                <div className="min-h-24 rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-4 text-sm leading-6 text-gray-700">
-                  {project.description || "Chưa có mô tả cho dự án này."}
+                <div className="min-h-24 max-w-full overflow-x-auto rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-4 text-sm leading-6 text-gray-700">
+                  <ProjectDescription description={project.description} />
                 </div>
                 <div className="mt-12 grid grid-cols-1 gap-5 border-t border-gray-100 pt-4 sm:grid-cols-2">
                   <DateInfo
@@ -397,7 +411,7 @@ export default function ProjectDetailPage() {
             </section>
           </div>
         ) : tab === "tasks" ? (
-          <section className="min-h-[560px]">
+          <section className="min-h-0 w-full flex-1">
             <ProjectTasksPanel
               project={project}
               members={members}
@@ -424,8 +438,8 @@ export default function ProjectDetailPage() {
         )}
       </div>
 
-      <div className="sticky bottom-0 z-20 border-t border-gray-200 bg-white/95 px-4 py-2 backdrop-blur">
-        <div className="mx-auto flex max-w-[1080px] gap-2 overflow-x-auto">
+      <div className="sticky bottom-0 z-20 shrink-0 border-t border-gray-200 bg-white/95 px-4 py-2 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-none gap-2 overflow-x-auto">
           <BottomTab
             active={tab === "info"}
             onClick={() => setTab("info")}
@@ -491,6 +505,32 @@ function OverviewCard({
         <Icon className="h-4 w-4" />
       </span>
     </article>
+  );
+}
+
+function ProjectDescription({ description }: { description?: string }) {
+  if (!description) {
+    return <p>Chưa có mô tả cho dự án này.</p>;
+  }
+
+  return (
+    <p className="min-w-full whitespace-pre-wrap break-words">
+      {description.split(/(https?:\/\/\S+)/g).map((part, index) =>
+        /^https?:\/\//.test(part) ? (
+          <a
+            key={`${part}-${index}`}
+            href={part}
+            target="_blank"
+            rel="noreferrer"
+            className="whitespace-nowrap text-blue-600 underline-offset-2 hover:underline"
+          >
+            {part}
+          </a>
+        ) : (
+          part
+        )
+      )}
+    </p>
   );
 }
 

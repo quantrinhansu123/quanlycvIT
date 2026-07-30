@@ -5,7 +5,6 @@ import type { WorkTask } from "@/types/task";
 import { isTaskOverdue } from "@/types/task";
 import type { Project, ProjectMember } from "@/types/project";
 import { Avatar, AvatarStack } from "@/components/ui/Avatar";
-import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { TaskPriorityBadge, TaskStatusBadge, OverdueTag } from "@/components/tasks/TaskBadges";
 import { ActionIconButton } from "@/components/ui/ActionIconButton";
@@ -46,7 +45,7 @@ export function TaskTable({
         <colgroup>
           <col className="w-9" />
           <col className={hideProjectColumn ? "w-[25%]" : "w-[18%]"} />
-          {!hideProjectColumn && <col className="w-[8%]" />}
+          {!hideProjectColumn && <col className="w-[12%]" />}
           <col className="w-[14%]" />
           <col className="w-[12%]" />
           <col className="w-[11%]" />
@@ -106,7 +105,11 @@ export function TaskTable({
                 </td>
                 {!hideProjectColumn && (
                   <td className="min-w-0 px-2 py-3 align-top">
-                    {project ? <Badge color={project.color}>{project.code}</Badge> : "--"}
+                    {project ? (
+                      <span className="block whitespace-normal break-words text-xs leading-4 text-gray-700">
+                        {project.name}
+                      </span>
+                    ) : "--"}
                   </td>
                 )}
                 <td className="min-w-0 px-2 py-3 align-top">

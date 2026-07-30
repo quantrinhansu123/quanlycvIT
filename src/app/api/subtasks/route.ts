@@ -5,6 +5,7 @@ import { createApiSupabaseClient } from "@/lib/supabase/api";
 import {
   createSubtask,
   listSubtasks,
+  listSubtasksPage,
   type SubtaskFilters,
 } from "@/lib/supabase/data";
 import type { TaskPriority, TaskStatus } from "@/types/task";
@@ -23,10 +24,35 @@ function filtersFromRequest(request: NextRequest): SubtaskFilters {
 
 export async function GET(request: NextRequest) {
   try {
-    const subtasks = await listSubtasks(
-      createApiSupabaseClient(request),
-      filtersFromRequest(request)
-    );
+    const supabase = createApiSupabaseClient(request);
+    const filters = filtersFromRequest(request);
+    const params = request.nextUrl.searchParams;
+    const page = params.get("page");
+    const pageSize = params.get("pageSize");
+
+    if (page && pageSize) {
+      const projectId = params.get("projectId") ?? undefined;
+      const workTaskIdsParam = params.get("workTaskIds");
+      const workTaskIds = workTaskIdsParam
+        ? workTaskIdsParam.split(",").filter(Boolean)
+        : undefined;
+      const assigneeIdsParam = params.get("assigneeIds");
+      const assigneeIds = assigneeIdsParam
+        ? assigneeIdsParam.split(",").filter(Boolean)
+        : undefined;
+
+      const result = await listSubtasksPage(supabase, {
+        ...filters,
+        projectId,
+        workTaskIds,
+        assigneeIds,
+        page: Number(page),
+        pageSize: Number(pageSize),
+      });
+      return apiSuccess(result);
+    }
+
+    const subtasks = await listSubtasks(supabase, filters);
     return apiSuccess(subtasks);
   } catch (error) {
     return handleApiError(error);

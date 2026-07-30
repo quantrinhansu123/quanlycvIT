@@ -20,18 +20,14 @@ interface Props {
 
 export function BankCombobox({ value, onChange, className }: Props) {
   const [banks, setBanks] = useState<Bank[]>([]);
-  const [query, setQuery] = useState(value);
+  const [draft, setDraft] = useState(value);
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    setQuery(value);
-  }, [value]);
+  const query = open ? draft : value;
 
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true);
     fetch("/api/banks", { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error("Không thể tải danh sách ngân hàng.");
@@ -62,11 +58,14 @@ export function BankCombobox({ value, onChange, className }: Props) {
         value={query}
         onChange={(event) => {
           const nextValue = event.target.value;
-          setQuery(nextValue);
+          setDraft(nextValue);
           onChange(nextValue);
           setOpen(true);
         }}
-        onFocus={() => setOpen(true)}
+        onFocus={() => {
+          setDraft(value);
+          setOpen(true);
+        }}
         onBlur={() => window.setTimeout(() => setOpen(false), 150)}
         placeholder="Tìm theo tên hoặc mã ngân hàng"
         className={cn("h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-9 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100", className)}
@@ -87,7 +86,7 @@ export function BankCombobox({ value, onChange, className }: Props) {
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => {
                 onChange(bank.shortName);
-                setQuery(bank.shortName);
+                setDraft(bank.shortName);
                 setOpen(false);
               }}
               className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-blue-50"

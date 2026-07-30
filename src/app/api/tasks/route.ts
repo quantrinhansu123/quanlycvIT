@@ -5,16 +5,19 @@ import { createApiSupabaseClient } from "@/lib/supabase/api";
 import {
   createWorkTask,
   listWorkTasks,
+  listWorkTasksPage,
   type WorkTaskFilters,
 } from "@/lib/supabase/data";
 import type { TaskPriority, TaskStatus } from "@/types/task";
 
 function filtersFromRequest(request: NextRequest): WorkTaskFilters {
   const params = request.nextUrl.searchParams;
+  const assigneeIdsParam = params.get("assigneeIds");
   return {
     search: params.get("search") ?? undefined,
     projectId: params.get("projectId") ?? undefined,
     assigneeId: params.get("assigneeId") ?? undefined,
+    assigneeIds: assigneeIdsParam ? assigneeIdsParam.split(",").filter(Boolean) : undefined,
     priority: (params.get("priority") as TaskPriority | null) ?? undefined,
     status: (params.get("status") as TaskStatus | null) ?? undefined,
     overdueOnly: params.get("overdueOnly") === "true",
@@ -23,10 +26,22 @@ function filtersFromRequest(request: NextRequest): WorkTaskFilters {
 
 export async function GET(request: NextRequest) {
   try {
-    const tasks = await listWorkTasks(
-      createApiSupabaseClient(request),
-      filtersFromRequest(request)
-    );
+    const supabase = createApiSupabaseClient(request);
+    const filters = filtersFromRequest(request);
+    const params = request.nextUrl.searchParams;
+    const page = params.get("page");
+    const pageSize = params.get("pageSize");
+
+    if (page && pageSize) {
+      const result = await listWorkTasksPage(supabase, {
+        ...filters,
+        page: Number(page),
+        pageSize: Number(pageSize),
+      });
+      return apiSuccess(result);
+    }
+
+    const tasks = await listWorkTasks(supabase, filters);
     return apiSuccess(tasks);
   } catch (error) {
     return handleApiError(error);

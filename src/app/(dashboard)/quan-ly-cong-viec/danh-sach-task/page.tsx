@@ -13,14 +13,17 @@ import {
   ListTodo,
 } from "lucide-react";
 import { taskService } from "@/services/task-service";
-import { subtaskService, type SubtaskFilters } from "@/services/subtask-service";
+import { subtaskService, type SubtaskListFilters } from "@/services/subtask-service";
 import { projectService } from "@/services/project-service";
-import type { ProjectMember } from "@/types/project";
+import type { Project, ProjectMember } from "@/types/project";
 import type { WorkTask, TaskPriority, TaskStatus } from "@/types/task";
 import { TASK_PRIORITY_OPTIONS, TASK_STATUS_OPTIONS } from "@/types/task";
 import type { Subtask } from "@/types/subtask";
 import { Button } from "@/components/ui/Button";
 import { FilterSelect } from "@/components/ui/FilterSelect";
+import { MemberFilterMultiSelect } from "@/components/ui/MemberFilterMultiSelect";
+import { SearchableFilterSelect } from "@/components/ui/SearchableFilterSelect";
+import { SearchableFilterMultiSelect } from "@/components/ui/SearchableFilterMultiSelect";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { TableSkeleton } from "@/components/ui/Skeleton";
@@ -41,15 +44,18 @@ type QuickViewState = { subtask: Subtask; tab: "info" | "reports" | "timeline" }
 export default function SubtaskListPage() {
   const router = useRouter();
   const { confirm, notify } = useFeedback();
+  const [projects, setProjects] = useState<Project[]>([]);
   const [workTasks, setWorkTasks] = useState<WorkTask[]>([]);
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   const [search, setSearch] = useState("");
-  const [workTaskId, setWorkTaskId] = useState("");
-  const [assigneeId, setAssigneeId] = useState("");
+  const [projectId, setProjectId] = useState("");
+  const [workTaskIds, setWorkTaskIds] = useState<string[]>([]);
+  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [priority, setPriority] = useState<TaskPriority | "">("");
   const [status, setStatus] = useState<TaskStatus | "">("");
   const [overdueOnly, setOverdueOnly] = useState(false);
@@ -65,19 +71,37 @@ export default function SubtaskListPage() {
 
   const workTasksById = useMemo(() => new Map(workTasks.map((t) => [t.id, t])), [workTasks]);
   const membersById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
-  const pageCount = Math.max(1, Math.ceil(subtasks.length / pageSize));
-  const currentPage = Math.min(page, pageCount);
-  const visibleSubtasks = useMemo(
-    () => subtasks.slice((currentPage - 1) * pageSize, currentPage * pageSize),
-    [currentPage, pageSize, subtasks]
+  const projectsById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
+
+  // Bộ lọc "Công việc" chỉ hiển thị công việc thuộc dự án đang chọn.
+  const workTaskOptions = useMemo(
+    () => (projectId ? workTasks.filter((t) => t.projectId === projectId) : workTasks),
+    [workTasks, projectId]
   );
 
-  const loadSubtasks = useCallback(async (filters: SubtaskFilters) => {
+  function currentFilters(): Omit<SubtaskListFilters, "page" | "pageSize"> {
+    return {
+      search,
+      workTaskIds: workTaskIds.length > 0 ? workTaskIds : undefined,
+      projectId: projectId || undefined,
+      assigneeIds: assigneeIds.length > 0 ? assigneeIds : undefined,
+      priority: priority || undefined,
+      status: status || undefined,
+      overdueOnly,
+    };
+  }
+
+  const loadSubtasks = useCallback(async (
+    filters: Omit<SubtaskListFilters, "page" | "pageSize">,
+    targetPage: number,
+    size: number
+  ) => {
     setLoading(true);
     setError(false);
     try {
-      const data = await subtaskService.getSubtasks(filters);
-      setSubtasks(data);
+      const result = await subtaskService.getSubtasksPage({ ...filters, page: targetPage, pageSize: size });
+      setSubtasks(result.items);
+      setTotal(result.total);
       setSelectedIds([]);
     } catch (loadError) {
       setError(true);
@@ -92,10 +116,11 @@ export default function SubtaskListPage() {
   }, [notify]);
 
   useEffect(() => {
-    Promise.all([taskService.getTasks(), projectService.getDirectory()])
-      .then(([taskData, memberData]) => {
+    Promise.all([taskService.getTasks(), projectService.getDirectory(), projectService.getProjects()])
+      .then(([taskData, memberData, projectData]) => {
         setWorkTasks(taskData);
         setMembers(memberData);
+        setProjects(projectData);
       })
       .catch((dependencyError) => {
         setError(true);
@@ -107,37 +132,36 @@ export default function SubtaskListPage() {
       });
   }, [notify]);
 
+  // Đổi dự án thì bỏ những lựa chọn "Công việc" không thuộc dự án mới.
+  function handleProjectChange(nextProjectId: string) {
+    setProjectId(nextProjectId);
+    if (nextProjectId) {
+      setWorkTaskIds((current) =>
+        current.filter((id) => workTasksById.get(id)?.projectId === nextProjectId)
+      );
+    }
+  }
+
+  useEffect(() => {
+    // Bộ lọc thay đổi thì quay về trang đầu để không rơi vào trang trống.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPage(1);
+  }, [search, projectId, workTaskIds, assigneeIds, priority, status, overdueOnly]);
+
   useEffect(() => {
     const timer = setTimeout(() => {
-      loadSubtasks({
-        search,
-        workTaskId: workTaskId || undefined,
-        assigneeId: assigneeId || undefined,
-        priority: priority || undefined,
-        status: status || undefined,
-        overdueOnly,
-      });
+      loadSubtasks(currentFilters(), page, pageSize);
     }, 300);
     return () => clearTimeout(timer);
-  }, [search, workTaskId, assigneeId, priority, status, overdueOnly, loadSubtasks]);
-
-  function currentFilters(): SubtaskFilters {
-    return {
-      search,
-      workTaskId: workTaskId || undefined,
-      assigneeId: assigneeId || undefined,
-      priority: priority || undefined,
-      status: status || undefined,
-      overdueOnly,
-    };
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, projectId, workTaskIds, assigneeIds, priority, status, overdueOnly, page, pageSize, loadSubtasks]);
 
   function toggleSelect(id: string) {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
   }
 
   function toggleSelectAll() {
-    const visibleIds = visibleSubtasks.map((subtask) => subtask.id);
+    const visibleIds = subtasks.map((subtask) => subtask.id);
     const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
     setSelectedIds((current) =>
       allVisibleSelected
@@ -160,7 +184,7 @@ export default function SubtaskListPage() {
       const deleted = await subtaskService.deleteSubtask(subtask.id);
       if (!deleted) throw new Error("Task không tồn tại hoặc đã được xóa trước đó.");
       notify({ type: "success", title: "Đã xóa task", description: `Task “${subtask.title}” đã được xóa.` });
-      await loadSubtasks(currentFilters());
+      await loadSubtasks(currentFilters(), page, pageSize);
     } catch (deleteError) {
       notify({
         type: "error",
@@ -172,27 +196,37 @@ export default function SubtaskListPage() {
     }
   }
 
-  function handleExportCsv() {
+  async function handleExportCsv() {
     try {
-      const header = ["Tên task", "Thuộc công việc", "Người thực hiện", "Hạn hoàn thành", "Tiến độ", "Ưu tiên", "Trạng thái"];
-    const rows = subtasks.map((subtask) => [
-      subtask.title,
-      workTasksById.get(subtask.workTaskId)?.title ?? "",
-      membersById.get(subtask.assigneeId)?.name ?? "",
-      formatDateVN(subtask.dueDate),
-      `${subtask.progress}%`,
-      TASK_PRIORITY_OPTIONS.find((o) => o.value === subtask.priority)?.label ?? "",
-      TASK_STATUS_OPTIONS.find((o) => o.value === subtask.status)?.label ?? "",
-    ]);
-    const csvContent = [header, ...rows].map((row) => row.map((cell) => `"${cell}"`).join(",")).join("\n");
-    const blob = new Blob([`﻿${csvContent}`], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "danh-sach-task.csv";
-    link.click();
-    URL.revokeObjectURL(url);
-      notify({ type: "success", title: "Đã xuất danh sách task", description: `${subtasks.length} bản ghi đã được xuất.` });
+      const result = await subtaskService.getSubtasksPage({
+        ...currentFilters(),
+        page: 1,
+        pageSize: Math.max(total, 1),
+      });
+      const exportSubtasks = result.items;
+      const header = ["Tên task", "Thuộc công việc", "Dự án", "Người thực hiện", "Hạn hoàn thành", "Tiến độ", "Ưu tiên", "Trạng thái"];
+      const rows = exportSubtasks.map((subtask) => {
+        const workTask = workTasksById.get(subtask.workTaskId);
+        return [
+          subtask.title,
+          workTask?.title ?? "",
+          (workTask && projectsById.get(workTask.projectId)?.name) ?? "",
+          membersById.get(subtask.assigneeId)?.name ?? "",
+          formatDateVN(subtask.dueDate),
+          `${subtask.progress}%`,
+          TASK_PRIORITY_OPTIONS.find((o) => o.value === subtask.priority)?.label ?? "",
+          TASK_STATUS_OPTIONS.find((o) => o.value === subtask.status)?.label ?? "",
+        ];
+      });
+      const csvContent = [header, ...rows].map((row) => row.map((cell) => `"${cell}"`).join(",")).join("\n");
+      const blob = new Blob([`﻿${csvContent}`], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "danh-sach-task.csv";
+      link.click();
+      URL.revokeObjectURL(url);
+      notify({ type: "success", title: "Đã xuất danh sách task", description: `${exportSubtasks.length} bản ghi đã được xuất.` });
     } catch (exportError) {
       notify({
         type: "error",
@@ -225,21 +259,28 @@ export default function SubtaskListPage() {
           />
         </div>
 
-        <FilterSelect
-          compact
-          className="w-[92px] shrink-0 2xl:w-[104px]"
-          label="Công việc"
-          value={workTaskId}
-          onChange={setWorkTaskId}
-          options={workTasks.map((t) => ({ value: t.id, label: t.title }))}
+        <SearchableFilterSelect
+          className="w-[110px] shrink-0 2xl:w-[130px]"
+          label="Dự án"
+          searchPlaceholder="Tìm dự án..."
+          value={projectId}
+          onChange={handleProjectChange}
+          options={projects.map((p) => ({ value: p.id, label: p.name }))}
         />
-        <FilterSelect
-          compact
-          className="w-[112px] shrink-0 2xl:w-[126px]"
+        <SearchableFilterMultiSelect
+          className="w-[120px] shrink-0 2xl:w-[140px]"
+          label="Công việc"
+          searchPlaceholder="Tìm công việc..."
+          value={workTaskIds}
+          onChange={setWorkTaskIds}
+          options={workTaskOptions.map((t) => ({ value: t.id, label: t.title }))}
+        />
+        <MemberFilterMultiSelect
+          className="w-[130px] shrink-0 2xl:w-[150px]"
           label="Người thực hiện"
-          value={assigneeId}
-          onChange={setAssigneeId}
-          options={members.map((m) => ({ value: m.id, label: m.name }))}
+          value={assigneeIds}
+          onChange={setAssigneeIds}
+          options={members}
         />
         <FilterSelect
           compact
@@ -309,7 +350,7 @@ export default function SubtaskListPage() {
         {loading ? (
           <TableSkeleton rows={5} />
         ) : error ? (
-          <ErrorState onRetry={() => loadSubtasks(currentFilters())} />
+          <ErrorState onRetry={() => loadSubtasks(currentFilters(), page, pageSize)} />
         ) : subtasks.length === 0 ? (
           <EmptyState
             icon={ListTodo}
@@ -324,9 +365,10 @@ export default function SubtaskListPage() {
           />
         ) : viewMode === "table" ? (
           <SubtaskTable
-            subtasks={visibleSubtasks}
+            subtasks={subtasks}
             workTasksById={workTasksById}
             membersById={membersById}
+            projectsById={projectsById}
             selectedIds={selectedIds}
             onToggleSelect={toggleSelect}
             onToggleSelectAll={toggleSelectAll}
@@ -340,7 +382,7 @@ export default function SubtaskListPage() {
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3">
-            {visibleSubtasks.map((subtask) => (
+            {subtasks.map((subtask) => (
               <SubtaskCard
                 key={subtask.id}
                 subtask={subtask}
@@ -361,8 +403,8 @@ export default function SubtaskListPage() {
 
         {!loading && !error && (
           <ListPaginationFooter
-            total={subtasks.length}
-            page={currentPage}
+            total={total}
+            page={page}
             pageSize={pageSize}
             onPageChange={setPage}
             onPageSizeChange={(size) => {
@@ -382,7 +424,7 @@ export default function SubtaskListPage() {
           onClose={() => setFormModal(null)}
           onSaved={() => {
             setFormModal(null);
-            loadSubtasks(currentFilters());
+            loadSubtasks(currentFilters(), page, pageSize);
           }}
         />
       )}
@@ -394,7 +436,7 @@ export default function SubtaskListPage() {
           assignee={membersById.get(quickView.subtask.assigneeId)}
           initialTab={quickView.tab}
           onClose={() => setQuickView(null)}
-          onReportAdded={() => loadSubtasks(currentFilters())}
+          onReportAdded={() => loadSubtasks(currentFilters(), page, pageSize)}
         />
       )}
 
@@ -412,7 +454,7 @@ export default function SubtaskListPage() {
             subtaskService.addSubtaskReport(reportDrawer.id, input)
           }
           onClose={() => setReportDrawer(null)}
-          onSubmitted={() => loadSubtasks(currentFilters())}
+          onSubmitted={() => loadSubtasks(currentFilters(), page, pageSize)}
         />
       )}
     </div>

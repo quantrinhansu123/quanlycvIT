@@ -133,6 +133,9 @@ export const INITIAL_PROJECTS: Project[] = [
     manager: DIRECTORY[0],
     members: [DIRECTORY[0], DIRECTORY[1], DIRECTORY[2]],
     stats: { total: 1, done: 1, inProgress: 0, overdue: 0 },
+    files: [],
+    links: [],
+    images: [],
   },
   {
     id: "2",
@@ -149,5 +152,8 @@ export const INITIAL_PROJECTS: Project[] = [
     manager: DIRECTORY[1],
     members: [DIRECTORY[1], DIRECTORY[3], DIRECTORY[4]],
     stats: { total: 6, done: 2, inProgress: 3, overdue: 1 },
+    files: [],
+    links: [],
+    images: [],
   },
 ];

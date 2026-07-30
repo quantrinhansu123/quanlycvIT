@@ -1,6 +1,6 @@
 import { ApiException } from "@/lib/api/response";
 import type { ProjectColor, ProjectInput, ProjectStepConfig } from "@/types/project";
-import type { SubtaskInput } from "@/types/subtask";
+import type { SubtaskInput, TaskFileAttachment, TaskLinkAttachment } from "@/types/subtask";
 import type { TaskPriority, TaskStatus, WorkTaskInput } from "@/types/task";
 
 const PROJECT_COLORS = new Set<ProjectColor>(["purple", "green", "orange", "red", "blue"]);
@@ -40,6 +40,75 @@ function stringArray(body: Record<string, unknown>, key: string): string[] {
     throw new ApiException(`${key} phải là một mảng chuỗi.`, 400);
   }
   return [...new Set(value.map((item) => item.trim()).filter(Boolean))];
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+function imageUrls(body: Record<string, unknown>): string[] {
+  const images = stringArray(body, "images");
+  if (images.length > 10) {
+    throw new ApiException("Mỗi Task chỉ được lưu tối đa 10 ảnh.", 400);
+  }
+  if (images.some((url) => !isHttpUrl(url))) {
+    throw new ApiException("Danh sách ảnh có URL không hợp lệ.", 400);
+  }
+  return images;
+}
+
+function fileAttachments(body: Record<string, unknown>): TaskFileAttachment[] {
+  const value = body.files;
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    throw new ApiException("Danh sách tệp đính kèm phải là một mảng.", 400);
+  }
+  if (value.length > 10) {
+    throw new ApiException("Mỗi Task chỉ được đính kèm tối đa 10 tệp.", 400);
+  }
+  return value.map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new ApiException("Tệp đính kèm không hợp lệ.", 400);
+    }
+    const entry = item as Record<string, unknown>;
+    if (typeof entry.url !== "string" || !isHttpUrl(entry.url.trim())) {
+      throw new ApiException("Tệp đính kèm phải có đường dẫn hợp lệ.", 400);
+    }
+    if (typeof entry.name !== "string" || !entry.name.trim()) {
+      throw new ApiException("Tệp đính kèm phải có tên.", 400);
+    }
+    return { name: entry.name.trim(), url: entry.url.trim() };
+  });
+}
+
+function linkAttachments(body: Record<string, unknown>): TaskLinkAttachment[] {
+  const value = body.links;
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    throw new ApiException("Danh sách liên kết phải là một mảng.", 400);
+  }
+  if (value.length > 10) {
+    throw new ApiException("Mỗi Task chỉ được đính kèm tối đa 10 liên kết.", 400);
+  }
+  return value.map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new ApiException("Liên kết đính kèm không hợp lệ.", 400);
+    }
+    const entry = item as Record<string, unknown>;
+    if (typeof entry.url !== "string" || !isHttpUrl(entry.url.trim())) {
+      throw new ApiException("Liên kết đính kèm phải có đường dẫn hợp lệ.", 400);
+    }
+    const label =
+      typeof entry.label === "string" && entry.label.trim()
+        ? entry.label.trim()
+        : undefined;
+    return { label, url: entry.url.trim() };
+  });
 }
 
 function progressValue(body: Record<string, unknown>): number {
@@ -122,6 +191,9 @@ export function parseProjectInput(body: Record<string, unknown>): ProjectInput {
     endDate,
     managerIds,
     memberIds: stringArray(body, "memberIds"),
+    files: fileAttachments(body),
+    links: linkAttachments(body),
+    images: imageUrls(body),
   };
 }
 
@@ -153,6 +225,9 @@ export function parseWorkTaskInput(body: Record<string, unknown>): WorkTaskInput
     progress: progressValue(body),
     tags: stringArray(body, "tags"),
     dependsOnTaskId: optionalString(body, "dependsOnTaskId"),
+    files: fileAttachments(body),
+    links: linkAttachments(body),
+    images: imageUrls(body),
   };
 }
 
@@ -258,5 +333,8 @@ export function parseSubtaskInput(body: Record<string, unknown>): SubtaskInput {
     dueDate,
     progress: progressValue(body),
     tags: stringArray(body, "tags"),
+    files: fileAttachments(body),
+    links: linkAttachments(body),
+    images: imageUrls(body),
   };
 }

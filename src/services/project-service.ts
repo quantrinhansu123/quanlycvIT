@@ -6,10 +6,52 @@ import type {
 } from "@/types/project";
 import type { ProjectTask } from "@/services/mock-data";
 
+export interface ProjectPage {
+  items: Project[];
+  total: number;
+}
+
 export const projectService = {
+  async uploadImage(file: File): Promise<string> {
+    const formData = new FormData();
+    formData.set("file", file);
+    const uploaded = await apiClient.postFormData<{
+      url: string;
+      publicId: string;
+    }>("/media/task-image", formData);
+    return uploaded.url;
+  },
+
+  /** Tải tệp lên Google Drive qua Apps Script proxy, trả về tên và link Drive. */
+  async uploadFile(file: File): Promise<{ name: string; url: string }> {
+    const formData = new FormData();
+    formData.set("file", file);
+    return apiClient.postFormData<{ name: string; url: string }>(
+      "/media/task-file",
+      formData
+    );
+  },
+
   async getProjects(search?: string): Promise<Project[]> {
     const query = search?.trim() ? `?q=${encodeURIComponent(search.trim())}` : "";
     return apiClient.get<Project[]>(`/projects${query}`);
+  },
+
+  /** Tải một trang dự án từ server, có thể lọc theo nhiều người quản lý. */
+  async getProjectsPage(
+    search: string | undefined,
+    page: number,
+    pageSize: number,
+    managerIds?: string[]
+  ): Promise<ProjectPage> {
+    const params = new URLSearchParams();
+    if (search?.trim()) params.set("q", search.trim());
+    if (managerIds && managerIds.length > 0) {
+      params.set("managerIds", managerIds.join(","));
+    }
+    params.set("page", String(page));
+    params.set("pageSize", String(pageSize));
+    return apiClient.get<ProjectPage>(`/projects?${params.toString()}`);
   },
 
   async getProjectById(id: string): Promise<Project | null> {

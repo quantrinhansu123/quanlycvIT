@@ -8,7 +8,13 @@ import {
   type ProjectMember,
   type ProjectStepConfig,
 } from "@/types/project";
-import type { Subtask, SubtaskInput, SubtaskReport } from "@/types/subtask";
+import type {
+  Subtask,
+  SubtaskInput,
+  SubtaskReport,
+  TaskFileAttachment,
+  TaskLinkAttachment,
+} from "@/types/subtask";
 import type {
   TaskPriority,
   TaskReport,
@@ -40,6 +46,9 @@ interface ProjectRow {
   ngay_kt: string | null;
   nguoi_ql_id: string | null;
   steps: unknown;
+  hinh_anh: string[] | null;
+  tep_dinh_kem: TaskFileAttachment[] | null;
+  lien_ket_dinh_kem: TaskLinkAttachment[] | null;
 }
 
 interface ProjectMemberRow {
@@ -75,6 +84,9 @@ interface WorkTaskRow {
   tien_do_thuc_te: number;
   nhan_tag: string[] | null;
   cong_viec_tien_de_id: string | null;
+  hinh_anh: string[] | null;
+  tep_dinh_kem: TaskFileAttachment[] | null;
+  lien_ket_dinh_kem: TaskLinkAttachment[] | null;
 }
 
 interface SubtaskRow {
@@ -90,6 +102,9 @@ interface SubtaskRow {
   uu_tien: string;
   tien_do_thuc_te: number;
   nhan_tag: string[] | null;
+  hinh_anh: string[] | null;
+  tep_dinh_kem: TaskFileAttachment[] | null;
+  lien_ket_dinh_kem: TaskLinkAttachment[] | null;
   task_tien_de_id: string | null;
   cong_viec_id: string;
 }
@@ -103,6 +118,8 @@ export interface WorkTaskFilters {
   search?: string;
   projectId?: string;
   assigneeId?: string;
+  /** Lọc theo nhiều người phụ trách cùng lúc; `assigneeId` (số ít) vẫn được giữ để tương thích. */
+  assigneeIds?: string[];
   priority?: TaskPriority;
   status?: TaskStatus;
   overdueOnly?: boolean;
@@ -134,13 +151,35 @@ export interface SubtaskFilters {
   overdueOnly?: boolean;
 }
 
+/** Bộ lọc cho trang danh sách task: thêm lọc theo dự án và nhiều người thực hiện, có phân trang. */
+export interface SubtaskListFilters extends SubtaskFilters {
+  projectId?: string;
+  /** Lọc theo nhiều công việc cùng lúc; `workTaskId` (số ít) vẫn được giữ để tương thích. */
+  workTaskIds?: string[];
+  assigneeIds?: string[];
+  page: number;
+  pageSize: number;
+}
+
+export interface PagedResult<T> {
+  items: T[];
+  total: number;
+}
+
+function pageRange(page: number, pageSize: number): { from: number; to: number } {
+  const safePage = Math.max(1, Math.floor(page));
+  const safeSize = Math.max(1, Math.min(200, Math.floor(pageSize)));
+  const from = (safePage - 1) * safeSize;
+  return { from, to: from + safeSize - 1 };
+}
+
 const ACCOUNT_SELECT = "id,ma_nv,ten_nv,chuc_vu,email,avatar_url";
 const PROJECT_SELECT =
-  "id,ma_da,ten_da,hop_mau,mo_ta,ngay_bd,ngay_kt,nguoi_ql_id,steps";
+  "id,ma_da,ten_da,hop_mau,mo_ta,ngay_bd,ngay_kt,nguoi_ql_id,steps,hinh_anh,tep_dinh_kem,lien_ket_dinh_kem";
 const WORK_TASK_SELECT =
-  "id,ten_cv,mo_ta,created_at,updated_at,du_an_id,nguoi_phu_trach_id,trang_thai,uu_tien,ngay_bat_dau,ngay_hoan_thanh,tien_do_thuc_te,nhan_tag,cong_viec_tien_de_id";
+  "id,ten_cv,mo_ta,created_at,updated_at,du_an_id,nguoi_phu_trach_id,trang_thai,uu_tien,ngay_bat_dau,ngay_hoan_thanh,tien_do_thuc_te,nhan_tag,cong_viec_tien_de_id,hinh_anh,tep_dinh_kem,lien_ket_dinh_kem";
 const SUBTASK_SELECT =
-  "id,ten_task,mo_ta,created_at,updated_at,ngay_bat_dau,ngay_ket_thuc,nguoi_phu_trach_id,trang_thai,uu_tien,tien_do_thuc_te,nhan_tag,task_tien_de_id,cong_viec_id";
+  "id,ten_task,mo_ta,created_at,updated_at,ngay_bat_dau,ngay_ket_thuc,nguoi_phu_trach_id,trang_thai,uu_tien,tien_do_thuc_te,nhan_tag,hinh_anh,tep_dinh_kem,lien_ket_dinh_kem,task_tien_de_id,cong_viec_id";
 
 function avatarColor(value: string): string {
   const colors = ["#F59E0B", "#1F2937", "#DC2626", "#0EA5E9", "#16A34A", "#7C5CFC"];
@@ -365,6 +404,9 @@ async function hydrateProjects(
             task.ngay_hoan_thanh! < today
         ).length,
       },
+      files: row.tep_dinh_kem ?? [],
+      links: row.lien_ket_dinh_kem ?? [],
+      images: row.hinh_anh ?? [],
     };
   });
 }
@@ -476,6 +518,46 @@ export async function listProjects(
   return hydrateProjects(supabase, (data ?? []) as ProjectRow[]);
 }
 
+/** Giống `listProjects` nhưng chỉ tải một trang kết quả. */
+export async function listProjectsPage(
+  supabase: ApiSupabaseClient,
+  filters: { search?: string; managerIds?: string[]; page: number; pageSize: number }
+): Promise<PagedResult<Project>> {
+  let projectIdsFromManagers: string[] | undefined;
+  if (filters.managerIds && filters.managerIds.length > 0) {
+    // `managerIds` có thể là mã nhân viên (ma_nv) từ UI, cần quy về id UUID
+    // thật của tài khoản trước khi so khớp với du_an_quan_ly.tai_khoan_id.
+    const accountIds = await resolveAccountIds(supabase, filters.managerIds, "Người quản lý");
+    const { data, error } = await supabase
+      .from("du_an_quan_ly")
+      .select("du_an_id")
+      .in("tai_khoan_id", accountIds);
+    throwDatabaseError(error);
+    projectIdsFromManagers = uniqueValues((data ?? []).map((row) => row.du_an_id as string));
+    if (projectIdsFromManagers.length === 0) return { items: [], total: 0 };
+  }
+
+  let query = supabase
+    .from("du_an")
+    .select(PROJECT_SELECT, { count: "exact" })
+    .order("created_at", { ascending: false });
+
+  const term = filters.search?.trim();
+  if (term) {
+    const safeTerm = term.replace(/[,().%_]/g, " ").trim();
+    if (safeTerm) {
+      query = query.or(`ten_da.ilike.%${safeTerm}%,ma_da.ilike.%${safeTerm}%`);
+    }
+  }
+  if (projectIdsFromManagers) query = query.in("id", projectIdsFromManagers);
+
+  const { from, to } = pageRange(filters.page, filters.pageSize);
+  const { data, error, count } = await query.range(from, to);
+  throwDatabaseError(error);
+  const items = await hydrateProjects(supabase, (data ?? []) as ProjectRow[]);
+  return { items, total: count ?? 0 };
+}
+
 export async function getProject(
   supabase: ApiSupabaseClient,
   id: string
@@ -518,6 +600,9 @@ export async function createProject(
       ngay_kt: input.endDate,
       nguoi_ql_id: managerIds[0],
       steps: input.steps,
+      hinh_anh: input.images,
+      tep_dinh_kem: input.files,
+      lien_ket_dinh_kem: input.links,
     })
     .select(PROJECT_SELECT)
     .single();
@@ -565,6 +650,9 @@ export async function updateProject(
       ngay_kt: input.endDate,
       nguoi_ql_id: managerIds[0],
       steps: input.steps,
+      hinh_anh: input.images,
+      tep_dinh_kem: input.files,
+      lien_ket_dinh_kem: input.links,
     })
     .eq("id", id)
     .select("id")
@@ -712,6 +800,9 @@ async function hydrateWorkTasks(
       progress,
       tags: row.nhan_tag ?? [],
       dependsOnTaskId: row.cong_viec_tien_de_id ?? undefined,
+      files: row.tep_dinh_kem ?? [],
+      links: row.lien_ket_dinh_kem ?? [],
+      images: row.hinh_anh ?? [],
     };
   });
 }
@@ -720,6 +811,18 @@ export async function listWorkTasks(
   supabase: ApiSupabaseClient,
   filters: WorkTaskFilters = {}
 ): Promise<WorkTask[]> {
+  let taskIdsFromAssignees: string[] | undefined;
+  if (filters.assigneeIds && filters.assigneeIds.length > 0) {
+    const accountIds = await resolveAccountIds(supabase, filters.assigneeIds, "Người phụ trách");
+    const { data, error } = await supabase
+      .from("cong_viec_phu_trach")
+      .select("cong_viec_id")
+      .in("tai_khoan_id", accountIds);
+    throwDatabaseError(error);
+    taskIdsFromAssignees = uniqueValues((data ?? []).map((row) => row.cong_viec_id as string));
+    if (taskIdsFromAssignees.length === 0) return [];
+  }
+
   let query = supabase
     .from("cong_viec")
     .select(WORK_TASK_SELECT)
@@ -729,6 +832,7 @@ export async function listWorkTasks(
     query = query.ilike("ten_cv", `%${filters.search.trim()}%`);
   }
   if (filters.projectId) query = query.eq("du_an_id", filters.projectId);
+  if (taskIdsFromAssignees) query = query.in("id", taskIdsFromAssignees);
   if (filters.assigneeId) {
     const accountId = await resolveAccountId(
       supabase,
@@ -748,6 +852,61 @@ export async function listWorkTasks(
   const { data, error } = await query;
   throwDatabaseError(error);
   return hydrateWorkTasks(supabase, (data ?? []) as WorkTaskRow[]);
+}
+
+/**
+ * Giống `listWorkTasks` nhưng chỉ tải một trang kết quả (dùng cho trang danh sách
+ * dạng bảng có phân trang) thay vì hydrate toàn bộ tập kết quả khớp bộ lọc.
+ */
+export async function listWorkTasksPage(
+  supabase: ApiSupabaseClient,
+  filters: WorkTaskFilters & { page: number; pageSize: number }
+): Promise<PagedResult<WorkTask>> {
+  let taskIdsFromAssignees: string[] | undefined;
+  if (filters.assigneeIds && filters.assigneeIds.length > 0) {
+    // `assigneeIds` có thể là mã nhân viên (ma_nv) từ UI, cần quy về id UUID
+    // thật của tài khoản trước khi so khớp với cong_viec_phu_trach.tai_khoan_id.
+    const accountIds = await resolveAccountIds(supabase, filters.assigneeIds, "Người phụ trách");
+    const { data, error } = await supabase
+      .from("cong_viec_phu_trach")
+      .select("cong_viec_id")
+      .in("tai_khoan_id", accountIds);
+    throwDatabaseError(error);
+    taskIdsFromAssignees = uniqueValues((data ?? []).map((row) => row.cong_viec_id as string));
+    if (taskIdsFromAssignees.length === 0) return { items: [], total: 0 };
+  }
+
+  let query = supabase
+    .from("cong_viec")
+    .select(WORK_TASK_SELECT, { count: "exact" })
+    .order("created_at", { ascending: false });
+
+  if (filters.search?.trim()) {
+    query = query.ilike("ten_cv", `%${filters.search.trim()}%`);
+  }
+  if (filters.projectId) query = query.eq("du_an_id", filters.projectId);
+  if (taskIdsFromAssignees) query = query.in("id", taskIdsFromAssignees);
+  if (filters.assigneeId) {
+    const accountId = await resolveAccountId(
+      supabase,
+      filters.assigneeId,
+      "Người phụ trách"
+    );
+    query = query.eq("nguoi_phu_trach_id", accountId);
+  }
+  if (filters.priority) query = query.eq("uu_tien", filters.priority);
+  if (filters.status) query = query.eq("trang_thai", toDatabaseStatus(filters.status));
+  if (filters.overdueOnly) {
+    query = query
+      .neq("trang_thai", "done")
+      .lt("ngay_hoan_thanh", getAppDateKey());
+  }
+
+  const { from, to } = pageRange(filters.page, filters.pageSize);
+  const { data, error, count } = await query.range(from, to);
+  throwDatabaseError(error);
+  const items = await hydrateWorkTasks(supabase, (data ?? []) as WorkTaskRow[]);
+  return { items, total: count ?? 0 };
 }
 
 export async function getWorkTask(
@@ -880,6 +1039,9 @@ async function workTaskPayload(input: WorkTaskInput, primaryAccountId: string) {
     ngay_hoan_thanh: input.dueDate,
     nhan_tag: input.tags,
     cong_viec_tien_de_id: input.dependsOnTaskId ?? null,
+    hinh_anh: input.images,
+    tep_dinh_kem: input.files,
+    lien_ket_dinh_kem: input.links,
   };
 }
 
@@ -1012,15 +1174,13 @@ export async function listProjectTasks(
   projectId: string
 ): Promise<ProjectTask[]> {
   const tasks = await listWorkTasks(supabase, { projectId });
-  const directory = await listDirectory(supabase);
-  const members = new Map(directory.map((member) => [member.id, member]));
 
   return tasks.map((task) => ({
     id: task.id,
     title: task.title,
     description: task.description,
     status: task.status,
-    assignee: members.get(task.assigneeId) ?? emptyProjectMember(),
+    assignee: task.assignees[0] ?? emptyProjectMember(),
     assignees: task.assignees,
     priority: task.priority,
     startDate: task.startDate,
@@ -1069,6 +1229,9 @@ async function hydrateSubtasks(
       dueDate: row.ngay_ket_thuc ?? "",
       progress: row.tien_do_thuc_te,
       tags: row.nhan_tag ?? [],
+      files: row.tep_dinh_kem ?? [],
+      links: row.lien_ket_dinh_kem ?? [],
+      images: row.hinh_anh ?? [],
     };
   });
 }
@@ -1107,6 +1270,80 @@ export async function listSubtasks(
   return hydrateSubtasks(supabase, (data ?? []) as SubtaskRow[]);
 }
 
+/**
+ * Giống `listSubtasks` nhưng chỉ tải một trang kết quả, có thêm lọc theo dự án
+ * (qua bảng công việc cha) và nhiều người thực hiện (qua bảng task_phu_trach).
+ */
+export async function listSubtasksPage(
+  supabase: ApiSupabaseClient,
+  filters: SubtaskListFilters
+): Promise<PagedResult<Subtask>> {
+  let workTaskIds: string[] | undefined;
+  if (filters.projectId) {
+    const { data, error } = await supabase
+      .from("cong_viec")
+      .select("id")
+      .eq("du_an_id", filters.projectId);
+    throwDatabaseError(error);
+    workTaskIds = (data ?? []).map((row) => row.id as string);
+    if (workTaskIds.length === 0) return { items: [], total: 0 };
+  }
+  // Kết hợp với danh sách công việc chọn thủ công (bộ lọc "Công việc" nhiều lựa chọn).
+  if (filters.workTaskIds && filters.workTaskIds.length > 0) {
+    workTaskIds = workTaskIds
+      ? workTaskIds.filter((id) => filters.workTaskIds!.includes(id))
+      : filters.workTaskIds;
+    if (workTaskIds.length === 0) return { items: [], total: 0 };
+  }
+
+  let subtaskIdsFromAssignees: string[] | undefined;
+  if (filters.assigneeIds && filters.assigneeIds.length > 0) {
+    // `assigneeIds` có thể là mã nhân viên (ma_nv) từ UI, cần quy về id UUID
+    // thật của tài khoản trước khi so khớp với task_phu_trach.tai_khoan_id.
+    const accountIds = await resolveAccountIds(supabase, filters.assigneeIds, "Người thực hiện");
+    const { data, error } = await supabase
+      .from("task_phu_trach")
+      .select("task_id")
+      .in("tai_khoan_id", accountIds);
+    throwDatabaseError(error);
+    subtaskIdsFromAssignees = uniqueValues((data ?? []).map((row) => row.task_id as string));
+    if (subtaskIdsFromAssignees.length === 0) return { items: [], total: 0 };
+  }
+
+  let query = supabase
+    .from("task")
+    .select(SUBTASK_SELECT, { count: "exact" })
+    .order("created_at", { ascending: false });
+
+  if (filters.search?.trim()) {
+    query = query.ilike("ten_task", `%${filters.search.trim()}%`);
+  }
+  if (filters.workTaskId) query = query.eq("cong_viec_id", filters.workTaskId);
+  if (workTaskIds) query = query.in("cong_viec_id", workTaskIds);
+  if (subtaskIdsFromAssignees) query = query.in("id", subtaskIdsFromAssignees);
+  if (filters.assigneeId) {
+    const accountId = await resolveAccountId(
+      supabase,
+      filters.assigneeId,
+      "Người phụ trách"
+    );
+    query = query.eq("nguoi_phu_trach_id", accountId);
+  }
+  if (filters.priority) query = query.eq("uu_tien", filters.priority);
+  if (filters.status) query = query.eq("trang_thai", toDatabaseStatus(filters.status));
+  if (filters.overdueOnly) {
+    query = query
+      .neq("trang_thai", "done")
+      .lt("ngay_ket_thuc", getAppDateKey());
+  }
+
+  const { from, to } = pageRange(filters.page, filters.pageSize);
+  const { data, error, count } = await query.range(from, to);
+  throwDatabaseError(error);
+  const items = await hydrateSubtasks(supabase, (data ?? []) as SubtaskRow[]);
+  return { items, total: count ?? 0 };
+}
+
 export async function getSubtask(
   supabase: ApiSupabaseClient,
   id: string
@@ -1133,6 +1370,9 @@ function subtaskPayload(input: SubtaskInput, primaryAccountId: string) {
     uu_tien: input.priority,
     tien_do_thuc_te: input.progress,
     nhan_tag: input.tags,
+    hinh_anh: input.images,
+    tep_dinh_kem: input.files,
+    lien_ket_dinh_kem: input.links,
     cong_viec_id: input.workTaskId,
   };
 }

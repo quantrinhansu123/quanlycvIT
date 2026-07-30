@@ -137,7 +137,27 @@ export function HRAnalyticsPage() {
       setError("Không thể tải dữ liệu nhân sự. Vui lòng kiểm tra kết nối và thử lại.");
     } finally { setLoading(false); }
   }
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    let active = true;
+
+    accountService.getAll()
+      .then((result) => {
+        if (!active) return;
+        setAccounts(result.accounts);
+        setDepartments(result.departments);
+      })
+      .catch(() => {
+        if (!active) return;
+        setError("Không thể tải dữ liệu nhân sự. Vui lòng kiểm tra kết nối và thử lại.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const filtered = useMemo(() => accounts.filter((x) =>
     (!department || x.departmentId === department) &&

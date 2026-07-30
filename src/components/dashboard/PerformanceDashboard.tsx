@@ -738,19 +738,30 @@ export function PerformanceDashboard() {
 
   const workloads = useMemo<WorkloadItem[]>(() => {
     if (!data) return [];
+    const totals = new Map<string, number>();
+    const importantCounts = new Map<string, number>();
+    for (const task of filteredTasks) {
+      if (task.status === "done") continue;
+      const memberIds = new Set<string>();
+      if (task.assigneeId) memberIds.add(task.assigneeId);
+      for (const assignee of task.assignees ?? []) memberIds.add(assignee.id);
+      const isImportant = task.priority === "high" || task.priority === "urgent";
+      for (const memberId of memberIds) {
+        totals.set(memberId, (totals.get(memberId) ?? 0) + 1);
+        if (isImportant) {
+          importantCounts.set(memberId, (importantCounts.get(memberId) ?? 0) + 1);
+        }
+      }
+    }
     return data.members
       .map((member) => {
-        const memberTasks = filteredTasks.filter(
-          (task) => task.status !== "done" && taskHasMember(task, member.id)
-        );
-        const important = memberTasks.filter(
-          (task) => task.priority === "high" || task.priority === "urgent"
-        ).length;
+        const total = totals.get(member.id) ?? 0;
+        const important = importantCounts.get(member.id) ?? 0;
         return {
           member,
-          total: memberTasks.length,
+          total,
           important,
-          index: Number((memberTasks.length + important * 1.8).toFixed(1)),
+          index: Number((total + important * 1.8).toFixed(1)),
         };
       })
       .filter((item) => item.total > 0)
@@ -780,9 +791,15 @@ export function PerformanceDashboard() {
   const projectHealth = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const tasksByProject = new Map<string, WorkTask[]>();
+    for (const task of filteredTasks) {
+      const list = tasksByProject.get(task.projectId);
+      if (list) list.push(task);
+      else tasksByProject.set(task.projectId, [task]);
+    }
     return visibleProjects
       .map((project) => {
-        const tasks = filteredTasks.filter((task) => task.projectId === project.id);
+        const tasks = tasksByProject.get(project.id) ?? [];
         const done = tasks.filter((task) => task.status === "done").length;
         const overdue = tasks.filter((task) => isTaskOverdue(task, new Date(today))).length;
         const progress =

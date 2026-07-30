@@ -129,6 +129,9 @@ export default function TaskDetailPage() {
         progress: task.progress,
         tags: task.tags,
         dependsOnTaskId: task.dependsOnTaskId,
+        files: task.files,
+        links: task.links,
+        images: task.images,
         ...patch,
       });
       if (!updated) {
@@ -203,7 +206,7 @@ export default function TaskDetailPage() {
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white">
       <div className="shrink-0 border-b border-gray-100 bg-white">
-        <div className="mx-auto flex max-w-[1320px] items-center justify-between gap-4 px-3 py-3 sm:px-5">
+        <div className="mx-auto flex w-full max-w-none items-center justify-between gap-4 px-3 py-3 sm:px-5">
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
@@ -246,7 +249,14 @@ export default function TaskDetailPage() {
         </div>
       </div>
 
-      <div className="mx-auto min-h-0 w-full max-w-[1080px] flex-1 overflow-y-auto px-4 pb-8 pt-6 sm:px-6">
+      <div
+        className={cn(
+          "mx-auto min-h-0 w-full flex-1",
+          tab === "tasks"
+            ? "max-w-none overflow-hidden px-3 pb-3 pt-3 sm:px-5"
+            : "max-w-none overflow-y-auto px-3 pb-8 pt-4 sm:px-5"
+        )}
+      >
         {tab === "info" ? (
           <div className="space-y-5">
             <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -330,8 +340,11 @@ export default function TaskDetailPage() {
                 title="Chi tiết công việc"
                 subtitle="Mô tả công việc và thời hạn thực hiện chi tiết"
               >
-                <div className="rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-4 text-sm leading-6 text-gray-700">
-                  {task.description || "Chưa có mô tả cho công việc này."}
+                <div className="max-w-full overflow-x-auto rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-4 text-sm leading-6 text-gray-700">
+                  <DetailDescription
+                    description={task.description}
+                    emptyText="Chưa có mô tả cho công việc này."
+                  />
                 </div>
                 <div className="mt-16 grid grid-cols-1 gap-5 border-t border-gray-100 pt-4 sm:grid-cols-2">
                   <DateInfo
@@ -489,7 +502,7 @@ export default function TaskDetailPage() {
       </div>
 
       <div className="z-20 shrink-0 border-t border-gray-200 bg-white px-4 py-2">
-        <div className="mx-auto flex max-w-[1080px] gap-2">
+        <div className="mx-auto flex w-full max-w-none gap-2">
           <BottomTab
             active={tab === "info"}
             onClick={() => setTab("info")}
@@ -528,6 +541,38 @@ export default function TaskDetailPage() {
         />
       )}
     </div>
+  );
+}
+
+function DetailDescription({
+  description,
+  emptyText,
+}: {
+  description?: string;
+  emptyText: string;
+}) {
+  if (!description) {
+    return <p>{emptyText}</p>;
+  }
+
+  return (
+    <p className="min-w-full whitespace-pre-wrap break-words">
+      {description.split(/(https?:\/\/\S+)/g).map((part, index) =>
+        /^https?:\/\/\S+$/.test(part) ? (
+          <a
+            key={`${part}-${index}`}
+            href={part}
+            target="_blank"
+            rel="noreferrer"
+            className="whitespace-nowrap text-blue-600 underline-offset-2 hover:underline"
+          >
+            {part}
+          </a>
+        ) : (
+          part
+        )
+      )}
+    </p>
   );
 }
 
