@@ -44,7 +44,7 @@ export function ProjectTable({
             </th>
             <th className="px-3 py-3">Mã dự án</th>
             <th className="px-3 py-3">Tên dự án</th>
-            <th className="px-3 py-3">Quản lý (PM)</th>
+            <th className="w-32 whitespace-nowrap px-3 py-3">Quản lý (PM)</th>
             <th className="px-3 py-3">Ngày bắt đầu</th>
             <th className="px-3 py-3">Ngày kết thúc</th>
             <th className="px-3 py-3">Thành viên</th>
@@ -79,15 +79,8 @@ export function ProjectTable({
                   <p className="mt-0.5 truncate text-xs text-gray-400">{project.description}</p>
                 )}
               </td>
-              <td className="px-3 py-4 align-top">
-                <div className="flex items-center gap-2">
-                  <AvatarStack people={project.managers} />
-                  <span className="max-w-44 truncate text-xs text-gray-600">
-                    {project.managers.length > 0
-                      ? project.managers.map((manager) => manager.name).join(", ")
-                      : "Chưa phân công"}
-                  </span>
-                </div>
+              <td className="w-32 px-3 py-4 align-top">
+                <AvatarStack people={project.managers} />
               </td>
               <td className="px-3 py-4 align-top">
                 <div className="flex items-center gap-1.5 text-xs text-gray-500">
