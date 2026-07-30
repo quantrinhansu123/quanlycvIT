@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, FileText, ImagePlus, Paperclip, Plus, Search, Trash2, X } from "lucide-react";
+import { Check, ChevronDown, Search, X } from "lucide-react";
 import type {
   Project,
   ProjectColor,
@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/Button";
 import { Avatar } from "@/components/ui/Avatar";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
+import { TaskAttachmentFields } from "@/components/tasks/TaskAttachmentFields";
 
 interface ProjectFormModalProps {
   mode: "create" | "edit";
@@ -138,11 +139,9 @@ export function ProjectFormModal({ mode, project, members, onClose, onSaved }: P
   const memberPickerRef = useRef<HTMLDivElement>(null);
   const [pendingImages, setPendingImages] = useState<PendingProjectImage[]>([]);
   const [imageError, setImageError] = useState("");
-  const imageInputRef = useRef<HTMLInputElement>(null);
   const pendingImagesRef = useRef<PendingProjectImage[]>([]);
   const [pendingFiles, setPendingFiles] = useState<PendingProjectFile[]>([]);
   const [fileError, setFileError] = useState("");
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -627,252 +626,31 @@ export function ProjectFormModal({ mode, project, members, onClose, onSaved }: P
             />
           </div>
 
-          <div>
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Tệp đính kèm</label>
-                <p className="mt-0.5 text-xs text-gray-400">
-                  Tối đa {MAX_PROJECT_FILES} tệp, mỗi tệp không quá 20 MB. Hệ thống sẽ tự động tải lên Google Drive.
-                </p>
-              </div>
-              <span className="text-xs font-medium text-gray-500">
-                {form.files.length + pendingFiles.length}/{MAX_PROJECT_FILES} tệp
-              </span>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={submitting || form.files.length + pendingFiles.length >= MAX_PROJECT_FILES}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-blue-300 bg-blue-50/60 px-4 py-4 text-sm font-semibold text-blue-600 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Paperclip className="h-5 w-5" />
-              Chọn nhiều tệp
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              className="hidden"
-              onChange={(event) => {
-                handleFileSelection(event.target.files);
-                event.target.value = "";
-              }}
-            />
-
-            {(form.files.length > 0 || pendingFiles.length > 0) && (
-              <ul className="mt-3 space-y-2">
-                {form.files.map((fileItem) => (
-                  <li
-                    key={fileItem.url}
-                    className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2"
-                  >
-                    <FileText className="h-4 w-4 shrink-0 text-gray-400" />
-                    <a
-                      href={fileItem.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="min-w-0 flex-1 truncate text-sm text-gray-700 hover:text-blue-600"
-                    >
-                      {fileItem.name}
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() => removeSavedFile(fileItem.url)}
-                      disabled={submitting}
-                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-600"
-                      aria-label={`Xóa tệp ${fileItem.name}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </li>
-                ))}
-                {pendingFiles.map((pending) => (
-                  <li
-                    key={pending.id}
-                    className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2"
-                  >
-                    <FileText className="h-4 w-4 shrink-0 text-blue-400" />
-                    <span className="min-w-0 flex-1 truncate text-sm text-gray-700">
-                      {pending.file.name}
-                    </span>
-                    <span className="shrink-0 rounded-md bg-blue-600 px-2 py-0.5 text-[10px] font-semibold text-white">
-                      Chưa lưu
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => removePendingFile(pending.id)}
-                      disabled={submitting}
-                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-600"
-                      aria-label={`Bỏ tệp ${pending.file.name}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {fileError && (
-              <p role="alert" className="mt-2 text-xs text-rose-600">
-                {fileError}
-              </p>
-            )}
-          </div>
-
-          <div>
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Liên kết</label>
-                <p className="mt-0.5 text-xs text-gray-400">
-                  Thêm liên kết tham khảo, gồm tên đường dẫn và đường dẫn.
-                </p>
-              </div>
-              <span className="text-xs font-medium text-gray-500">
-                {form.links.length}/{MAX_PROJECT_LINKS} liên kết
-              </span>
-            </div>
-
-            {form.links.length > 0 && (
-              <div className="space-y-2">
-                {form.links.map((link, index) => (
-                  <div key={index} className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={link.label ?? ""}
-                      onChange={(event) => updateLinkRow(index, { label: event.target.value })}
-                      placeholder="Tên đường dẫn"
-                      className="h-10 w-[38%] rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                    />
-                    <input
-                      type="url"
-                      value={link.url}
-                      onChange={(event) => updateLinkRow(index, { url: event.target.value })}
-                      placeholder="https://..."
-                      className="h-10 flex-1 rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeLinkRow(index)}
-                      disabled={submitting}
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-600"
-                      aria-label="Xóa liên kết"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <button
-              type="button"
-              onClick={addLinkRow}
-              disabled={submitting || form.links.length >= MAX_PROJECT_LINKS}
-              className="mt-2 flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Plus className="h-4 w-4" />
-              Thêm liên kết
-            </button>
-            {errors.links && <p className="mt-1 text-xs text-rose-500">{errors.links}</p>}
-          </div>
-
-          <div>
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Hình ảnh dự án</label>
-                <p className="mt-0.5 text-xs text-gray-400">
-                  Tối đa {MAX_PROJECT_IMAGES} ảnh, mỗi ảnh không quá 10 MB.
-                </p>
-              </div>
-              <span className="text-xs font-medium text-gray-500">
-                {form.images.length + pendingImages.length}/{MAX_PROJECT_IMAGES} ảnh
-              </span>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => imageInputRef.current?.click()}
-              disabled={
-                submitting ||
-                form.images.length + pendingImages.length >= MAX_PROJECT_IMAGES
-              }
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-blue-300 bg-blue-50/60 px-4 py-4 text-sm font-semibold text-blue-600 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <ImagePlus className="h-5 w-5" />
-              Chọn nhiều ảnh
-            </button>
-            <input
-              ref={imageInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/avif"
-              multiple
-              className="hidden"
-              onChange={(event) => {
-                handleImageSelection(event.target.files);
-                event.target.value = "";
-              }}
-            />
-
-            {(form.images.length > 0 || pendingImages.length > 0) && (
-              <ul className="mt-3 flex gap-2.5 overflow-x-auto pb-1">
-                {form.images.map((url, index) => (
-                  <li
-                    key={url}
-                    className="group relative w-24 shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-gray-50"
-                  >
-                    <a href={url} target="_blank" rel="noreferrer">
-                      {/* URL Cloudinary động nên dùng img thay vì giới hạn hostname của next/image. */}
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={url}
-                        alt={`Ảnh dự án ${index + 1}`}
-                        className="h-16 w-24 object-cover"
-                      />
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() => removeSavedImage(url)}
-                      disabled={submitting}
-                      className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-md bg-gray-950/70 text-white shadow-sm transition hover:bg-rose-600"
-                      aria-label={`Xóa ảnh dự án ${index + 1}`}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  </li>
-                ))}
-                {pendingImages.map((image) => (
-                  <li
-                    key={image.id}
-                    className="group relative w-24 shrink-0 overflow-hidden rounded-lg border border-blue-200 bg-blue-50"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={image.previewUrl}
-                      alt={image.file.name}
-                      className="h-16 w-24 object-cover"
-                    />
-                    <span className="absolute bottom-1 left-1 rounded bg-blue-600 px-1 py-0.5 text-[9px] font-semibold leading-none text-white">
-                      Chưa lưu
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => removePendingImage(image.id)}
-                      disabled={submitting}
-                      className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-md bg-gray-950/70 text-white shadow-sm transition hover:bg-rose-600"
-                      aria-label={`Bỏ ảnh ${image.file.name}`}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {imageError && (
-              <p role="alert" className="mt-2 text-xs text-rose-600">
-                {imageError}
-              </p>
-            )}
-          </div>
+          <TaskAttachmentFields
+            label="Đính kèm dự án"
+            entityLabel="dự án"
+            files={form.files}
+            pendingFiles={pendingFiles}
+            links={form.links}
+            images={form.images}
+            pendingImages={pendingImages}
+            maxFiles={MAX_PROJECT_FILES}
+            maxLinks={MAX_PROJECT_LINKS}
+            maxImages={MAX_PROJECT_IMAGES}
+            submitting={submitting}
+            fileError={fileError}
+            linkError={errors.links}
+            imageError={imageError}
+            onSelectFiles={handleFileSelection}
+            onSelectImages={handleImageSelection}
+            onAddLink={addLinkRow}
+            onUpdateLink={updateLinkRow}
+            onRemoveLink={removeLinkRow}
+            onRemoveSavedFile={removeSavedFile}
+            onRemovePendingFile={removePendingFile}
+            onRemoveSavedImage={removeSavedImage}
+            onRemovePendingImage={removePendingImage}
+          />
 
           <div className="flex gap-4">
             <div className="flex-1">

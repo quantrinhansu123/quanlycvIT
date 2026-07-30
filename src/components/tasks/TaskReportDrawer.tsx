@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Image as ImageIcon, Link2, Paperclip, Plus, X } from "lucide-react";
+import { FileText, ImagePlus, Paperclip, Plus, Trash2, X } from "lucide-react";
 import type {
   ProgressReport,
   ProgressReportSubmission,
@@ -38,6 +38,10 @@ interface PendingLink {
   url: string;
 }
 
+const MAX_REPORT_IMAGES = 10;
+const MAX_REPORT_FILES = 10;
+const MAX_REPORT_LINKS = 10;
+
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -63,6 +67,10 @@ export function TaskReportDrawer({
   const [links, setLinks] = useState<PendingLink[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [previewImage, setPreviewImage] = useState<{
+    name: string;
+    url: string;
+  } | null>(null);
 
   useEffect(() => {
     // Drawer có thể mở chồng lên modal, nên trả lại giá trị cũ thay vì xóa trắng.
@@ -75,11 +83,16 @@ export function TaskReportDrawer({
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && !submitting) onClose();
+      if (event.key !== "Escape") return;
+      if (previewImage) {
+        setPreviewImage(null);
+      } else if (!submitting) {
+        onClose();
+      }
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose, submitting]);
+  }, [onClose, previewImage, submitting]);
 
   // Giải phóng object URL của ảnh xem trước khi drawer đóng.
   const imagesRef = useRef<PendingImage[]>([]);
@@ -108,6 +121,16 @@ export function TaskReportDrawer({
 
   const addImages = useCallback(
     (incoming: File[]) => {
+      const availableSlots = MAX_REPORT_IMAGES - images.length;
+      if (availableSlots <= 0) {
+        notify({
+          type: "error",
+          title: "Đã đủ số lượng ảnh",
+          description: `Mỗi báo cáo chỉ được đính kèm tối đa ${MAX_REPORT_IMAGES} ảnh.`,
+        });
+        return;
+      }
+
       const accepted: PendingImage[] = [];
       for (const file of incoming) {
         const problem = rejectFile(file, true);
@@ -121,13 +144,34 @@ export function TaskReportDrawer({
           previewUrl: URL.createObjectURL(file),
         });
       }
-      if (accepted.length > 0) setImages((prev) => [...prev, ...accepted]);
+      const selected = accepted.slice(0, availableSlots);
+      for (const image of accepted.slice(availableSlots)) {
+        URL.revokeObjectURL(image.previewUrl);
+      }
+      if (selected.length > 0) setImages((prev) => [...prev, ...selected]);
+      if (accepted.length > availableSlots) {
+        notify({
+          type: "error",
+          title: "Một số ảnh chưa được thêm",
+          description: `Chỉ thêm ${availableSlots} ảnh để không vượt quá ${MAX_REPORT_IMAGES} ảnh.`,
+        });
+      }
     },
-    [notify, rejectFile]
+    [images.length, notify, rejectFile]
   );
 
   const addFiles = useCallback(
     (incoming: File[]) => {
+      const availableSlots = MAX_REPORT_FILES - files.length;
+      if (availableSlots <= 0) {
+        notify({
+          type: "error",
+          title: "Đã đủ số lượng tệp",
+          description: `Mỗi báo cáo chỉ được đính kèm tối đa ${MAX_REPORT_FILES} tệp.`,
+        });
+        return;
+      }
+
       const accepted = incoming.filter((file) => {
         const problem = rejectFile(file, false);
         if (problem) {
@@ -136,9 +180,17 @@ export function TaskReportDrawer({
         }
         return true;
       });
-      if (accepted.length > 0) setFiles((prev) => [...prev, ...accepted]);
+      const selected = accepted.slice(0, availableSlots);
+      if (selected.length > 0) setFiles((prev) => [...prev, ...selected]);
+      if (accepted.length > availableSlots) {
+        notify({
+          type: "error",
+          title: "Một số tệp chưa được thêm",
+          description: `Chỉ thêm ${availableSlots} tệp để không vượt quá ${MAX_REPORT_FILES} tệp.`,
+        });
+      }
     },
-    [notify, rejectFile]
+    [files.length, notify, rejectFile]
   );
 
   // Dán ảnh trực tiếp bằng Ctrl+V.
@@ -168,6 +220,14 @@ export function TaskReportDrawer({
     setLinks((prev) =>
       prev.map((link) => (link.id === id ? { ...link, ...patch } : link))
     );
+  }
+
+  function addLink() {
+    if (links.length >= MAX_REPORT_LINKS) return;
+    setLinks((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), label: "", url: "" },
+    ]);
   }
 
   const trimmedLinks = useMemo(
@@ -240,12 +300,13 @@ export function TaskReportDrawer({
   }
 
   return (
-    <div
-      className="account-overlay fixed inset-0 z-[60] flex items-center justify-center bg-gray-950/45 p-4"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !submitting) onClose();
-      }}
-    >
+    <>
+      <div
+        className="account-overlay fixed inset-0 z-[60] flex items-center justify-center bg-gray-950/45 p-4"
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget && !submitting) onClose();
+        }}
+      >
       <div
         role="dialog"
         aria-modal="true"
@@ -316,89 +377,103 @@ export function TaskReportDrawer({
             />
           </div>
 
-          <div className="mt-5">
-            <p className="flex items-center gap-1.5 text-sm font-semibold text-gray-700">
-              <ImageIcon className="h-4 w-4 text-gray-400" />
-              Hình ảnh tiến độ
-            </p>
-            <div
-              onDragOver={(event) => {
-                event.preventDefault();
-                setDragActive(true);
-              }}
-              onDragLeave={() => setDragActive(false)}
-              onDrop={(event) => {
-                event.preventDefault();
+          <div
+            onDragOver={(event) => {
+              event.preventDefault();
+              setDragActive(true);
+            }}
+            onDragLeave={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
                 setDragActive(false);
-                addImages(Array.from(event.dataTransfer.files));
-              }}
-              className={cn(
-                "mt-2 rounded-xl border border-dashed px-4 py-8 text-center transition-colors",
-                dragActive ? "border-blue-400 bg-blue-50/60" : "border-gray-200"
-              )}
-            >
-              <ImageIcon className="mx-auto h-7 w-7 text-gray-300" />
-              <p className="mt-3 text-sm text-gray-500">
-                Kéo thả, dán (Ctrl+V) hoặc{" "}
-                <button
-                  type="button"
-                  onClick={() => imageInputRef.current?.click()}
-                  className="font-semibold text-blue-600 underline hover:text-blue-700"
-                >
-                  chọn file
-                </button>
-              </p>
-              <p className="mt-1 text-xs text-gray-400">PNG, JPG, WEBP (tối đa 10MB)</p>
-              <input
-                ref={imageInputRef}
-                type="file"
-                accept={TASK_REPORT_IMAGE_MIME_TYPES.join(",")}
-                multiple
-                className="hidden"
-                onChange={(event) => {
-                  addImages(Array.from(event.target.files ?? []));
-                  event.target.value = "";
-                }}
-              />
+              }
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              setDragActive(false);
+              addImages(
+                Array.from(event.dataTransfer.files).filter((file) =>
+                  file.type.startsWith("image/")
+                )
+              );
+            }}
+            className={cn(
+              "mt-5 space-y-3 rounded-xl border p-3 transition-colors",
+              dragActive
+                ? "border-blue-400 bg-blue-50/60"
+                : "border-transparent bg-gray-50/70"
+            )}
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="mr-1 text-sm font-semibold text-gray-700">
+                Đính kèm báo cáo
+              </span>
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click()}
+                disabled={submitting || images.length >= MAX_REPORT_IMAGES}
+                className={cn(
+                  "inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
+                  images.length > 0
+                    ? "border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100"
+                    : "border-gray-200 bg-white text-gray-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+                )}
+                title={`Tối đa ${MAX_REPORT_IMAGES} ảnh, mỗi ảnh không quá 10 MB. Có thể kéo thả hoặc dán ảnh bằng Ctrl+V.`}
+              >
+                <ImagePlus className="h-3.5 w-3.5" />
+                Chọn ảnh
+                <span className={cn("text-[10px]", images.length > 0 ? "text-blue-400" : "text-gray-400")}>
+                  {images.length}/{MAX_REPORT_IMAGES}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={submitting || files.length >= MAX_REPORT_FILES}
+                className={cn(
+                  "inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
+                  files.length > 0
+                    ? "border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100"
+                    : "border-gray-200 bg-white text-gray-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+                )}
+                title={`Tối đa ${MAX_REPORT_FILES} tệp, mỗi tệp không quá 10 MB`}
+              >
+                <Paperclip className="h-3.5 w-3.5" />
+                Chọn tệp
+                <span className={cn("text-[10px]", files.length > 0 ? "text-blue-400" : "text-gray-400")}>
+                  {files.length}/{MAX_REPORT_FILES}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={addLink}
+                disabled={submitting || links.length >= MAX_REPORT_LINKS}
+                className={cn(
+                  "inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
+                  links.length > 0
+                    ? "border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100"
+                    : "border-gray-200 bg-white text-gray-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+                )}
+                title={`Tối đa ${MAX_REPORT_LINKS} liên kết`}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Thêm liên kết
+                <span className={cn("text-[10px]", links.length > 0 ? "text-blue-400" : "text-gray-400")}>
+                  {links.length}/{MAX_REPORT_LINKS}
+                </span>
+              </button>
             </div>
 
-            {images.length > 0 && (
-              <ul className="mt-3 grid grid-cols-3 gap-3">
-                {images.map((image) => (
-                  <li key={image.id} className="group relative">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={image.previewUrl}
-                      alt={image.file.name}
-                      className="h-24 w-full rounded-lg border border-gray-200 object-cover"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeImage(image.id)}
-                      className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-gray-900/70 text-white opacity-0 transition-opacity group-hover:opacity-100"
-                      aria-label={`Xóa ảnh ${image.file.name}`}
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <div className="mt-5">
-            <p className="flex items-center gap-1.5 text-sm font-semibold text-gray-700">
-              <Paperclip className="h-4 w-4 text-gray-400" />
-              File tài liệu đính kèm
-            </p>
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="mt-2 flex h-14 w-full items-center gap-2.5 rounded-xl border border-dashed border-gray-200 px-4 text-sm text-gray-600 hover:border-blue-300 hover:bg-blue-50/40"
-            >
-              <Paperclip className="h-4 w-4 text-gray-400" />
-              Chọn file
-            </button>
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept={TASK_REPORT_IMAGE_MIME_TYPES.join(",")}
+              multiple
+              className="hidden"
+              onChange={(event) => {
+                addImages(Array.from(event.target.files ?? []));
+                event.target.value = "";
+              }}
+            />
             <input
               ref={fileInputRef}
               type="file"
@@ -409,96 +484,105 @@ export function TaskReportDrawer({
                 event.target.value = "";
               }}
             />
-            <p className="mt-1.5 text-xs text-gray-400">
-              Ảnh, audio, video, PDF, ZIP/RAR... (tối đa 10MB)
-            </p>
 
             {files.length > 0 && (
-              <ul className="mt-3 space-y-2">
+              <ul className="space-y-2">
                 {files.map((file, index) => (
                   <li
-                    key={`${file.name}-${index}`}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2"
+                    key={`${file.name}-${file.lastModified}-${index}`}
+                    className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2"
                   >
-                    <span className="truncate text-sm text-gray-700">{file.name}</span>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <span className="text-xs text-gray-400">
-                        {formatFileSize(file.size)}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setFiles((prev) => prev.filter((_, i) => i !== index))
-                        }
-                        className="text-gray-400 hover:text-rose-500"
-                        aria-label={`Xóa file ${file.name}`}
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <div className="mt-5">
-            <div className="flex items-center justify-between gap-3">
-              <p className="flex items-center gap-1.5 text-sm font-semibold text-gray-700">
-                <Link2 className="h-4 w-4 text-gray-400" />
-                Liên kết ngoài (Figma, Github, Google Doc...)
-              </p>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() =>
-                  setLinks((prev) => [
-                    ...prev,
-                    { id: crypto.randomUUID(), label: "", url: "" },
-                  ])
-                }
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Thêm link
-              </Button>
-            </div>
-
-            {links.length > 0 && (
-              <ul className="mt-3 space-y-2">
-                {links.map((link) => (
-                  <li key={link.id} className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={link.label}
-                      onChange={(event) =>
-                        updateLink(link.id, { label: event.target.value })
-                      }
-                      placeholder="Tên hiển thị"
-                      className="h-10 w-36 shrink-0 rounded-lg border border-gray-200 px-3 text-sm outline-none placeholder:text-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                    />
-                    <input
-                      type="url"
-                      value={link.url}
-                      onChange={(event) =>
-                        updateLink(link.id, { url: event.target.value })
-                      }
-                      placeholder="https://..."
-                      className="h-10 min-w-0 flex-1 rounded-lg border border-gray-200 px-3 text-sm outline-none placeholder:text-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                    />
+                    <FileText className="h-4 w-4 shrink-0 text-blue-400" />
+                    <span className="min-w-0 flex-1 truncate text-sm text-gray-700">
+                      {file.name}
+                    </span>
+                    <span className="shrink-0 text-xs text-gray-400">
+                      {formatFileSize(file.size)}
+                    </span>
                     <button
                       type="button"
-                      onClick={() =>
-                        setLinks((prev) => prev.filter((item) => item.id !== link.id))
-                      }
-                      className="shrink-0 text-gray-400 hover:text-rose-500"
-                      aria-label="Xóa liên kết"
+                      onClick={() => setFiles((prev) => prev.filter((_, i) => i !== index))}
+                      disabled={submitting}
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-600"
+                      aria-label={`Bỏ tệp ${file.name}`}
                     >
-                      <X className="h-4 w-4" />
+                      <Trash2 className="h-4 w-4" />
                     </button>
                   </li>
                 ))}
               </ul>
             )}
+
+            {links.length > 0 && (
+              <div className="space-y-2">
+                {links.map((link) => (
+                  <div key={link.id} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={link.label}
+                      onChange={(event) => updateLink(link.id, { label: event.target.value })}
+                      placeholder="Tên đường dẫn"
+                      className="h-9 w-[38%] rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none placeholder:text-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                    />
+                    <input
+                      type="url"
+                      value={link.url}
+                      onChange={(event) => updateLink(link.id, { url: event.target.value })}
+                      placeholder="https://..."
+                      className="h-9 min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none placeholder:text-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setLinks((prev) => prev.filter((item) => item.id !== link.id))}
+                      disabled={submitting}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-600"
+                      aria-label="Xóa liên kết"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {images.length > 0 && (
+              <ul className="flex max-w-full flex-nowrap gap-2.5 overflow-x-auto overflow-y-hidden pb-2">
+                {images.map((image) => (
+                  <li
+                    key={image.id}
+                    className="group relative h-16 w-24 shrink-0 overflow-hidden rounded-lg border border-blue-200 bg-blue-50"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setPreviewImage({ name: image.file.name, url: image.previewUrl })}
+                      className="h-full w-full focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+                      aria-label={`Xem trước ảnh ${image.file.name}`}
+                    >
+                      {/* Ảnh dùng object URL cục bộ nên không qua bộ tối ưu ảnh của Next.js. */}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={image.previewUrl}
+                        alt={image.file.name}
+                        className="h-full w-full object-cover"
+                      />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeImage(image.id)}
+                      disabled={submitting}
+                      className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-md bg-gray-950/70 text-white shadow-sm transition hover:bg-rose-600"
+                      aria-label={`Bỏ ảnh ${image.file.name}`}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <p className="text-xs text-gray-400">
+              Có thể kéo thả hoặc dán ảnh bằng Ctrl+V. Mỗi ảnh/tệp tối đa 10 MB.
+            </p>
           </div>
         </div>
 
@@ -511,6 +595,38 @@ export function TaskReportDrawer({
           </Button>
         </div>
       </div>
-    </div>
+      </div>
+
+      {previewImage && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-gray-950/70 p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setPreviewImage(null);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Xem trước ảnh ${previewImage.name}`}
+            className="relative flex max-h-[90vh] max-w-[95vw] items-center justify-center"
+          >
+            <button
+              type="button"
+              onClick={() => setPreviewImage(null)}
+              className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-gray-950/75 text-white transition hover:bg-gray-950 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-gray-950 sm:right-4 sm:top-4 sm:h-11 sm:w-11"
+              aria-label="Đóng xem trước ảnh"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={previewImage.url}
+              alt={previewImage.name}
+              className="max-h-[90vh] max-w-[95vw] object-contain"
+            />
+          </div>
+        </div>
+      )}
+    </>
   );
 }

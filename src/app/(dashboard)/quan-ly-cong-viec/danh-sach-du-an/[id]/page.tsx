@@ -39,6 +39,7 @@ import { ActivityTimeline } from "@/components/timeline/ActivityTimeline";
 import { cn, formatDateVN } from "@/lib/utils";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
+import { DetailAttachments } from "@/components/tasks/DetailAttachments";
 
 type Tab = "info" | "tasks" | "history";
 
@@ -277,7 +278,13 @@ export default function ProjectDetailPage() {
                 <div className="min-h-24 max-w-full overflow-x-auto rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-4 text-sm leading-6 text-gray-700">
                   <ProjectDescription description={project.description} />
                 </div>
-                <div className="mt-12 grid grid-cols-1 gap-5 border-t border-gray-100 pt-4 sm:grid-cols-2">
+                <DetailAttachments
+                  entityLabel="dự án"
+                  files={project.files}
+                  links={project.links}
+                  images={project.images}
+                />
+                <div className="mt-6 grid grid-cols-1 gap-5 border-t border-gray-100 pt-4 sm:grid-cols-2">
                   <DateInfo
                     label="Thời gian bắt đầu:"
                     value={formatDateVN(project.startDate)}

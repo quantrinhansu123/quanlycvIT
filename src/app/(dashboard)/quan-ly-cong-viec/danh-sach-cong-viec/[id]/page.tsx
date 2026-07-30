@@ -45,6 +45,7 @@ import { ActivityTimeline } from "@/components/timeline/ActivityTimeline";
 import { cn, formatDateVN } from "@/lib/utils";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
+import { DetailAttachments } from "@/components/tasks/DetailAttachments";
 
 type Tab = "info" | "tasks" | "reports";
 
@@ -346,7 +347,13 @@ export default function TaskDetailPage() {
                     emptyText="Chưa có mô tả cho công việc này."
                   />
                 </div>
-                <div className="mt-16 grid grid-cols-1 gap-5 border-t border-gray-100 pt-4 sm:grid-cols-2">
+                <DetailAttachments
+                  entityLabel="công việc"
+                  files={task.files}
+                  links={task.links}
+                  images={task.images}
+                />
+                <div className="mt-6 grid grid-cols-1 gap-5 border-t border-gray-100 pt-4 sm:grid-cols-2">
                   <DateInfo
                     label="Thời gian bắt đầu:"
                     value={formatDateVN(task.startDate)}

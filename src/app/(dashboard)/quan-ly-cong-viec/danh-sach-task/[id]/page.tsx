@@ -13,7 +13,6 @@ import {
   FileClock,
   Flag,
   History,
-  Images,
   Info,
   ListTodo,
   Pencil,
@@ -45,6 +44,7 @@ import { TaskReportDrawer } from "@/components/tasks/TaskReportDrawer";
 import { cn, formatDateVN } from "@/lib/utils";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
+import { DetailAttachments } from "@/components/tasks/DetailAttachments";
 
 type Tab = "info" | "reports";
 
@@ -71,7 +71,6 @@ export default function SubtaskDetailPage() {
   const [editing, setEditing] = useState(false);
   const [reportDrawerOpen, setReportDrawerOpen] = useState(false);
   const [quickUpdating, setQuickUpdating] = useState(false);
-
   const load = useCallback(async () => {
     try {
       const [subtaskData, workTaskList, reportData, memberData] =
@@ -310,41 +309,6 @@ export default function SubtaskDetailPage() {
               </OverviewCard>
             </section>
 
-            {subtask.images.length > 0 && (
-              <section>
-                <Panel
-                  accentClassName="bg-blue-500"
-                  icon={Images}
-                  iconClassName="text-blue-500"
-                  title={`Hình ảnh Task (${subtask.images.length})`}
-                  subtitle="Ảnh minh họa và tài liệu hình ảnh đính kèm của Task"
-                >
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                    {subtask.images.map((url, index) => (
-                      <a
-                        key={url}
-                        href={url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="group relative overflow-hidden rounded-xl border border-gray-200 bg-gray-50"
-                      >
-                        {/* URL Cloudinary động nên dùng img thay vì giới hạn hostname của next/image. */}
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={url}
-                          alt={`Ảnh Task ${index + 1}`}
-                          className="aspect-video w-full object-cover transition duration-200 group-hover:scale-105"
-                        />
-                        <span className="absolute bottom-2 right-2 rounded-md bg-gray-950/70 px-2 py-1 text-[10px] font-semibold text-white">
-                          Ảnh {index + 1}
-                        </span>
-                      </a>
-                    ))}
-                  </div>
-                </Panel>
-              </section>
-            )}
-
             <section className="grid grid-cols-1 gap-5 lg:grid-cols-3">
               <Panel
                 className="lg:col-span-2"
@@ -360,7 +324,13 @@ export default function SubtaskDetailPage() {
                     emptyText="Chưa có mô tả cho Task này."
                   />
                 </div>
-                <div className="mt-16 grid grid-cols-1 gap-5 border-t border-gray-100 pt-4 sm:grid-cols-2">
+                <DetailAttachments
+                  entityLabel="Task"
+                  files={subtask.files}
+                  links={subtask.links}
+                  images={subtask.images}
+                />
+                <div className="mt-6 grid grid-cols-1 gap-5 border-t border-gray-100 pt-4 sm:grid-cols-2">
                   <DateInfo
                     label="Thời gian bắt đầu:"
                     value={formatDateVN(subtask.startDate)}
@@ -555,6 +525,7 @@ export default function SubtaskDetailPage() {
           }}
         />
       )}
+
     </div>
   );
 }

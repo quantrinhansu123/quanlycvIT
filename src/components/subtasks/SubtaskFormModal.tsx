@@ -4,12 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   ChevronDown,
-  FileText,
-  ImagePlus,
-  Paperclip,
-  Plus,
   Search,
-  Trash2,
   X,
 } from "lucide-react";
 import type {
@@ -26,6 +21,7 @@ import { Button } from "@/components/ui/Button";
 import { MemberMultiSelect } from "@/components/ui/MemberMultiSelect";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
+import { TaskAttachmentFields } from "@/components/tasks/TaskAttachmentFields";
 
 interface SubtaskFormModalProps {
   mode: "create" | "edit";
@@ -298,11 +294,9 @@ export function SubtaskFormModal({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [pendingImages, setPendingImages] = useState<PendingTaskImage[]>([]);
   const [imageError, setImageError] = useState("");
-  const imageInputRef = useRef<HTMLInputElement>(null);
   const pendingImagesRef = useRef<PendingTaskImage[]>([]);
   const [pendingFiles, setPendingFiles] = useState<PendingTaskFile[]>([]);
   const [fileError, setFileError] = useState("");
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -623,259 +617,31 @@ export function SubtaskFormModal({
             />
           </div>
 
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="mr-1 text-sm font-medium text-gray-700">Đính kèm Task</span>
-              <button
-                type="button"
-                onClick={() => imageInputRef.current?.click()}
-                disabled={
-                  submitting ||
-                  form.images.length + pendingImages.length >= MAX_TASK_IMAGES
-                }
-                className={cn(
-                  "inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
-                  form.images.length + pendingImages.length > 0
-                    ? "border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100"
-                    : "border-gray-200 bg-white text-gray-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
-                )}
-                title={`Tối đa ${MAX_TASK_IMAGES} ảnh, mỗi ảnh không quá 10 MB`}
-              >
-                <ImagePlus className="h-3.5 w-3.5" />
-                Chọn ảnh
-                <span
-                  className={cn(
-                    "text-[10px]",
-                    form.images.length + pendingImages.length > 0
-                      ? "text-blue-400"
-                      : "text-gray-400"
-                  )}
-                >
-                  {form.images.length + pendingImages.length}/{MAX_TASK_IMAGES}
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={submitting || form.files.length + pendingFiles.length >= MAX_TASK_FILES}
-                className={cn(
-                  "inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
-                  form.files.length + pendingFiles.length > 0
-                    ? "border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100"
-                    : "border-gray-200 bg-white text-gray-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
-                )}
-                title={`Tối đa ${MAX_TASK_FILES} tệp, mỗi tệp không quá 20 MB`}
-              >
-                <Paperclip className="h-3.5 w-3.5" />
-                Chọn tệp
-                <span
-                  className={cn(
-                    "text-[10px]",
-                    form.files.length + pendingFiles.length > 0
-                      ? "text-blue-400"
-                      : "text-gray-400"
-                  )}
-                >
-                  {form.files.length + pendingFiles.length}/{MAX_TASK_FILES}
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={addLinkRow}
-                disabled={submitting || form.links.length >= MAX_TASK_LINKS}
-                className={cn(
-                  "inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
-                  form.links.length > 0
-                    ? "border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100"
-                    : "border-gray-200 bg-white text-gray-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
-                )}
-                title={`Tối đa ${MAX_TASK_LINKS} liên kết`}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Thêm liên kết
-                <span
-                  className={cn(
-                    "text-[10px]",
-                    form.links.length > 0 ? "text-blue-400" : "text-gray-400"
-                  )}
-                >
-                  {form.links.length}/{MAX_TASK_LINKS}
-                </span>
-              </button>
-            </div>
-
-            <input
-              ref={imageInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/avif"
-              multiple
-              className="hidden"
-              onChange={(event) => {
-                handleImageSelection(event.target.files);
-                event.target.value = "";
-              }}
-            />
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              className="hidden"
-              onChange={(event) => {
-                handleFileSelection(event.target.files);
-                event.target.value = "";
-              }}
-            />
-
-            {(form.files.length > 0 || pendingFiles.length > 0) && (
-              <ul className="space-y-2">
-                {form.files.map((fileItem) => (
-                  <li
-                    key={fileItem.url}
-                    className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2"
-                  >
-                    <FileText className="h-4 w-4 shrink-0 text-gray-400" />
-                    <a
-                      href={fileItem.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="min-w-0 flex-1 truncate text-sm text-gray-700 hover:text-blue-600"
-                    >
-                      {fileItem.name}
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() => removeSavedFile(fileItem.url)}
-                      disabled={submitting}
-                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-600"
-                      aria-label={`Xóa tệp ${fileItem.name}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </li>
-                ))}
-                {pendingFiles.map((pending) => (
-                  <li
-                    key={pending.id}
-                    className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2"
-                  >
-                    <FileText className="h-4 w-4 shrink-0 text-blue-400" />
-                    <span className="min-w-0 flex-1 truncate text-sm text-gray-700">
-                      {pending.file.name}
-                    </span>
-                    <span className="shrink-0 rounded-md bg-blue-600 px-2 py-0.5 text-[10px] font-semibold text-white">
-                      Chưa lưu
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => removePendingFile(pending.id)}
-                      disabled={submitting}
-                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-600"
-                      aria-label={`Bỏ tệp ${pending.file.name}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {form.links.length > 0 && (
-              <div className="space-y-2">
-                {form.links.map((link, index) => (
-                  <div key={index} className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={link.label ?? ""}
-                      onChange={(event) => updateLinkRow(index, { label: event.target.value })}
-                      placeholder="Tên đường dẫn"
-                      className="h-9 w-[38%] rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                    />
-                    <input
-                      type="url"
-                      value={link.url}
-                      onChange={(event) => updateLinkRow(index, { url: event.target.value })}
-                      placeholder="https://..."
-                      className="h-9 flex-1 rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeLinkRow(index)}
-                      disabled={submitting}
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-600"
-                      aria-label="Xóa liên kết"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {(form.images.length > 0 || pendingImages.length > 0) && (
-              <ul className="flex gap-2.5 overflow-x-auto pb-1">
-                {form.images.map((url, index) => (
-                  <li
-                    key={url}
-                    className="group relative w-24 shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-gray-50"
-                  >
-                    <a href={url} target="_blank" rel="noreferrer">
-                      {/* URL Cloudinary động nên dùng img thay vì giới hạn hostname của next/image. */}
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={url}
-                        alt={`Ảnh Task ${index + 1}`}
-                        className="h-16 w-24 object-cover"
-                      />
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() => removeSavedImage(url)}
-                      disabled={submitting}
-                      className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-md bg-gray-950/70 text-white shadow-sm transition hover:bg-rose-600"
-                      aria-label={`Xóa ảnh Task ${index + 1}`}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  </li>
-                ))}
-                {pendingImages.map((image) => (
-                  <li
-                    key={image.id}
-                    className="group relative w-24 shrink-0 overflow-hidden rounded-lg border border-blue-200 bg-blue-50"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={image.previewUrl}
-                      alt={image.file.name}
-                      className="h-16 w-24 object-cover"
-                    />
-                    <span className="absolute bottom-1 left-1 rounded bg-blue-600 px-1 py-0.5 text-[9px] font-semibold leading-none text-white">
-                      Chưa lưu
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => removePendingImage(image.id)}
-                      disabled={submitting}
-                      className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-md bg-gray-950/70 text-white shadow-sm transition hover:bg-rose-600"
-                      aria-label={`Bỏ ảnh ${image.file.name}`}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {imageError && (
-              <p role="alert" className="text-xs text-rose-600">
-                {imageError}
-              </p>
-            )}
-            {fileError && (
-              <p role="alert" className="text-xs text-rose-600">
-                {fileError}
-              </p>
-            )}
-            {errors.links && <p className="text-xs text-rose-500">{errors.links}</p>}
-          </div>
+          <TaskAttachmentFields
+            label="Đính kèm Task"
+            entityLabel="Task"
+            files={form.files}
+            pendingFiles={pendingFiles}
+            links={form.links}
+            images={form.images}
+            pendingImages={pendingImages}
+            maxFiles={MAX_TASK_FILES}
+            maxLinks={MAX_TASK_LINKS}
+            maxImages={MAX_TASK_IMAGES}
+            submitting={submitting}
+            fileError={fileError}
+            linkError={errors.links}
+            imageError={imageError}
+            onSelectFiles={handleFileSelection}
+            onSelectImages={handleImageSelection}
+            onAddLink={addLinkRow}
+            onUpdateLink={updateLinkRow}
+            onRemoveLink={removeLinkRow}
+            onRemoveSavedFile={removeSavedFile}
+            onRemovePendingFile={removePendingFile}
+            onRemoveSavedImage={removeSavedImage}
+            onRemovePendingImage={removePendingImage}
+          />
 
           <div>
             <label className="mb-1.5 block text-sm font-medium text-gray-700">
