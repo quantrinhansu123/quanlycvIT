@@ -1,5 +1,8 @@
 import { apiSuccess, handleApiError } from "@/lib/api/response";
 
+// Danh sách ngân hàng gần như tĩnh, ít khi thay đổi trong ngày.
+export const revalidate = 3600;
+
 interface VietQrBank {
   id: number;
   name: string;
@@ -11,7 +14,7 @@ interface VietQrBank {
 export async function GET() {
   try {
     const response = await fetch("https://api.vietqr.io/v2/banks", {
-      next: { revalidate: 60 * 60 * 24 },
+      next: { revalidate },
     });
     if (!response.ok) throw new Error("Không thể tải danh sách ngân hàng.");
 
