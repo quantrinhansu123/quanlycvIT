@@ -1,19 +1,25 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import {
   ArrowDownUp, ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft,
   ChevronsRight, Columns3, Download, LockKeyhole, Pencil,
   Plus, RefreshCw, Search, Trash2, UnlockKeyhole, Upload, X,
 } from "lucide-react";
-import { DepartmentFormModal } from "@/components/departments/DepartmentFormModal";
 import { Button } from "@/components/ui/Button";
 import { ActionIconButton } from "@/components/ui/ActionIconButton";
+import { ModalLoadingFallback } from "@/components/ui/ModalLoadingFallback";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { departmentService } from "@/services/department-service";
 import type { DepartmentInput, DepartmentRecord } from "@/types/department";
+
+const DepartmentFormModal = dynamic(
+  () => import("@/components/departments/DepartmentFormModal").then((mod) => mod.DepartmentFormModal),
+  { ssr: false, loading: () => <ModalLoadingFallback /> }
+);
 
 const PAGE_SIZES = [20, 50, 100];
 type SortKey = "code" | "name" | "level" | "createdAt";

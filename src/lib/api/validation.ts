@@ -107,7 +107,11 @@ function linkAttachments(body: Record<string, unknown>): TaskLinkAttachment[] {
       typeof entry.label === "string" && entry.label.trim()
         ? entry.label.trim()
         : undefined;
-    return { label, url: entry.url.trim() };
+    const description =
+      typeof entry.description === "string" && entry.description.trim()
+        ? entry.description.trim()
+        : undefined;
+    return { label, url: entry.url.trim(), description };
   });
 }
 

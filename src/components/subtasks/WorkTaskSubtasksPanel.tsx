@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import {
   Download,
   LayoutGrid,
@@ -21,14 +22,25 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { FilterSelect } from "@/components/ui/FilterSelect";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { SubtaskCard } from "@/components/subtasks/SubtaskCard";
-import { SubtaskFormModal } from "@/components/subtasks/SubtaskFormModal";
-import { SubtaskQuickViewModal } from "@/components/subtasks/SubtaskQuickViewModal";
 import { SubtaskTable } from "@/components/subtasks/SubtaskTable";
-import { TaskReportDrawer } from "@/components/tasks/TaskReportDrawer";
+import { ModalLoadingFallback } from "@/components/ui/ModalLoadingFallback";
 import { ListPaginationFooter } from "@/components/ui/ListPaginationFooter";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 import { cn, formatDateVN } from "@/lib/utils";
+
+const SubtaskFormModal = dynamic(
+  () => import("@/components/subtasks/SubtaskFormModal").then((mod) => mod.SubtaskFormModal),
+  { ssr: false, loading: () => <ModalLoadingFallback /> }
+);
+const SubtaskQuickViewModal = dynamic(
+  () => import("@/components/subtasks/SubtaskQuickViewModal").then((mod) => mod.SubtaskQuickViewModal),
+  { ssr: false, loading: () => <ModalLoadingFallback /> }
+);
+const TaskReportDrawer = dynamic(
+  () => import("@/components/tasks/TaskReportDrawer").then((mod) => mod.TaskReportDrawer),
+  { ssr: false, loading: () => <ModalLoadingFallback /> }
+);
 
 type ViewMode = "table" | "grid";
 type FormModalState = { mode: "create" } | { mode: "edit"; subtask: Subtask } | null;

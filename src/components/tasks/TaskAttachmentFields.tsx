@@ -214,30 +214,42 @@ export function TaskAttachmentFields({
       {links.length > 0 && (
         <div className="space-y-2">
           {links.map((link, index) => (
-            <div key={index} className="flex items-center gap-2">
+            <div
+              key={index}
+              className="space-y-2 rounded-lg border border-gray-100 bg-gray-50/60 p-2"
+            >
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={link.label ?? ""}
+                  onChange={(event) => onUpdateLink(index, { label: event.target.value })}
+                  placeholder="Tên đường dẫn"
+                  className="h-9 w-[38%] rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                />
+                <input
+                  type="url"
+                  value={link.url}
+                  onChange={(event) => onUpdateLink(index, { url: event.target.value })}
+                  placeholder="https://..."
+                  className="h-9 min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                />
+                <button
+                  type="button"
+                  onClick={() => onRemoveLink(index)}
+                  disabled={submitting}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-600"
+                  aria-label="Xóa liên kết"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
               <input
                 type="text"
-                value={link.label ?? ""}
-                onChange={(event) => onUpdateLink(index, { label: event.target.value })}
-                placeholder="Tên đường dẫn"
-                className="h-9 w-[38%] rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                value={link.description ?? ""}
+                onChange={(event) => onUpdateLink(index, { description: event.target.value })}
+                placeholder="Mô tả đường dẫn (không bắt buộc)"
+                className="h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
               />
-              <input
-                type="url"
-                value={link.url}
-                onChange={(event) => onUpdateLink(index, { url: event.target.value })}
-                placeholder="https://..."
-                className="h-9 min-w-0 flex-1 rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-              />
-              <button
-                type="button"
-                onClick={() => onRemoveLink(index)}
-                disabled={submitting}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-600"
-                aria-label="Xóa liên kết"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
             </div>
           ))}
         </div>

@@ -36,6 +36,23 @@ interface AccountRow {
   avatar_url: string | null;
 }
 
+interface ProjectMemberEmbedRow {
+  tai_khoan_id: string;
+  tai_khoan: AccountRow | null;
+}
+
+interface ProjectManagerEmbedRow {
+  tai_khoan_id: string;
+  la_chinh: boolean;
+  tai_khoan: AccountRow | null;
+}
+
+interface ProjectTaskStatsRow {
+  id: string;
+  trang_thai: string;
+  ngay_hoan_thanh: string | null;
+}
+
 interface ProjectRow {
   id: string;
   ma_da: string;
@@ -49,24 +66,20 @@ interface ProjectRow {
   hinh_anh: string[] | null;
   tep_dinh_kem: TaskFileAttachment[] | null;
   lien_ket_dinh_kem: TaskLinkAttachment[] | null;
+  /** Người quản lý chính "cũ" (cột nguoi_ql_id), lấy kèm qua embed. */
+  legacy_manager: AccountRow | null;
+  /** Danh sách người quản lý đầy đủ, lấy kèm qua embed thay vì round-trip riêng. */
+  du_an_quan_ly: ProjectManagerEmbedRow[];
+  /** Danh sách thành viên, lấy kèm qua embed thay vì round-trip riêng. */
+  du_an_thanh_vien: ProjectMemberEmbedRow[];
+  /** Thống kê công việc của dự án, lấy kèm qua embed thay vì round-trip riêng. */
+  cong_viec: ProjectTaskStatsRow[];
 }
 
-interface ProjectMemberRow {
-  du_an_id: string;
-  tai_khoan_id: string;
-}
-
-interface ProjectManagerRow {
-  du_an_id: string;
+interface AssignmentEmbedRow {
   tai_khoan_id: string;
   la_chinh: boolean;
-}
-
-interface ProjectTaskStatsRow {
-  id: string;
-  du_an_id: string;
-  trang_thai: string;
-  ngay_hoan_thanh: string | null;
+  tai_khoan: AccountRow | null;
 }
 
 interface WorkTaskRow {
@@ -87,6 +100,12 @@ interface WorkTaskRow {
   hinh_anh: string[] | null;
   tep_dinh_kem: TaskFileAttachment[] | null;
   lien_ket_dinh_kem: TaskLinkAttachment[] | null;
+  /** Người phụ trách chính "cũ" (cột nguoi_phu_trach_id), lấy kèm qua embed. */
+  legacy_assignee: AccountRow | null;
+  /** Danh sách người phụ trách đầy đủ, lấy kèm qua embed thay vì round-trip riêng. */
+  cong_viec_phu_trach: AssignmentEmbedRow[];
+  /** Tiến độ các task con, lấy kèm qua embed để tính tiến độ trung bình. */
+  task: { tien_do_thuc_te: number }[];
 }
 
 interface SubtaskRow {
@@ -107,11 +126,10 @@ interface SubtaskRow {
   lien_ket_dinh_kem: TaskLinkAttachment[] | null;
   task_tien_de_id: string | null;
   cong_viec_id: string;
-}
-
-interface WorkTaskProgressRow {
-  cong_viec_id: string;
-  tien_do_thuc_te: number;
+  /** Người phụ trách chính "cũ" (cột nguoi_phu_trach_id), lấy kèm qua embed. */
+  legacy_assignee: AccountRow | null;
+  /** Danh sách người phụ trách đầy đủ, lấy kèm qua embed thay vì round-trip riêng. */
+  task_phu_trach: AssignmentEmbedRow[];
 }
 
 export interface WorkTaskFilters {
@@ -175,11 +193,20 @@ function pageRange(page: number, pageSize: number): { from: number; to: number }
 
 const ACCOUNT_SELECT = "id,ma_nv,ten_nv,chuc_vu,email,avatar_url";
 const PROJECT_SELECT =
-  "id,ma_da,ten_da,hop_mau,mo_ta,ngay_bd,ngay_kt,nguoi_ql_id,steps,hinh_anh,tep_dinh_kem,lien_ket_dinh_kem";
+  "id,ma_da,ten_da,hop_mau,mo_ta,ngay_bd,ngay_kt,nguoi_ql_id,steps,hinh_anh,tep_dinh_kem,lien_ket_dinh_kem," +
+  `legacy_manager:tai_khoan!nguoi_ql_id(${ACCOUNT_SELECT}),` +
+  `du_an_quan_ly(tai_khoan_id,la_chinh,tai_khoan(${ACCOUNT_SELECT})),` +
+  `du_an_thanh_vien(tai_khoan_id,tai_khoan(${ACCOUNT_SELECT})),` +
+  "cong_viec(id,trang_thai,ngay_hoan_thanh)";
 const WORK_TASK_SELECT =
-  "id,ten_cv,mo_ta,created_at,updated_at,du_an_id,nguoi_phu_trach_id,trang_thai,uu_tien,ngay_bat_dau,ngay_hoan_thanh,tien_do_thuc_te,nhan_tag,cong_viec_tien_de_id,hinh_anh,tep_dinh_kem,lien_ket_dinh_kem";
+  "id,ten_cv,mo_ta,created_at,updated_at,du_an_id,nguoi_phu_trach_id,trang_thai,uu_tien,ngay_bat_dau,ngay_hoan_thanh,tien_do_thuc_te,nhan_tag,cong_viec_tien_de_id,hinh_anh,tep_dinh_kem,lien_ket_dinh_kem," +
+  `legacy_assignee:tai_khoan!nguoi_phu_trach_id(${ACCOUNT_SELECT}),` +
+  `cong_viec_phu_trach(tai_khoan_id,la_chinh,tai_khoan(${ACCOUNT_SELECT})),` +
+  "task(tien_do_thuc_te)";
 const SUBTASK_SELECT =
-  "id,ten_task,mo_ta,created_at,updated_at,ngay_bat_dau,ngay_ket_thuc,nguoi_phu_trach_id,trang_thai,uu_tien,tien_do_thuc_te,nhan_tag,hinh_anh,tep_dinh_kem,lien_ket_dinh_kem,task_tien_de_id,cong_viec_id";
+  "id,ten_task,mo_ta,created_at,updated_at,ngay_bat_dau,ngay_ket_thuc,nguoi_phu_trach_id,trang_thai,uu_tien,tien_do_thuc_te,nhan_tag,hinh_anh,tep_dinh_kem,lien_ket_dinh_kem,task_tien_de_id,cong_viec_id," +
+  `legacy_assignee:tai_khoan!nguoi_phu_trach_id(${ACCOUNT_SELECT}),` +
+  `task_phu_trach(tai_khoan_id,la_chinh,tai_khoan(${ACCOUNT_SELECT}))`;
 
 function avatarColor(value: string): string {
   const colors = ["#F59E0B", "#1F2937", "#DC2626", "#0EA5E9", "#16A34A", "#7C5CFC"];
@@ -296,74 +323,32 @@ async function resolveAccountIds(
   );
 }
 
-async function hydrateProjects(
-  supabase: ApiSupabaseClient,
-  rows: ProjectRow[]
-): Promise<Project[]> {
-  if (rows.length === 0) return [];
-
-  const projectIds = rows.map((row) => row.id);
-  const [
-    { data: managerData, error: managerError },
-    { data: memberData, error: memberError },
-    { data: taskData, error: taskError },
-  ] =
-    await Promise.all([
-      supabase
-        .from("du_an_quan_ly")
-        .select("du_an_id,tai_khoan_id,la_chinh")
-        .in("du_an_id", projectIds),
-      supabase
-        .from("du_an_thanh_vien")
-        .select("du_an_id,tai_khoan_id")
-        .in("du_an_id", projectIds),
-      supabase
-        .from("cong_viec")
-        .select("id,du_an_id,trang_thai,ngay_hoan_thanh")
-        .in("du_an_id", projectIds),
-    ]);
-
-  throwDatabaseError(managerError);
-  throwDatabaseError(memberError);
-  throwDatabaseError(taskError);
-
-  const managerAssignments = (managerData ?? []) as ProjectManagerRow[];
-  const memberships = (memberData ?? []) as ProjectMemberRow[];
-  const taskStats = (taskData ?? []) as ProjectTaskStatsRow[];
-  const accountIds = uniqueValues([
-    ...rows.map((row) => row.nguoi_ql_id),
-    ...managerAssignments.map((row) => row.tai_khoan_id),
-    ...memberships.map((row) => row.tai_khoan_id),
-  ]);
-  const accounts = await loadAccounts(supabase, accountIds);
+/**
+ * Không còn cần round-trip riêng cho quản lý/thành viên/thống kê công việc:
+ * `PROJECT_SELECT` đã lấy kèm (embed) `du_an_quan_ly`, `du_an_thanh_vien`,
+ * `cong_viec` và `legacy_manager` trong cùng một truy vấn.
+ */
+function hydrateProjects(rows: ProjectRow[]): Project[] {
   const today = getAppDateKey();
 
   return rows.map((row) => {
-    const projectTasks = taskStats.filter((task) => task.du_an_id === row.id);
+    const managerAssignments = row.du_an_quan_ly ?? [];
+    const projectTasks = row.cong_viec ?? [];
     const managers = managerAssignments
-      .filter((assignment) => assignment.du_an_id === row.id)
+      .slice()
       .sort((a, b) => Number(b.la_chinh) - Number(a.la_chinh))
-      .map((assignment) => accounts.get(assignment.tai_khoan_id))
+      .map((assignment) => assignment.tai_khoan)
       .filter((account): account is AccountRow => Boolean(account))
       .map(toProjectMember);
     // Dữ liệu cũ chưa có bản ghi liên kết vẫn đọc được từ nguoi_ql_id.
-    if (managers.length === 0 && row.nguoi_ql_id) {
-      const legacyManager = accounts.get(row.nguoi_ql_id);
-      if (legacyManager) managers.push(toProjectMember(legacyManager));
+    if (managers.length === 0 && row.legacy_manager) {
+      managers.push(toProjectMember(row.legacy_manager));
     }
-    const managerAccountIds = new Set(
-      managerAssignments
-        .filter((assignment) => assignment.du_an_id === row.id)
-        .map((assignment) => assignment.tai_khoan_id)
-    );
+    const managerAccountIds = new Set(managerAssignments.map((assignment) => assignment.tai_khoan_id));
     if (row.nguoi_ql_id) managerAccountIds.add(row.nguoi_ql_id);
-    const members = memberships
-      .filter(
-        (membership) =>
-          membership.du_an_id === row.id &&
-          !managerAccountIds.has(membership.tai_khoan_id)
-      )
-      .map((membership) => accounts.get(membership.tai_khoan_id))
+    const members = (row.du_an_thanh_vien ?? [])
+      .filter((membership) => !managerAccountIds.has(membership.tai_khoan_id))
+      .map((membership) => membership.tai_khoan)
       .filter((account): account is AccountRow => Boolean(account))
       .map(toProjectMember);
 
@@ -515,7 +500,7 @@ export async function listProjects(
 
   const { data, error } = await query;
   throwDatabaseError(error);
-  return hydrateProjects(supabase, (data ?? []) as ProjectRow[]);
+  return hydrateProjects((data ?? []) as unknown as ProjectRow[]);
 }
 
 /** Giống `listProjects` nhưng chỉ tải một trang kết quả. */
@@ -554,7 +539,7 @@ export async function listProjectsPage(
   const { from, to } = pageRange(filters.page, filters.pageSize);
   const { data, error, count } = await query.range(from, to);
   throwDatabaseError(error);
-  const items = await hydrateProjects(supabase, (data ?? []) as ProjectRow[]);
+  const items = hydrateProjects((data ?? []) as unknown as ProjectRow[]);
   return { items, total: count ?? 0 };
 }
 
@@ -569,7 +554,7 @@ export async function getProject(
     .maybeSingle();
   throwDatabaseError(error);
   if (!data) return null;
-  const [project] = await hydrateProjects(supabase, [data as ProjectRow]);
+  const [project] = hydrateProjects([data as unknown as ProjectRow]);
   return project;
 }
 
@@ -604,7 +589,7 @@ export async function createProject(
       tep_dinh_kem: input.files,
       lien_ket_dinh_kem: input.links,
     })
-    .select(PROJECT_SELECT)
+    .select("id")
     .single();
   throwDatabaseError(error);
   if (!data) throw new ApiException("Supabase không trả về dự án vừa tạo.", 500);
@@ -691,98 +676,29 @@ export async function listDirectory(
   return ((data ?? []) as AccountRow[]).map(toProjectMember);
 }
 
-interface AssignmentRow {
-  tai_khoan_id: string;
-  la_chinh: boolean;
-}
-
 /**
- * Đọc danh sách người phụ trách từ bảng nối, xếp người chính lên đầu.
- * `ownerColumn` là cột khóa ngoại trỏ về bản ghi cha (cong_viec_id hoặc task_id).
+ * Không còn cần round-trip riêng cho người phụ trách/tiến độ: `WORK_TASK_SELECT`
+ * đã lấy kèm (embed) `cong_viec_phu_trach`, `legacy_assignee` và `task` trong
+ * cùng một truy vấn, nên hàm này chỉ còn việc dựng lại hình dạng dữ liệu.
  */
-async function loadAssignments(
-  supabase: ApiSupabaseClient,
-  table: "cong_viec_phu_trach" | "task_phu_trach",
-  ownerColumn: "cong_viec_id" | "task_id",
-  ownerIds: string[]
-): Promise<Map<string, ProjectMember[]>> {
-  const result = new Map<string, ProjectMember[]>();
-  if (ownerIds.length === 0) return result;
-
-  const { data, error } = await supabase
-    .from(table)
-    .select(`${ownerColumn},tai_khoan_id,la_chinh`)
-    .in(ownerColumn, ownerIds);
-  throwDatabaseError(error);
-
-  const rows = (data ?? []) as (AssignmentRow & Record<string, string>)[];
-  const accounts = await loadAccounts(
-    supabase,
-    uniqueValues(rows.map((row) => row.tai_khoan_id))
-  );
-
-  const grouped = new Map<string, AssignmentRow[]>();
-  for (const row of rows) {
-    const ownerId = row[ownerColumn];
-    const list = grouped.get(ownerId) ?? [];
-    list.push({ tai_khoan_id: row.tai_khoan_id, la_chinh: row.la_chinh });
-    grouped.set(ownerId, list);
-  }
-
-  for (const [ownerId, list] of grouped) {
-    const members = list
+function hydrateWorkTasks(rows: WorkTaskRow[]): WorkTask[] {
+  return rows.map((row) => {
+    const assignees = (row.cong_viec_phu_trach ?? [])
+      .slice()
       .sort((a, b) => Number(b.la_chinh) - Number(a.la_chinh))
-      .map((row) => accounts.get(row.tai_khoan_id))
+      .map((assignment) => assignment.tai_khoan)
       .filter((account): account is AccountRow => Boolean(account))
       .map(toProjectMember);
-    result.set(ownerId, members);
-  }
-  return result;
-}
-
-async function hydrateWorkTasks(
-  supabase: ApiSupabaseClient,
-  rows: WorkTaskRow[]
-): Promise<WorkTask[]> {
-  if (rows.length === 0) return [];
-
-  const [accounts, assignments, { data: progressData, error: progressError }] =
-    await Promise.all([
-    loadAccounts(supabase, uniqueValues(rows.map((row) => row.nguoi_phu_trach_id))),
-    loadAssignments(
-      supabase,
-      "cong_viec_phu_trach",
-      "cong_viec_id",
-      rows.map((row) => row.id)
-    ),
-    supabase
-      .from("task")
-      .select("cong_viec_id,tien_do_thuc_te")
-      .in("cong_viec_id", rows.map((row) => row.id)),
-  ]);
-  throwDatabaseError(progressError);
-
-  const progressByWorkTask = new Map<string, { total: number; count: number }>();
-  for (const item of (progressData ?? []) as WorkTaskProgressRow[]) {
-    const current = progressByWorkTask.get(item.cong_viec_id) ?? {
-      total: 0,
-      count: 0,
-    };
-    current.total += item.tien_do_thuc_te;
-    current.count += 1;
-    progressByWorkTask.set(item.cong_viec_id, current);
-  }
-
-  return rows.map((row) => {
-    const legacy = row.nguoi_phu_trach_id
-      ? accounts.get(row.nguoi_phu_trach_id)
-      : undefined;
-    const assignees = assignments.get(row.id) ?? [];
-    const primary = assignees[0] ?? (legacy ? toProjectMember(legacy) : undefined);
-    const taskProgress = progressByWorkTask.get(row.id);
-    const progress = taskProgress
-      ? Math.round(taskProgress.total / taskProgress.count)
-      : 0;
+    const primary =
+      assignees[0] ?? (row.legacy_assignee ? toProjectMember(row.legacy_assignee) : undefined);
+    const progressRows = row.task ?? [];
+    const progress =
+      progressRows.length > 0
+        ? Math.round(
+            progressRows.reduce((sum, item) => sum + item.tien_do_thuc_te, 0) /
+              progressRows.length
+          )
+        : 0;
 
     return {
       id: row.id,
@@ -851,7 +767,7 @@ export async function listWorkTasks(
 
   const { data, error } = await query;
   throwDatabaseError(error);
-  return hydrateWorkTasks(supabase, (data ?? []) as WorkTaskRow[]);
+  return hydrateWorkTasks((data ?? []) as unknown as WorkTaskRow[]);
 }
 
 /**
@@ -905,7 +821,7 @@ export async function listWorkTasksPage(
   const { from, to } = pageRange(filters.page, filters.pageSize);
   const { data, error, count } = await query.range(from, to);
   throwDatabaseError(error);
-  const items = await hydrateWorkTasks(supabase, (data ?? []) as WorkTaskRow[]);
+  const items = hydrateWorkTasks((data ?? []) as unknown as WorkTaskRow[]);
   return { items, total: count ?? 0 };
 }
 
@@ -920,7 +836,7 @@ export async function getWorkTask(
     .maybeSingle();
   throwDatabaseError(error);
   if (!data) return null;
-  const [task] = await hydrateWorkTasks(supabase, [data as WorkTaskRow]);
+  const [task] = hydrateWorkTasks([data as unknown as WorkTaskRow]);
   return task;
 }
 
@@ -1191,28 +1107,20 @@ export async function listProjectTasks(
   }));
 }
 
-async function hydrateSubtasks(
-  supabase: ApiSupabaseClient,
-  rows: SubtaskRow[]
-): Promise<Subtask[]> {
-  if (rows.length === 0) return [];
-
-  const [accounts, assignments] = await Promise.all([
-    loadAccounts(supabase, uniqueValues(rows.map((row) => row.nguoi_phu_trach_id))),
-    loadAssignments(
-      supabase,
-      "task_phu_trach",
-      "task_id",
-      rows.map((row) => row.id)
-    ),
-  ]);
-
+/**
+ * Không còn cần round-trip riêng cho người phụ trách: `SUBTASK_SELECT` đã lấy
+ * kèm (embed) `task_phu_trach` và `legacy_assignee` trong cùng một truy vấn.
+ */
+function hydrateSubtasks(rows: SubtaskRow[]): Subtask[] {
   return rows.map((row) => {
-    const legacy = row.nguoi_phu_trach_id
-      ? accounts.get(row.nguoi_phu_trach_id)
-      : undefined;
-    const assignees = assignments.get(row.id) ?? [];
-    const primary = assignees[0] ?? (legacy ? toProjectMember(legacy) : undefined);
+    const assignees = (row.task_phu_trach ?? [])
+      .slice()
+      .sort((a, b) => Number(b.la_chinh) - Number(a.la_chinh))
+      .map((assignment) => assignment.tai_khoan)
+      .filter((account): account is AccountRow => Boolean(account))
+      .map(toProjectMember);
+    const primary =
+      assignees[0] ?? (row.legacy_assignee ? toProjectMember(row.legacy_assignee) : undefined);
 
     return {
       id: row.id,
@@ -1267,7 +1175,7 @@ export async function listSubtasks(
 
   const { data, error } = await query;
   throwDatabaseError(error);
-  return hydrateSubtasks(supabase, (data ?? []) as SubtaskRow[]);
+  return hydrateSubtasks((data ?? []) as unknown as SubtaskRow[]);
 }
 
 /**
@@ -1340,7 +1248,7 @@ export async function listSubtasksPage(
   const { from, to } = pageRange(filters.page, filters.pageSize);
   const { data, error, count } = await query.range(from, to);
   throwDatabaseError(error);
-  const items = await hydrateSubtasks(supabase, (data ?? []) as SubtaskRow[]);
+  const items = hydrateSubtasks((data ?? []) as unknown as SubtaskRow[]);
   return { items, total: count ?? 0 };
 }
 
@@ -1355,7 +1263,7 @@ export async function getSubtask(
     .maybeSingle();
   throwDatabaseError(error);
   if (!data) return null;
-  const [subtask] = await hydrateSubtasks(supabase, [data as SubtaskRow]);
+  const [subtask] = hydrateSubtasks([data as unknown as SubtaskRow]);
   return subtask;
 }
 

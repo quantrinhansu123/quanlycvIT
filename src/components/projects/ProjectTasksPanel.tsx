@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import {
   Download,
   LayoutGrid,
@@ -20,12 +21,17 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { FilterSelect } from "@/components/ui/FilterSelect";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { TaskCard } from "@/components/tasks/TaskCard";
-import { TaskFormModal } from "@/components/tasks/TaskFormModal";
 import { TaskTable } from "@/components/tasks/TaskTable";
+import { ModalLoadingFallback } from "@/components/ui/ModalLoadingFallback";
 import { ListPaginationFooter } from "@/components/ui/ListPaginationFooter";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 import { cn, formatDateVN } from "@/lib/utils";
+
+const TaskFormModal = dynamic(
+  () => import("@/components/tasks/TaskFormModal").then((mod) => mod.TaskFormModal),
+  { ssr: false, loading: () => <ModalLoadingFallback /> }
+);
 
 type ViewMode = "table" | "grid";
 type FormModalState = { mode: "create" } | { mode: "edit"; task: WorkTask } | null;

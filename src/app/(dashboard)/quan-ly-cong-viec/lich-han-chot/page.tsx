@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import {
   ArrowLeft,
   ChevronLeft,
@@ -19,10 +20,18 @@ import { FilterSelect } from "@/components/ui/FilterSelect";
 import { DeadlineCalendar } from "@/components/calendar/DeadlineCalendar";
 import { WeekCalendar } from "@/components/calendar/WeekCalendar";
 import { MONTH_NAMES, getWeekRange, formatWeekHeader } from "@/lib/calendar-utils";
-import { TaskFormModal } from "@/components/tasks/TaskFormModal";
-import { TaskQuickViewModal } from "@/components/tasks/TaskQuickViewModal";
+import { ModalLoadingFallback } from "@/components/ui/ModalLoadingFallback";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
+
+const TaskFormModal = dynamic(
+  () => import("@/components/tasks/TaskFormModal").then((mod) => mod.TaskFormModal),
+  { ssr: false, loading: () => <ModalLoadingFallback /> }
+);
+const TaskQuickViewModal = dynamic(
+  () => import("@/components/tasks/TaskQuickViewModal").then((mod) => mod.TaskQuickViewModal),
+  { ssr: false, loading: () => <ModalLoadingFallback /> }
+);
 
 type ViewMode = "month" | "week" | "day";
 type FormModalState = { mode: "create" } | { mode: "edit"; task: WorkTask } | null;

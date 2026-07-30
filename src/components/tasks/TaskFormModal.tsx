@@ -8,12 +8,17 @@ import type {
   WorkTask,
   WorkTaskInput,
 } from "@/types/task";
-import { TASK_PRIORITY_OPTIONS, TASK_STATUS_OPTIONS } from "@/types/task";
+import {
+  TASK_PRIORITY_OPTIONS,
+  TASK_STATUS_META,
+  TASK_STATUS_OPTIONS,
+} from "@/types/task";
 import type { Project, ProjectMember } from "@/types/project";
 import { taskService } from "@/services/task-service";
 import { toDateInputValue, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { MemberMultiSelect } from "@/components/ui/MemberMultiSelect";
+import { SingleSelectDropdown } from "@/components/ui/SingleSelectDropdown";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 import { TaskAttachmentFields } from "@/components/tasks/TaskAttachmentFields";
@@ -69,6 +74,13 @@ const ALLOWED_TASK_IMAGE_TYPES = new Set([
 const MAX_TASK_FILES = 10;
 const MAX_TASK_FILE_SIZE = 20 * 1024 * 1024;
 const MAX_TASK_LINKS = 10;
+
+const PRIORITY_DOT_CLASS: Record<WorkTaskInput["priority"], string> = {
+  low: "bg-gray-400",
+  medium: "bg-sky-500",
+  high: "bg-amber-500",
+  urgent: "bg-rose-500",
+};
 
 /** Chiều cao tối đa của ô mô tả trước khi hiện thanh cuộn thay vì phình to thêm. */
 const DESCRIPTION_MAX_HEIGHT = 200;
@@ -199,6 +211,49 @@ export function TaskFormModal({
   const projectParticipants = useMemo(
     () => participantsOf(projects.find((project) => project.id === form.projectId)),
     [projects, form.projectId]
+  );
+
+  const projectOptions = useMemo(
+    () =>
+      projects.map((project) => ({
+        value: project.id,
+        label: project.name,
+        sublabel: project.code,
+      })),
+    [projects]
+  );
+
+  const statusOptions = useMemo(
+    () =>
+      TASK_STATUS_OPTIONS.map((option) => ({
+        value: option.value,
+        label: option.label,
+        dotClassName: TASK_STATUS_META[option.value].dot,
+      })),
+    []
+  );
+
+  const priorityOptions = useMemo(
+    () =>
+      TASK_PRIORITY_OPTIONS.map((option) => ({
+        value: option.value,
+        label: option.label,
+        dotClassName: PRIORITY_DOT_CLASS[option.value],
+      })),
+    []
+  );
+
+  const dependencyOptions = useMemo(
+    () => [
+      { value: "", label: "Không có" },
+      ...otherTasks
+        .filter((item) => item.id !== task?.id)
+        .map((item) => ({
+          value: item.id,
+          label: item.title,
+        })),
+    ],
+    [otherTasks, task?.id]
   );
 
   /** Đổi dự án thì bỏ những người không còn tham gia dự án mới. */
@@ -336,7 +391,11 @@ export function TaskFormModal({
   /** Bỏ qua các dòng liên kết chưa nhập gì thay vì bắt lỗi. */
   function normalizedLinks(): TaskLinkAttachment[] {
     return form.links
-      .map((link) => ({ label: link.label?.trim() || undefined, url: link.url.trim() }))
+      .map((link) => ({
+        label: link.label?.trim() || undefined,
+        url: link.url.trim(),
+        description: link.description?.trim() || undefined,
+      }))
       .filter((link) => link.url);
   }
 
@@ -514,23 +573,17 @@ export function TaskFormModal({
             <label className="mb-1.5 block text-sm font-medium text-gray-700">
               Thuộc dự án <span className="text-rose-500">*</span>
             </label>
-            <select
+            <SingleSelectDropdown
+              options={projectOptions}
               value={form.projectId}
-              onChange={(event) => handleProjectChange(event.target.value)}
-              className={cn(
-                "h-10 w-full rounded-lg border px-3 text-sm outline-none focus:ring-2 focus:ring-blue-100",
-                errors.projectId ? "border-rose-400" : "border-gray-200 focus:border-blue-400"
-              )}
-            >
-              <option value="" disabled>
-                Chọn dự án trước
-              </option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name} ({project.code})
-                </option>
-              ))}
-            </select>
+              onChange={handleProjectChange}
+              placeholder="Chọn dự án..."
+              emptyHint="Chưa có dự án để chọn"
+              searchable
+              searchPlaceholder="Nhập tên hoặc mã dự án..."
+              invalid={Boolean(errors.projectId)}
+              showSelectionIndicator={false}
+            />
             {errors.projectId && <p className="mt-1 text-xs text-rose-500">{errors.projectId}</p>}
           </div>
 
@@ -567,35 +620,25 @@ export function TaskFormModal({
           <div className="flex gap-4">
             <div className="flex-1">
               <label className="mb-1.5 block text-sm font-medium text-gray-700">Trạng thái</label>
-              <select
+              <SingleSelectDropdown
+                options={statusOptions}
                 value={form.status}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, status: event.target.value as FormState["status"] }))
+                onChange={(value) =>
+                  setForm((prev) => ({ ...prev, status: value as FormState["status"] }))
                 }
-                className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-              >
-                {TASK_STATUS_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+                showSelectionIndicator={false}
+              />
             </div>
             <div className="flex-1">
               <label className="mb-1.5 block text-sm font-medium text-gray-700">Mức độ ưu tiên</label>
-              <select
+              <SingleSelectDropdown
+                options={priorityOptions}
                 value={form.priority}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, priority: event.target.value as FormState["priority"] }))
+                onChange={(value) =>
+                  setForm((prev) => ({ ...prev, priority: value as FormState["priority"] }))
                 }
-                className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-              >
-                {TASK_PRIORITY_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+                showSelectionIndicator={false}
+              />
             </div>
           </div>
 
@@ -645,20 +688,15 @@ export function TaskFormModal({
 
           <div>
             <label className="mb-1.5 block text-sm font-medium text-gray-700">Công việc tiền đề (Phải xong trước)</label>
-            <select
+            <SingleSelectDropdown
+              options={dependencyOptions}
               value={form.dependsOnTaskId}
-              onChange={(event) => setForm((prev) => ({ ...prev, dependsOnTaskId: event.target.value }))}
-              className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-            >
-              <option value="">Không có</option>
-              {otherTasks
-                .filter((item) => item.id !== task?.id)
-                .map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.title}
-                  </option>
-                ))}
-            </select>
+              onChange={(value) =>
+                setForm((prev) => ({ ...prev, dependsOnTaskId: value }))
+              }
+              searchable={dependencyOptions.length > 6}
+              searchPlaceholder="Nhập tên công việc..."
+            />
           </div>
 
           {submitError && <p className="text-sm text-rose-500">{submitError}</p>}

@@ -13,12 +13,18 @@ import type {
   TaskFileAttachment,
   TaskLinkAttachment,
 } from "@/types/subtask";
-import { TASK_PRIORITY_OPTIONS, TASK_STATUS_OPTIONS, type WorkTask } from "@/types/task";
+import {
+  TASK_PRIORITY_OPTIONS,
+  TASK_STATUS_META,
+  TASK_STATUS_OPTIONS,
+  type WorkTask,
+} from "@/types/task";
 import type { ProjectMember } from "@/types/project";
 import { subtaskService } from "@/services/subtask-service";
 import { toDateInputValue, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { MemberMultiSelect } from "@/components/ui/MemberMultiSelect";
+import { SingleSelectDropdown } from "@/components/ui/SingleSelectDropdown";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 import { TaskAttachmentFields } from "@/components/tasks/TaskAttachmentFields";
@@ -72,6 +78,25 @@ const ALLOWED_TASK_IMAGE_TYPES = new Set([
 const MAX_TASK_FILES = 10;
 const MAX_TASK_FILE_SIZE = 20 * 1024 * 1024;
 const MAX_TASK_LINKS = 10;
+
+const PRIORITY_DOT_CLASS: Record<SubtaskInput["priority"], string> = {
+  low: "bg-gray-400",
+  medium: "bg-sky-500",
+  high: "bg-amber-500",
+  urgent: "bg-rose-500",
+};
+
+const STATUS_SELECT_OPTIONS = TASK_STATUS_OPTIONS.map((option) => ({
+  value: option.value,
+  label: option.label,
+  dotClassName: TASK_STATUS_META[option.value].dot,
+}));
+
+const PRIORITY_SELECT_OPTIONS = TASK_PRIORITY_OPTIONS.map((option) => ({
+  value: option.value,
+  label: option.label,
+  dotClassName: PRIORITY_DOT_CLASS[option.value],
+}));
 
 /** Chiều cao tối đa của ô mô tả trước khi hiện thanh cuộn thay vì phình to thêm. */
 const DESCRIPTION_MAX_HEIGHT = 200;
@@ -471,7 +496,11 @@ export function SubtaskFormModal({
   /** Bỏ qua các dòng liên kết chưa nhập gì thay vì bắt lỗi. */
   function normalizedLinks(): TaskLinkAttachment[] {
     return form.links
-      .map((link) => ({ label: link.label?.trim() || undefined, url: link.url.trim() }))
+      .map((link) => ({
+        label: link.label?.trim() || undefined,
+        url: link.url.trim(),
+        description: link.description?.trim() || undefined,
+      }))
       .filter((link) => link.url);
   }
 
@@ -689,38 +718,28 @@ export function SubtaskFormModal({
           <div className="flex gap-4">
             <div className="flex-1">
               <label className="mb-1.5 block text-sm font-medium text-gray-700">Trạng thái</label>
-              <select
+              <SingleSelectDropdown
+                options={STATUS_SELECT_OPTIONS}
                 value={form.status}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, status: event.target.value as FormState["status"] }))
+                onChange={(value) =>
+                  setForm((prev) => ({ ...prev, status: value as FormState["status"] }))
                 }
-                className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-              >
-                {TASK_STATUS_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+                showSelectionIndicator={false}
+              />
             </div>
           </div>
 
           <div className="flex gap-4">
             <div className="flex-1">
               <label className="mb-1.5 block text-sm font-medium text-gray-700">Mức độ ưu tiên</label>
-              <select
+              <SingleSelectDropdown
+                options={PRIORITY_SELECT_OPTIONS}
                 value={form.priority}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, priority: event.target.value as FormState["priority"] }))
+                onChange={(value) =>
+                  setForm((prev) => ({ ...prev, priority: value as FormState["priority"] }))
                 }
-                className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-              >
-                {TASK_PRIORITY_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+                showSelectionIndicator={false}
+              />
             </div>
             <div className="flex-1">
               <label className="mb-1.5 block text-sm font-medium text-gray-700">Tiến độ thực tế (%)</label>

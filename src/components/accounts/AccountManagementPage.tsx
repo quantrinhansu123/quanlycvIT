@@ -2,21 +2,27 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import {
   ArrowDownUp, ArrowLeft, Building2, ChevronDown, ChevronLeft, ChevronRight,
   ChevronsLeft, ChevronsRight, Download, Eye, FileUp, FilterX, LockKeyhole,
   Pencil, Plus, RefreshCw, Search, ShieldCheck, Trash2, UnlockKeyhole, UsersRound, X,
 } from "lucide-react";
-import { AccountFormModal } from "@/components/accounts/AccountFormModal";
 import { Avatar } from "@/components/ui/Avatar";
 import { ActionIconButton } from "@/components/ui/ActionIconButton";
 import { Button } from "@/components/ui/Button";
+import { ModalLoadingFallback } from "@/components/ui/ModalLoadingFallback";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { accountService } from "@/services/account-service";
 import { getErrorMessage } from "@/lib/errors";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { AccountInput, Department, EmployeeAccount } from "@/types/account";
+
+const AccountFormModal = dynamic(
+  () => import("@/components/accounts/AccountFormModal").then((mod) => mod.AccountFormModal),
+  { ssr: false, loading: () => <ModalLoadingFallback /> }
+);
 
 const ROLE_LABEL = { admin: "Quản trị", manager: "Quản lý", member: "Nhân viên" };
 const PAGE_SIZES = [20, 50, 100];

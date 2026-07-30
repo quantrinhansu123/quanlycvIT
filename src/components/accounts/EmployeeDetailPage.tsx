@@ -2,19 +2,25 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import {
   ArrowLeft, BadgeCheck, BriefcaseBusiness, Building2, CalendarDays,
   CircleUserRound, CreditCard, Eye, EyeOff, KeyRound, Landmark, LoaderCircle,
   LockKeyhole, Mail, MapPin, Pencil, Phone, ShieldCheck, UserRound,
 } from "lucide-react";
-import { AccountFormModal } from "@/components/accounts/AccountFormModal";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
+import { ModalLoadingFallback } from "@/components/ui/ModalLoadingFallback";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { accountService } from "@/services/account-service";
 import type { AccountInput, Department, EmployeeAccount } from "@/types/account";
+
+const AccountFormModal = dynamic(
+  () => import("@/components/accounts/AccountFormModal").then((mod) => mod.AccountFormModal),
+  { ssr: false, loading: () => <ModalLoadingFallback /> }
+);
 
 const ROLE_LABEL = { admin: "Quản trị viên", manager: "Quản lý", member: "Nhân viên" };
 

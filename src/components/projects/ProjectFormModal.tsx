@@ -417,7 +417,11 @@ export function ProjectFormModal({ mode, project, members, onClose, onSaved }: P
   /** Bỏ qua các dòng liên kết chưa nhập gì thay vì bắt lỗi. */
   function normalizedLinks(): TaskLinkAttachment[] {
     return form.links
-      .map((link) => ({ label: link.label?.trim() || undefined, url: link.url.trim() }))
+      .map((link) => ({
+        label: link.label?.trim() || undefined,
+        url: link.url.trim(),
+        description: link.description?.trim() || undefined,
+      }))
       .filter((link) => link.url);
   }
 

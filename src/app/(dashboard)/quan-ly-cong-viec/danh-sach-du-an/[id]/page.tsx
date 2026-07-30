@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -33,11 +34,16 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ProgressRing } from "@/components/projects/ProgressRing";
-import { ProjectFormModal } from "@/components/projects/ProjectFormModal";
+import { ModalLoadingFallback } from "@/components/ui/ModalLoadingFallback";
 import { ProjectTasksPanel } from "@/components/projects/ProjectTasksPanel";
 import { ActivityTimeline } from "@/components/timeline/ActivityTimeline";
 import { cn, formatDateVN } from "@/lib/utils";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
+
+const ProjectFormModal = dynamic(
+  () => import("@/components/projects/ProjectFormModal").then((mod) => mod.ProjectFormModal),
+  { ssr: false, loading: () => <ModalLoadingFallback /> }
+);
 import { getErrorMessage } from "@/lib/errors";
 import { DetailAttachments } from "@/components/tasks/DetailAttachments";
 

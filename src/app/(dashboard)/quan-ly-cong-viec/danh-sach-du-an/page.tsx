@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { ArrowLeft, Download, LayoutGrid, Plus, Search, Table as TableIcon, FolderOpen } from "lucide-react";
 import { projectService } from "@/services/project-service";
 import type { Project, ProjectMember } from "@/types/project";
@@ -11,11 +12,16 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { ProjectTable } from "@/components/projects/ProjectTable";
 import { ProjectCard } from "@/components/projects/ProjectCard";
-import { ProjectFormModal } from "@/components/projects/ProjectFormModal";
+import { ModalLoadingFallback } from "@/components/ui/ModalLoadingFallback";
 import { formatDateVN } from "@/lib/utils";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 import { ListPaginationFooter } from "@/components/ui/ListPaginationFooter";
+
+const ProjectFormModal = dynamic(
+  () => import("@/components/projects/ProjectFormModal").then((mod) => mod.ProjectFormModal),
+  { ssr: false, loading: () => <ModalLoadingFallback /> }
+);
 
 type ViewMode = "table" | "grid";
 type ModalState = { mode: "create" } | { mode: "edit"; project: Project } | null;

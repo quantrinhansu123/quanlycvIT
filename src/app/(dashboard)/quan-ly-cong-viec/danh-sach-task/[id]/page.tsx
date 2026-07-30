@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -38,13 +39,21 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { MemberMultiSelect } from "@/components/ui/MemberMultiSelect";
-import { SubtaskFormModal } from "@/components/subtasks/SubtaskFormModal";
 import { ProgressReportItem } from "@/components/tasks/ProgressReportItem";
-import { TaskReportDrawer } from "@/components/tasks/TaskReportDrawer";
+import { ModalLoadingFallback } from "@/components/ui/ModalLoadingFallback";
 import { cn, formatDateVN } from "@/lib/utils";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 import { DetailAttachments } from "@/components/tasks/DetailAttachments";
+
+const SubtaskFormModal = dynamic(
+  () => import("@/components/subtasks/SubtaskFormModal").then((mod) => mod.SubtaskFormModal),
+  { ssr: false, loading: () => <ModalLoadingFallback /> }
+);
+const TaskReportDrawer = dynamic(
+  () => import("@/components/tasks/TaskReportDrawer").then((mod) => mod.TaskReportDrawer),
+  { ssr: false, loading: () => <ModalLoadingFallback /> }
+);
 
 type Tab = "info" | "reports";
 

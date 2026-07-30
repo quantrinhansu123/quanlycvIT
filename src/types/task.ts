@@ -42,6 +42,7 @@ export interface TaskFileAttachment {
 export interface TaskLinkAttachment {
   label?: string;
   url: string;
+  description?: string;
 }
 
 export interface WorkTask {
