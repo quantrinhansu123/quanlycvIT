@@ -13,7 +13,6 @@ import {
   Palette,
   PanelsTopLeft,
   Settings,
-  Target,
   UserRound,
   Users,
 } from "lucide-react";
@@ -139,12 +138,16 @@ export function LoginPage() {
   return (
     <main className="login-page min-h-screen bg-white text-gray-900">
       <div className="grid min-h-screen lg:grid-cols-[55%_45%]">
-        <section className="login-intro relative hidden overflow-hidden border-r border-blue-100 px-8 py-8 lg:flex xl:px-14 xl:py-10">
+        <section className="login-intro relative hidden overflow-hidden border-r border-brand-100 px-8 py-8 lg:flex xl:px-14 xl:py-10">
           <div className="login-grid absolute inset-0 opacity-60" aria-hidden="true" />
           <div className="relative z-10 mx-auto flex w-full max-w-[900px] flex-col">
             <div className="flex items-center gap-3">
-              <span className="login-logo flex h-10 w-10 items-center justify-center rounded-xl text-white shadow-lg shadow-blue-500/25">
-                <Target className="h-5 w-5" />
+              <span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl bg-white shadow-lg shadow-brand-500/25 ring-1 ring-brand-100">
+                <img
+                  src="/logo-viet-nhat-ipt.png"
+                  alt="Việt Nhật IPT"
+                  className="h-full w-full object-contain p-1"
+                />
               </span>
               <div>
                 <p className="text-base font-bold tracking-tight text-gray-900">Goal App</p>
@@ -155,7 +158,7 @@ export function LoginPage() {
             <div className="my-auto py-10">
               <h1 className="max-w-[700px] text-[clamp(2rem,3.1vw,3.35rem)] font-bold leading-[1.16] tracking-[-0.035em] text-gray-950">
                 Quản lý doanh nghiệp
-                <span className="mt-1 block text-blue-600">tích hợp &amp; hiệu quả</span>
+                <span className="mt-1 block text-brand-600">tích hợp &amp; hiệu quả</span>
               </h1>
               <p className="mt-5 max-w-[740px] text-sm font-medium leading-6 text-gray-600 xl:text-[15px]">
                 Nhân viên · Quản lý công · Quản lý công việc · Quản lý tài sản · Tài liệu ·
@@ -201,8 +204,12 @@ export function LoginPage() {
 
           <div className="w-full max-w-[390px]">
             <div className="mb-8 flex items-center gap-3 lg:hidden">
-              <span className="login-logo flex h-9 w-9 items-center justify-center rounded-xl text-white">
-                <Target className="h-[18px] w-[18px]" />
+              <span className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-white ring-1 ring-brand-100">
+                <img
+                  src="/logo-viet-nhat-ipt.png"
+                  alt="Việt Nhật IPT"
+                  className="h-full w-full object-contain p-1"
+                />
               </span>
               <div>
                 <p className="text-sm font-bold text-gray-900">Goal App</p>
@@ -221,13 +228,13 @@ export function LoginPage() {
                   Tên đăng nhập
                 </label>
                 <div className="group relative">
-                  <UserRound className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 transition-colors group-focus-within:text-blue-600" />
+                  <UserRound className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 transition-colors group-focus-within:text-brand-600" />
                   <input
                     id="login-email"
                     type="text"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
-                    className="h-11 w-full rounded-xl border border-gray-200 bg-white pl-10 pr-4 text-[13px] font-medium text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                    className="h-11 w-full rounded-xl border border-gray-200 bg-white pl-10 pr-4 text-[13px] font-medium text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
                     placeholder="Nhập tên đăng nhập"
                     autoComplete="username"
                     required
@@ -241,13 +248,13 @@ export function LoginPage() {
                   Mật khẩu
                 </label>
                 <div className="group relative">
-                  <LockKeyhole className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 transition-colors group-focus-within:text-blue-600" />
+                  <LockKeyhole className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 transition-colors group-focus-within:text-brand-600" />
                   <input
                     id="login-password"
                     type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
-                    className="h-11 w-full rounded-xl border border-gray-200 bg-white pl-10 pr-11 text-[13px] font-medium text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                    className="h-11 w-full rounded-xl border border-gray-200 bg-white pl-10 pr-11 text-[13px] font-medium text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
                     placeholder="Nhập mật khẩu"
                     autoComplete="current-password"
                     required
@@ -272,7 +279,7 @@ export function LoginPage() {
                   type="checkbox"
                   checked={remember}
                   onChange={(event) => setRemember(event.target.checked)}
-                  className="h-3.5 w-3.5 rounded border-gray-300 accent-blue-600"
+                  className="h-3.5 w-3.5 rounded border-gray-300 accent-brand-600"
                 />
                 Ghi nhớ đăng nhập
               </label>
@@ -289,7 +296,7 @@ export function LoginPage() {
               <button
                 type="submit"
                 disabled={submitting || !email.trim() || !password}
-                className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 text-[13px] font-semibold text-white shadow-sm shadow-blue-600/20 transition-all hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-500/20 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-55"
+                className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand-600 text-[13px] font-semibold text-white shadow-sm shadow-brand-600/20 transition-all hover:bg-brand-700 focus:outline-none focus:ring-4 focus:ring-brand-500/20 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-55"
               >
                 {submitting && <LoaderCircle className="h-4 w-4 animate-spin" />}
                 {submitting ? "Đang đăng nhập..." : "Đăng nhập"}

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { Ban, ChevronDown, ChevronRight, Target } from "lucide-react";
+import { Ban, ChevronDown, ChevronRight } from "lucide-react";
 import { NAV_ITEMS } from "@/constants/navigation";
 import { cn } from "@/lib/utils";
 
@@ -42,8 +42,12 @@ export function Sidebar({ collapsed }: SidebarProps) {
       )}
     >
       <div className="flex h-16 items-center gap-2 px-5">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sky-400 to-blue-600 text-white shadow-sm">
-          <Target className="h-5 w-5" />
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-100">
+          <img
+            src="/logo-viet-nhat-ipt.png"
+            alt="Việt Nhật IPT"
+            className="h-full w-full object-contain p-1"
+          />
         </div>
         {!collapsed && (
           <div className="leading-tight">
@@ -81,8 +85,8 @@ export function Sidebar({ collapsed }: SidebarProps) {
                     <Link
                       href={item.href}
                       className={cn(
-                        "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50",
-                        isActiveGroup && "bg-blue-600 text-white shadow-sm hover:bg-blue-600"
+                        "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-brand-50",
+                        isActiveGroup && "bg-brand-600 text-white shadow-sm hover:bg-brand-600"
                       )}
                     >
                       <item.icon className="h-[18px] w-[18px] shrink-0" />
@@ -99,17 +103,17 @@ export function Sidebar({ collapsed }: SidebarProps) {
                   type="button"
                   onClick={() => setOpenGroup(isOpen ? null : item.label)}
                   className={cn(
-                    "relative flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50",
+                    "relative flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-brand-50",
                     isActiveGroup &&
                       !collapsed &&
-                      "bg-slate-50 font-semibold text-gray-900 before:absolute before:-left-3 before:h-8 before:w-[3px] before:rounded-r-full before:bg-blue-600",
-                    isActiveGroup && collapsed && "bg-blue-50"
+                      "bg-slate-50 font-semibold text-gray-900 before:absolute before:-left-3 before:h-8 before:w-[3px] before:rounded-r-full before:bg-brand-600",
+                    isActiveGroup && collapsed && "bg-brand-50"
                   )}
                 >
                   <item.icon
                     className={cn(
                       "h-[18px] w-[18px] shrink-0",
-                      isActiveGroup && "text-blue-600"
+                      isActiveGroup && "text-brand-600"
                     )}
                   />
                   {!collapsed && (
@@ -145,9 +149,9 @@ export function Sidebar({ collapsed }: SidebarProps) {
                             <Link
                               href={child.href}
                               className={cn(
-                                "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-500 transition-all duration-200 hover:bg-gray-50",
+                                "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-500 transition-all duration-200 hover:bg-brand-50",
                                 isChildActive &&
-                                  "bg-blue-600 font-semibold text-white shadow-[0_5px_12px_rgba(37,99,235,0.24)] hover:bg-blue-600"
+                                  "bg-brand-600 font-semibold text-white shadow-[0_5px_12px_rgba(209,18,42,0.24)] hover:bg-brand-600"
                               )}
                             >
                               <child.icon className="h-4 w-4 shrink-0" />

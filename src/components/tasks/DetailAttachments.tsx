@@ -28,7 +28,7 @@ export function DetailAttachments({
       <div className="mt-4 space-y-3 border-t border-gray-100 pt-3">
         <div className="min-w-0">
           <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-gray-500">
-            <Images className="h-3.5 w-3.5 text-blue-500" />
+            <Images className="h-3.5 w-3.5 text-brand-500" />
             Hình ảnh ({images.length})
           </p>
           {images.length > 0 ? (
@@ -43,7 +43,7 @@ export function DetailAttachments({
                         url,
                       })
                     }
-                    className="group relative block h-20 w-28 overflow-hidden rounded-lg border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                    className="group relative block h-20 w-28 overflow-hidden rounded-lg border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-1"
                     aria-label={`Xem trước ảnh ${entityLabel} ${index + 1}`}
                   >
                     {/* URL ảnh động nên dùng img thay vì giới hạn hostname của next/image. */}
@@ -68,7 +68,7 @@ export function DetailAttachments({
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="min-w-0">
             <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-gray-500">
-              <FileText className="h-3.5 w-3.5 text-blue-500" />
+              <FileText className="h-3.5 w-3.5 text-brand-500" />
               Tệp đính kèm ({files.length})
             </p>
             {files.length > 0 ? (
@@ -79,7 +79,7 @@ export function DetailAttachments({
                         href={file.url}
                         target="_blank"
                         rel="noreferrer"
-                        className="flex min-w-0 items-center gap-2 rounded-lg border border-gray-100 bg-gray-50/80 px-2.5 py-2 text-xs text-gray-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+                        className="flex min-w-0 items-center gap-2 rounded-lg border border-gray-100 bg-gray-50/80 px-2.5 py-2 text-xs text-gray-700 transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-600"
                       >
                         <FileText className="h-3.5 w-3.5 shrink-0 text-gray-400" />
                         <span className="min-w-0 flex-1 truncate">{file.name}</span>
@@ -95,7 +95,7 @@ export function DetailAttachments({
 
           <div className="min-w-0">
             <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-gray-500">
-              <Link2 className="h-3.5 w-3.5 text-blue-500" />
+              <Link2 className="h-3.5 w-3.5 text-brand-500" />
               Liên kết ({links.length})
             </p>
             {links.length > 0 ? (
@@ -106,7 +106,7 @@ export function DetailAttachments({
                         href={link.url}
                         target="_blank"
                         rel="noreferrer"
-                        className="flex min-w-0 items-center gap-2 rounded-lg border border-gray-100 bg-gray-50/80 px-2.5 py-2 text-xs text-gray-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+                        className="flex min-w-0 items-center gap-2 rounded-lg border border-gray-100 bg-gray-50/80 px-2.5 py-2 text-xs text-gray-700 transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-600"
                       >
                         <Link2 className="h-3.5 w-3.5 shrink-0 text-gray-400" />
                         <span className="min-w-0 flex-1 truncate">

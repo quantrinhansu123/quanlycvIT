@@ -18,7 +18,7 @@ export function ProgressReportItem({ report }: { report: ProgressReport }) {
             {report.authorName ?? "Không xác định"}
           </span>
         </div>
-        <span className="rounded-md bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-600">
+        <span className="rounded-md bg-brand-50 px-2 py-0.5 text-xs font-bold text-brand-600">
           {report.progress}%
         </span>
       </div>
@@ -48,7 +48,7 @@ export function ProgressReportItem({ report }: { report: ProgressReport }) {
                 href={file.url}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:underline"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:underline"
               >
                 <Paperclip className="h-3.5 w-3.5" />
                 {file.fileName}
@@ -66,7 +66,7 @@ export function ProgressReportItem({ report }: { report: ProgressReport }) {
                 href={link.url}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:underline"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:underline"
               >
                 <Link2 className="h-3.5 w-3.5" />
                 {link.label ?? link.url}

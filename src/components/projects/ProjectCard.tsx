@@ -42,7 +42,7 @@ export function ProjectCard({ project, onEdit, onDelete }: ProjectCardProps) {
         onClick={() => router.push(`/quan-ly-cong-viec/danh-sach-du-an/${project.id}`)}
         className="text-left"
       >
-        <p className="line-clamp-1 text-sm font-semibold text-gray-800 hover:text-blue-600">
+        <p className="line-clamp-1 text-sm font-semibold text-gray-800 hover:text-brand-600">
           {project.name}
         </p>
         {project.description && (
@@ -72,7 +72,7 @@ export function ProjectCard({ project, onEdit, onDelete }: ProjectCardProps) {
       </div>
 
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
-        <div className="h-full rounded-full bg-blue-500" style={{ width: `${progress}%` }} />
+        <div className="h-full rounded-full bg-brand-500" style={{ width: `${progress}%` }} />
       </div>
 
       <div className="flex items-center justify-between pt-1">

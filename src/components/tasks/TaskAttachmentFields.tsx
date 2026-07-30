@@ -87,14 +87,14 @@ export function TaskAttachmentFields({
           className={cn(
             "inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
             imageCount > 0
-              ? "border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100"
-              : "border-gray-200 bg-white text-gray-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+              ? "border-brand-200 bg-brand-50 text-brand-600 hover:bg-brand-100"
+              : "border-gray-200 bg-white text-gray-600 hover:border-brand-200 hover:bg-brand-50 hover:text-brand-600"
           )}
           title={`Tối đa ${maxImages} ảnh, mỗi ảnh không quá 10 MB`}
         >
           <ImagePlus className="h-3.5 w-3.5" />
           Chọn ảnh
-          <span className={cn("text-[10px]", imageCount > 0 ? "text-blue-400" : "text-gray-400")}>
+          <span className={cn("text-[10px]", imageCount > 0 ? "text-brand-400" : "text-gray-400")}>
             {imageCount}/{maxImages}
           </span>
         </button>
@@ -105,14 +105,14 @@ export function TaskAttachmentFields({
           className={cn(
             "inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
             fileCount > 0
-              ? "border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100"
-              : "border-gray-200 bg-white text-gray-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+              ? "border-brand-200 bg-brand-50 text-brand-600 hover:bg-brand-100"
+              : "border-gray-200 bg-white text-gray-600 hover:border-brand-200 hover:bg-brand-50 hover:text-brand-600"
           )}
           title={`Tối đa ${maxFiles} tệp, mỗi tệp không quá 20 MB`}
         >
           <Paperclip className="h-3.5 w-3.5" />
           Chọn tệp
-          <span className={cn("text-[10px]", fileCount > 0 ? "text-blue-400" : "text-gray-400")}>
+          <span className={cn("text-[10px]", fileCount > 0 ? "text-brand-400" : "text-gray-400")}>
             {fileCount}/{maxFiles}
           </span>
         </button>
@@ -123,14 +123,14 @@ export function TaskAttachmentFields({
           className={cn(
             "inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
             links.length > 0
-              ? "border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100"
-              : "border-gray-200 bg-white text-gray-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+              ? "border-brand-200 bg-brand-50 text-brand-600 hover:bg-brand-100"
+              : "border-gray-200 bg-white text-gray-600 hover:border-brand-200 hover:bg-brand-50 hover:text-brand-600"
           )}
           title={`Tối đa ${maxLinks} liên kết`}
         >
           <Plus className="h-3.5 w-3.5" />
           Thêm liên kết
-          <span className={cn("text-[10px]", links.length > 0 ? "text-blue-400" : "text-gray-400")}>
+          <span className={cn("text-[10px]", links.length > 0 ? "text-brand-400" : "text-gray-400")}>
             {links.length}/{maxLinks}
           </span>
         </button>
@@ -170,7 +170,7 @@ export function TaskAttachmentFields({
                 href={fileItem.url}
                 target="_blank"
                 rel="noreferrer"
-                className="min-w-0 flex-1 truncate text-sm text-gray-700 hover:text-blue-600"
+                className="min-w-0 flex-1 truncate text-sm text-gray-700 hover:text-brand-600"
               >
                 {fileItem.name}
               </a>
@@ -188,13 +188,13 @@ export function TaskAttachmentFields({
           {pendingFiles.map((pending) => (
             <li
               key={pending.id}
-              className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2"
+              className="flex items-center gap-2 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2"
             >
-              <FileText className="h-4 w-4 shrink-0 text-blue-400" />
+              <FileText className="h-4 w-4 shrink-0 text-brand-400" />
               <span className="min-w-0 flex-1 truncate text-sm text-gray-700">
                 {pending.file.name}
               </span>
-              <span className="shrink-0 rounded-md bg-blue-600 px-2 py-0.5 text-[10px] font-semibold text-white">
+              <span className="shrink-0 rounded-md bg-brand-600 px-2 py-0.5 text-[10px] font-semibold text-white">
                 Chưa lưu
               </span>
               <button
@@ -224,14 +224,14 @@ export function TaskAttachmentFields({
                   value={link.label ?? ""}
                   onChange={(event) => onUpdateLink(index, { label: event.target.value })}
                   placeholder="Tên đường dẫn"
-                  className="h-9 w-[38%] rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  className="h-9 w-[38%] rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
                 />
                 <input
                   type="url"
                   value={link.url}
                   onChange={(event) => onUpdateLink(index, { url: event.target.value })}
                   placeholder="https://..."
-                  className="h-9 min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  className="h-9 min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
                 />
                 <button
                   type="button"
@@ -248,7 +248,7 @@ export function TaskAttachmentFields({
                 value={link.description ?? ""}
                 onChange={(event) => onUpdateLink(index, { description: event.target.value })}
                 placeholder="Mô tả đường dẫn (không bắt buộc)"
-                className="h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                className="h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
               />
             </div>
           ))}
@@ -270,7 +270,7 @@ export function TaskAttachmentFields({
                       url,
                     })
                   }
-                  className="block h-16 w-24 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+                  className="block h-16 w-24 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-500"
                   aria-label={`Xem trước ảnh ${entityLabel} ${index + 1}`}
                 >
                   {/* URL Cloudinary động nên dùng img thay vì giới hạn hostname của next/image. */}
@@ -295,7 +295,7 @@ export function TaskAttachmentFields({
             {pendingImages.map((image) => (
               <li
                 key={image.id}
-                className="group relative w-24 shrink-0 overflow-hidden rounded-lg border border-blue-200 bg-blue-50"
+                className="group relative w-24 shrink-0 overflow-hidden rounded-lg border border-brand-200 bg-brand-50"
               >
                 <button
                   type="button"
@@ -305,7 +305,7 @@ export function TaskAttachmentFields({
                       url: image.previewUrl,
                     })
                   }
-                  className="block h-16 w-24 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+                  className="block h-16 w-24 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-500"
                   aria-label={`Xem trước ảnh ${image.file.name}`}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -315,7 +315,7 @@ export function TaskAttachmentFields({
                     className="h-16 w-24 object-cover"
                   />
                 </button>
-                <span className="pointer-events-none absolute bottom-1 left-1 rounded bg-blue-600 px-1 py-0.5 text-[9px] font-semibold leading-none text-white">
+                <span className="pointer-events-none absolute bottom-1 left-1 rounded bg-brand-600 px-1 py-0.5 text-[9px] font-semibold leading-none text-white">
                   Chưa lưu
                 </span>
                 <button

@@ -316,7 +316,7 @@ export function TaskReportDrawer({
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-gray-100 px-6 py-5">
           <div>
             <h2 className="flex items-center gap-2 text-lg font-bold text-gray-900">
-              <span className="h-2 w-2 rounded-full bg-blue-600" />
+              <span className="h-2 w-2 rounded-full bg-brand-600" />
               Báo cáo tiến độ {entityLabel}
             </h2>
             <p className="mt-1 text-sm text-gray-500">
@@ -341,7 +341,7 @@ export function TaskReportDrawer({
               <label htmlFor="report-progress" className="text-sm font-semibold text-gray-700">
                 Cập nhật tiến độ thực tế
               </label>
-              <span className="text-base font-bold text-blue-600">{progress}%</span>
+              <span className="text-base font-bold text-brand-600">{progress}%</span>
             </div>
             <input
               id="report-progress"
@@ -351,9 +351,9 @@ export function TaskReportDrawer({
               step={5}
               value={progress}
               onChange={(event) => setProgress(Number(event.target.value))}
-              className="mt-3 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-gray-200 accent-blue-600"
+              className="mt-3 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-gray-200 accent-brand-600"
               style={{
-                background: `linear-gradient(to right, #2563eb ${progress}%, #e5e7eb ${progress}%)`,
+                background: `linear-gradient(to right, #d1122a ${progress}%, #e5e7eb ${progress}%)`,
               }}
             />
             <div className="mt-2 flex justify-between text-xs text-gray-400">
@@ -373,7 +373,7 @@ export function TaskReportDrawer({
               onChange={(event) => setContent(event.target.value)}
               rows={5}
               placeholder="Nhập chi tiết tiến trình công việc, kết quả đạt được, khó khăn (nếu có)..."
-              className="mt-2 w-full resize-y rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              className="mt-2 w-full resize-y rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
             />
           </div>
 
@@ -399,7 +399,7 @@ export function TaskReportDrawer({
             className={cn(
               "mt-5 space-y-3 rounded-xl border p-3 transition-colors",
               dragActive
-                ? "border-blue-400 bg-blue-50/60"
+                ? "border-brand-400 bg-brand-50/60"
                 : "border-transparent bg-gray-50/70"
             )}
           >
@@ -414,14 +414,14 @@ export function TaskReportDrawer({
                 className={cn(
                   "inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
                   images.length > 0
-                    ? "border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100"
-                    : "border-gray-200 bg-white text-gray-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+                    ? "border-brand-200 bg-brand-50 text-brand-600 hover:bg-brand-100"
+                    : "border-gray-200 bg-white text-gray-600 hover:border-brand-200 hover:bg-brand-50 hover:text-brand-600"
                 )}
                 title={`Tối đa ${MAX_REPORT_IMAGES} ảnh, mỗi ảnh không quá 10 MB. Có thể kéo thả hoặc dán ảnh bằng Ctrl+V.`}
               >
                 <ImagePlus className="h-3.5 w-3.5" />
                 Chọn ảnh
-                <span className={cn("text-[10px]", images.length > 0 ? "text-blue-400" : "text-gray-400")}>
+                <span className={cn("text-[10px]", images.length > 0 ? "text-brand-400" : "text-gray-400")}>
                   {images.length}/{MAX_REPORT_IMAGES}
                 </span>
               </button>
@@ -432,14 +432,14 @@ export function TaskReportDrawer({
                 className={cn(
                   "inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
                   files.length > 0
-                    ? "border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100"
-                    : "border-gray-200 bg-white text-gray-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+                    ? "border-brand-200 bg-brand-50 text-brand-600 hover:bg-brand-100"
+                    : "border-gray-200 bg-white text-gray-600 hover:border-brand-200 hover:bg-brand-50 hover:text-brand-600"
                 )}
                 title={`Tối đa ${MAX_REPORT_FILES} tệp, mỗi tệp không quá 10 MB`}
               >
                 <Paperclip className="h-3.5 w-3.5" />
                 Chọn tệp
-                <span className={cn("text-[10px]", files.length > 0 ? "text-blue-400" : "text-gray-400")}>
+                <span className={cn("text-[10px]", files.length > 0 ? "text-brand-400" : "text-gray-400")}>
                   {files.length}/{MAX_REPORT_FILES}
                 </span>
               </button>
@@ -450,14 +450,14 @@ export function TaskReportDrawer({
                 className={cn(
                   "inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
                   links.length > 0
-                    ? "border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100"
-                    : "border-gray-200 bg-white text-gray-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+                    ? "border-brand-200 bg-brand-50 text-brand-600 hover:bg-brand-100"
+                    : "border-gray-200 bg-white text-gray-600 hover:border-brand-200 hover:bg-brand-50 hover:text-brand-600"
                 )}
                 title={`Tối đa ${MAX_REPORT_LINKS} liên kết`}
               >
                 <Plus className="h-3.5 w-3.5" />
                 Thêm liên kết
-                <span className={cn("text-[10px]", links.length > 0 ? "text-blue-400" : "text-gray-400")}>
+                <span className={cn("text-[10px]", links.length > 0 ? "text-brand-400" : "text-gray-400")}>
                   {links.length}/{MAX_REPORT_LINKS}
                 </span>
               </button>
@@ -490,9 +490,9 @@ export function TaskReportDrawer({
                 {files.map((file, index) => (
                   <li
                     key={`${file.name}-${file.lastModified}-${index}`}
-                    className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2"
+                    className="flex items-center gap-2 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2"
                   >
-                    <FileText className="h-4 w-4 shrink-0 text-blue-400" />
+                    <FileText className="h-4 w-4 shrink-0 text-brand-400" />
                     <span className="min-w-0 flex-1 truncate text-sm text-gray-700">
                       {file.name}
                     </span>
@@ -522,14 +522,14 @@ export function TaskReportDrawer({
                       value={link.label}
                       onChange={(event) => updateLink(link.id, { label: event.target.value })}
                       placeholder="Tên đường dẫn"
-                      className="h-9 w-[38%] rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none placeholder:text-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      className="h-9 w-[38%] rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none placeholder:text-gray-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
                     />
                     <input
                       type="url"
                       value={link.url}
                       onChange={(event) => updateLink(link.id, { url: event.target.value })}
                       placeholder="https://..."
-                      className="h-9 min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none placeholder:text-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      className="h-9 min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none placeholder:text-gray-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
                     />
                     <button
                       type="button"
@@ -550,12 +550,12 @@ export function TaskReportDrawer({
                 {images.map((image) => (
                   <li
                     key={image.id}
-                    className="group relative h-16 w-24 shrink-0 overflow-hidden rounded-lg border border-blue-200 bg-blue-50"
+                    className="group relative h-16 w-24 shrink-0 overflow-hidden rounded-lg border border-brand-200 bg-brand-50"
                   >
                     <button
                       type="button"
                       onClick={() => setPreviewImage({ name: image.file.name, url: image.previewUrl })}
-                      className="h-full w-full focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+                      className="h-full w-full focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-500"
                       aria-label={`Xem trước ảnh ${image.file.name}`}
                     >
                       {/* Ảnh dùng object URL cục bộ nên không qua bộ tối ưu ảnh của Next.js. */}

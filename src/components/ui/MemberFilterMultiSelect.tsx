@@ -79,8 +79,8 @@ export function MemberFilterMultiSelect({
         type="button"
         onClick={() => setOpen((prev) => !prev)}
         className={cn(
-          "flex h-9 w-full items-center justify-between gap-1.5 whitespace-nowrap rounded-lg border bg-white px-2.5 text-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100",
-          value.length > 0 ? "border-blue-300 text-blue-600" : "border-gray-200 text-gray-600"
+          "flex h-9 w-full items-center justify-between gap-1.5 whitespace-nowrap rounded-lg border bg-white px-2.5 text-xs outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100",
+          value.length > 0 ? "border-brand-300 text-brand-600" : "border-gray-200 text-gray-600"
         )}
         aria-expanded={open}
         aria-haspopup="listbox"
@@ -101,7 +101,7 @@ export function MemberFilterMultiSelect({
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Nhập tên, chức vụ hoặc email..."
               autoFocus
-              className="h-9 w-full rounded-lg bg-gray-50 pl-9 pr-3 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
+              className="h-9 w-full rounded-lg bg-gray-50 pl-9 pr-3 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:bg-white focus:ring-2 focus:ring-brand-100"
             />
           </div>
           <div className="max-h-56 overflow-y-auto p-1.5" role="listbox" aria-multiselectable="true">
@@ -115,8 +115,8 @@ export function MemberFilterMultiSelect({
                   aria-selected={isSelected}
                   onClick={() => toggle(option.id)}
                   className={cn(
-                    "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-gray-50",
-                    isSelected && "bg-blue-50 hover:bg-blue-50"
+                    "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-brand-50",
+                    isSelected && "bg-brand-50 hover:bg-brand-50"
                   )}
                 >
                   <Avatar name={option.name} color={option.avatarColor} size="sm" />
@@ -129,7 +129,7 @@ export function MemberFilterMultiSelect({
                   <span
                     className={cn(
                       "flex h-5 w-5 shrink-0 items-center justify-center rounded border",
-                      isSelected ? "border-blue-600 bg-blue-600 text-white" : "border-gray-300 text-transparent"
+                      isSelected ? "border-brand-600 bg-brand-600 text-white" : "border-gray-300 text-transparent"
                     )}
                   >
                     <Check className="h-3.5 w-3.5" />

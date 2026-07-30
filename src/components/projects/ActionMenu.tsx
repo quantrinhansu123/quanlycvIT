@@ -102,7 +102,7 @@ export function ActionMenu({ onView, onEdit, onDelete }: ActionMenuProps) {
               setOpen(false);
               onView();
             }}
-            className="flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm text-gray-600 hover:bg-gray-50"
+            className="flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm text-gray-600 hover:bg-brand-50 hover:text-brand-600"
           >
             <Eye className="h-4 w-4" />
             Xem chi tiết dự án
@@ -114,7 +114,7 @@ export function ActionMenu({ onView, onEdit, onDelete }: ActionMenuProps) {
               setOpen(false);
               onEdit();
             }}
-            className="flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm text-gray-600 hover:bg-gray-50"
+            className="flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm text-gray-600 hover:bg-brand-50 hover:text-brand-600"
           >
             <Pencil className="h-4 w-4" />
             Chỉnh sửa

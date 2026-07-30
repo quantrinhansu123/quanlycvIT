@@ -203,7 +203,7 @@ export function DeadlineCalendar({
                   key={day.dateStr}
                   className={`border-r border-gray-50 px-2 pb-0.5 pt-2 text-right text-sm last:border-r-0 ${
                     day.isToday
-                      ? "bg-blue-50/60"
+                      ? "bg-brand-50/60"
                       : !day.isCurrentMonth
                         ? "bg-gray-50/40"
                         : ""
@@ -212,7 +212,7 @@ export function DeadlineCalendar({
                   <span
                     className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium ${
                       day.isToday
-                        ? "bg-blue-600 font-bold text-white"
+                        ? "bg-brand-600 font-bold text-white"
                         : !day.isCurrentMonth
                           ? "text-gray-300"
                           : "text-gray-700"
@@ -233,7 +233,7 @@ export function DeadlineCalendar({
                     key={day.dateStr}
                     className={`border-r border-gray-50 last:border-r-0 ${
                       day.isToday
-                        ? "bg-blue-50/60"
+                        ? "bg-brand-50/60"
                         : !day.isCurrentMonth
                           ? "bg-gray-50/40"
                           : ""

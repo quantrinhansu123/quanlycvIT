@@ -155,7 +155,7 @@ export function ProjectDetailView({
             <nav className="flex min-w-0 items-center gap-2 text-sm text-gray-400">
               <Link
                 href="/quan-ly-cong-viec/danh-sach-du-an"
-                className="shrink-0 font-semibold text-gray-600 hover:text-blue-600"
+                className="shrink-0 font-semibold text-gray-600 hover:text-brand-600"
               >
                 Danh sách dự án
               </Link>
@@ -168,7 +168,7 @@ export function ProjectDetailView({
 
           <Button
             onClick={() => setEditing(true)}
-            className="shrink-0 rounded-full bg-blue-600 hover:bg-blue-700"
+            className="shrink-0 rounded-full bg-brand-600 hover:bg-brand-700"
           >
             <Pencil className="h-4 w-4" />
             <span className="hidden sm:inline">Chỉnh sửa dự án</span>
@@ -230,7 +230,7 @@ export function ProjectDetailView({
               <OverviewCard
                 label="Tổng công việc"
                 icon={ClipboardList}
-                iconClassName="bg-blue-50 text-blue-600"
+                iconClassName="bg-brand-50 text-brand-600"
               >
                 <strong className="text-2xl font-bold text-gray-950">
                   {project.stats.total}
@@ -313,7 +313,7 @@ export function ProjectDetailView({
                         <p className="truncate text-sm font-bold text-gray-900">
                           {manager.name}
                           {index === 0 && (
-                            <span className="ml-1.5 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600">
+                            <span className="ml-1.5 rounded bg-brand-50 px-1.5 py-0.5 text-[10px] font-semibold text-brand-600">
                               Chính
                             </span>
                           )}
@@ -338,7 +338,7 @@ export function ProjectDetailView({
                   {project.members.map((member) => (
                     <span
                       key={member.id}
-                      className="flex items-center gap-1.5 rounded-lg bg-gray-50 px-2 py-1 text-xs font-medium text-blue-600"
+                      className="flex items-center gap-1.5 rounded-lg bg-gray-50 px-2 py-1 text-xs font-medium text-brand-600"
                     >
                       <Avatar name={member.name} color={member.avatarColor} size="sm" />
                       {member.name}
@@ -353,9 +353,9 @@ export function ProjectDetailView({
 
             <section className="grid grid-cols-1 gap-5 lg:grid-cols-3">
               <Panel
-                accentClassName="bg-blue-500"
+                accentClassName="bg-brand-500"
                 icon={ClipboardList}
-                iconClassName="text-blue-500"
+                iconClassName="text-brand-500"
                 title="Thống kê công việc"
                 subtitle="Tỷ lệ hoàn thành theo dữ liệu công việc thực tế"
               >
@@ -523,7 +523,7 @@ function ProjectDescription({ description }: { description?: string }) {
             href={part}
             target="_blank"
             rel="noreferrer"
-            className="whitespace-nowrap text-blue-600 underline-offset-2 hover:underline"
+            className="whitespace-nowrap text-brand-600 underline-offset-2 hover:underline"
           >
             {part}
           </a>
@@ -612,7 +612,7 @@ function BottomTab({
       className={cn(
         "flex min-w-[190px] flex-1 items-center justify-center gap-2 rounded-lg px-5 py-2 text-sm font-semibold transition-colors",
         active
-          ? "bg-blue-600 text-white shadow-sm"
+          ? "bg-brand-600 text-white shadow-sm"
           : "bg-gray-50 text-gray-500 hover:bg-gray-100"
       )}
     >
@@ -622,7 +622,7 @@ function BottomTab({
         <span
           className={cn(
             "rounded-full px-1.5 py-0.5 text-[10px] font-bold",
-            active ? "bg-white/20 text-white" : "bg-blue-50 text-blue-600"
+            active ? "bg-white/20 text-white" : "bg-brand-50 text-brand-600"
           )}
         >
           {count}

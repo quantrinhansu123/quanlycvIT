@@ -60,7 +60,7 @@ export function TaskTable({
                 type="checkbox"
                 checked={allSelected}
                 onChange={onToggleSelectAll}
-                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
                 aria-label="Chọn tất cả"
               />
             </th>
@@ -87,7 +87,7 @@ export function TaskTable({
                     type="checkbox"
                     checked={selectedIds.includes(task.id)}
                     onChange={() => onToggleSelect(task.id)}
-                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
                     aria-label={`Chọn công việc ${task.title}`}
                   />
                 </td>
@@ -95,7 +95,7 @@ export function TaskTable({
                   <button
                     type="button"
                     onClick={() => onOpenTask(task)}
-                    className="block w-full truncate text-left text-xs font-semibold text-gray-800 hover:text-blue-600"
+                    className="block w-full truncate text-left text-xs font-semibold text-gray-800 hover:text-brand-600"
                   >
                     {task.title}
                   </button>

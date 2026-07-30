@@ -294,7 +294,7 @@ export function WeekCalendar({
             <div
               key={day.dateStr}
               className={`border-r border-gray-100 px-2 py-3 text-center last:border-r-0 ${
-                day.isToday ? "bg-blue-50/60" : ""
+                day.isToday ? "bg-brand-50/60" : ""
               }`}
             >
               <div
@@ -343,7 +343,7 @@ export function WeekCalendar({
                 <div
                   key={day.dateStr}
                   className={`border-r border-gray-50 last:border-r-0 ${
-                    day.isToday ? "bg-blue-50/60" : ""
+                    day.isToday ? "bg-brand-50/60" : ""
                   }`}
                 />
               ))}
@@ -484,7 +484,7 @@ export function WeekCalendar({
                 <div
                   key={`${hour}-${day.dateStr}`}
                   className={`border-b border-r border-gray-50 last:border-r-0 ${
-                    day.isToday ? "bg-blue-50/30" : ""
+                    day.isToday ? "bg-brand-50/30" : ""
                   }`}
                 />
               ))}

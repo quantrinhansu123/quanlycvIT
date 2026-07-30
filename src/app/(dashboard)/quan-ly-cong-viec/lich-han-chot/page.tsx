@@ -218,7 +218,7 @@ export default function DeadlineCalendarPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Tìm công việc..."
-            className="h-9 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-xs text-gray-700 outline-none placeholder:text-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            className="h-9 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-xs text-gray-700 outline-none placeholder:text-gray-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
           />
         </div>
 
@@ -313,7 +313,7 @@ export default function DeadlineCalendarPage() {
         {loading ? (
           <div className="flex h-full items-center justify-center rounded-xl border border-gray-100 bg-white shadow-sm">
             <div className="flex flex-col items-center gap-3">
-              <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-gray-200 border-t-blue-500" />
+              <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-gray-200 border-t-brand-500" />
               <span className="text-sm text-gray-400">Đang tải lịch...</span>
             </div>
           </div>

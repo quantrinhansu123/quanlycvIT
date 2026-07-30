@@ -38,7 +38,7 @@ export function ProjectTable({
                 type="checkbox"
                 checked={allSelected}
                 onChange={onToggleSelectAll}
-                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
                 aria-label="Chọn tất cả"
               />
             </th>
@@ -60,7 +60,7 @@ export function ProjectTable({
                   type="checkbox"
                   checked={selectedIds.includes(project.id)}
                   onChange={() => onToggleSelect(project.id)}
-                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
                   aria-label={`Chọn dự án ${project.name}`}
                 />
               </td>
@@ -71,7 +71,7 @@ export function ProjectTable({
                 <button
                   type="button"
                   onClick={() => router.push(`/quan-ly-cong-viec/danh-sach-du-an/${project.id}`)}
-                  className="block truncate text-left text-xs font-semibold text-gray-800 hover:text-blue-600"
+                  className="block truncate text-left text-xs font-semibold text-gray-800 hover:text-brand-600"
                 >
                   {project.name}
                 </button>

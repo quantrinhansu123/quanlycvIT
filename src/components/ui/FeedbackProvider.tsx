@@ -49,7 +49,7 @@ const FeedbackContext = createContext<FeedbackContextValue | null>(null);
 const TOAST_STYLES: Record<ToastType, string> = {
   success: "border-emerald-200 bg-white text-emerald-600",
   error: "border-rose-200 bg-white text-rose-600",
-  info: "border-blue-200 bg-white text-blue-600",
+  info: "border-brand-200 bg-white text-brand-600",
 };
 
 const TOAST_ICONS = {

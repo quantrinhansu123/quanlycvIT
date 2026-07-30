@@ -103,7 +103,7 @@ export function TaskActionMenu({ onViewReports, onEdit, onDelete }: TaskActionMe
                 setOpen(false);
                 onViewReports();
               }}
-              className="flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm text-gray-600 hover:bg-gray-50"
+              className="flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm text-gray-600 hover:bg-brand-50 hover:text-brand-600"
             >
               <History className="h-4 w-4" />
               Lịch sử báo cáo

@@ -23,7 +23,7 @@ export const PROJECT_STATUS_META: Record<
   { label: string; badge: string }
 > = {
   notStarted: { label: "Chưa bắt đầu", badge: "bg-gray-100 text-gray-600" },
-  inProgress: { label: "Đang thực hiện", badge: "bg-blue-100 text-blue-700" },
+  inProgress: { label: "Đang thực hiện", badge: "bg-sky-100 text-sky-700" },
   overdue: { label: "Trễ hạn", badge: "bg-rose-100 text-rose-600" },
   done: { label: "Hoàn thành", badge: "bg-emerald-100 text-emerald-700" },
 };

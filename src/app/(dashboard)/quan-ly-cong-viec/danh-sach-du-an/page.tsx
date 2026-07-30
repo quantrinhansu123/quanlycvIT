@@ -174,7 +174,7 @@ export default function ProjectListPage() {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Tìm dự án..."
-            className="h-9 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-xs text-gray-700 outline-none placeholder:text-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            className="h-9 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-xs text-gray-700 outline-none placeholder:text-gray-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
           />
         </div>
 

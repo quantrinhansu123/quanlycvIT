@@ -111,7 +111,7 @@ export function ActivityTimeline({
       <div className="relative space-y-4 py-1 pl-12 sm:pl-14">
         <div
           aria-hidden="true"
-          className="absolute bottom-4 left-[19px] top-4 w-px bg-gradient-to-b from-violet-300 via-blue-200 to-emerald-200 sm:left-[23px]"
+          className="absolute bottom-4 left-[19px] top-4 w-px bg-gradient-to-b from-violet-300 via-brand-200 to-emerald-200 sm:left-[23px]"
         />
 
         {sortedItems.map((item) => {
@@ -134,7 +134,7 @@ export function ActivityTimeline({
 
               <Link
                 href={item.href}
-                className="block rounded-2xl border border-gray-200 bg-white px-4 py-3.5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                className="block rounded-2xl border border-gray-200 bg-white px-4 py-3.5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -153,7 +153,7 @@ export function ActivityTimeline({
                         {formatRelativeTime(activityTime)}
                       </span>
                     )}
-                    <ChevronRight className="h-4 w-4 text-gray-300 transition group-hover:translate-x-0.5 group-hover:text-blue-500" />
+                    <ChevronRight className="h-4 w-4 text-gray-300 transition group-hover:translate-x-0.5 group-hover:text-brand-500" />
                   </div>
                 </div>
 

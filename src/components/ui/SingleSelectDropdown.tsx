@@ -102,7 +102,7 @@ export function SingleSelectDropdown({
           invalid
             ? "border-rose-400"
             : expanded
-              ? "border-blue-400 ring-2 ring-blue-100"
+              ? "border-brand-400 ring-2 ring-brand-100"
               : "border-gray-200"
         )}
         aria-expanded={expanded}
@@ -137,7 +137,7 @@ export function SingleSelectDropdown({
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder={searchPlaceholder}
                 autoFocus
-                className="h-9 w-full rounded-lg bg-gray-50 pl-9 pr-3 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
+                className="h-9 w-full rounded-lg bg-gray-50 pl-9 pr-3 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:bg-white focus:ring-2 focus:ring-brand-100"
               />
             </div>
           )}
@@ -152,8 +152,8 @@ export function SingleSelectDropdown({
                   aria-selected={isSelected}
                   onClick={() => select(option.value)}
                   className={cn(
-                    "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-gray-50",
-                    isSelected && "bg-blue-50 hover:bg-blue-50"
+                    "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-brand-50",
+                    isSelected && "bg-brand-50 hover:bg-brand-50"
                   )}
                 >
                   {option.dotClassName && (
@@ -172,7 +172,7 @@ export function SingleSelectDropdown({
                       className={cn(
                         "flex h-5 w-5 shrink-0 items-center justify-center rounded border",
                         isSelected
-                          ? "border-blue-600 bg-blue-600 text-white"
+                          ? "border-brand-600 bg-brand-600 text-white"
                           : "border-gray-300 text-transparent"
                       )}
                     >

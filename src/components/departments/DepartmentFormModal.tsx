@@ -118,7 +118,7 @@ export function DepartmentFormModal({
   }
 
   const inputClass =
-    "h-11 w-full rounded-xl border border-gray-200 bg-white px-3.5 text-sm font-medium text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
+    "h-11 w-full rounded-xl border border-gray-200 bg-white px-3.5 text-sm font-medium text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-100";
   const availableParents = departments.filter((item) => item.id !== department?.id);
 
   return (
@@ -206,7 +206,7 @@ export function DepartmentFormModal({
               }))}
               rows={3}
               placeholder="Ví dụ: Phụ trách triển khai kỹ thuật và công nghệ"
-              className="w-full resize-y rounded-xl border border-gray-200 bg-white px-3.5 py-3 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              className="w-full resize-y rounded-xl border border-gray-200 bg-white px-3.5 py-3 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
             />
           </Field>
 
@@ -331,7 +331,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function cnSwitch(active: boolean) {
   return [
     "relative h-6 w-11 rounded-full p-0.5 transition-colors",
-    active ? "bg-blue-600" : "bg-gray-300",
+    active ? "bg-brand-600" : "bg-gray-300",
     "[&>span]:block [&>span]:h-5 [&>span]:w-5 [&>span]:rounded-full [&>span]:bg-white [&>span]:shadow-sm [&>span]:transition-transform",
   ].join(" ");
 }

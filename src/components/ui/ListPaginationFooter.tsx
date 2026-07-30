@@ -66,7 +66,7 @@ export function ListPaginationFooter({
           disabled={currentPage <= 1}
           onClick={() => onPageChange(currentPage - 1)}
         />
-        <span className="flex h-9 min-w-9 items-center justify-center rounded-lg bg-blue-600 px-3 font-semibold text-white">
+        <span className="flex h-9 min-w-9 items-center justify-center rounded-lg bg-brand-600 px-3 font-semibold text-white">
           {currentPage}
         </span>
         <span className="px-1 text-gray-600">/ {pageCount}</span>

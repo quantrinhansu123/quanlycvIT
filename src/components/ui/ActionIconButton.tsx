@@ -74,7 +74,7 @@ export function ActionIconButton({
             ? "border-rose-100 text-rose-500 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
             : tone === "warning"
               ? "border-amber-100 text-amber-600 hover:border-amber-200 hover:bg-amber-50"
-              : "border-gray-200 text-gray-500 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+              : "border-gray-200 text-gray-500 hover:border-brand-200 hover:bg-brand-50 hover:text-brand-600"
         )}
       >
         <Icon className="h-4 w-4" />

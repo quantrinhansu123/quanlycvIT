@@ -120,7 +120,7 @@ export function AccountFormModal({ account, departments, onClose, onSave }: Prop
   }
 
   const inputClass =
-    "h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
+    "h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100";
 
   return (
     <div
@@ -148,7 +148,7 @@ export function AccountFormModal({ account, departments, onClose, onSave }: Prop
         <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
           <section>
             <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-800">
-              <UserRound className="h-4 w-4 text-blue-600" /> Thông tin cơ bản
+              <UserRound className="h-4 w-4 text-brand-600" /> Thông tin cơ bản
             </h3>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Mã nhân viên" required>
@@ -174,7 +174,7 @@ export function AccountFormModal({ account, departments, onClose, onSave }: Prop
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={form.avatarUrl} alt="Ảnh đại diện xem trước" className="h-10 w-10 shrink-0 rounded-full border border-gray-200 object-cover" />
                     ) : (
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-semibold text-blue-600">AV</div>
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-semibold text-brand-600">AV</div>
                     )}
                     <label className={cn("flex h-10 cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-xs font-medium text-gray-700 transition hover:bg-gray-50", uploadingAvatar && "cursor-wait opacity-60")}>
                       {uploadingAvatar ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ImageUp className="h-4 w-4" />}
@@ -206,7 +206,7 @@ export function AccountFormModal({ account, departments, onClose, onSave }: Prop
 
           <section>
             <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-800">
-              <Building2 className="h-4 w-4 text-blue-600" /> Công việc & phân quyền
+              <Building2 className="h-4 w-4 text-brand-600" /> Công việc & phân quyền
             </h3>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Phòng ban">
@@ -249,7 +249,7 @@ export function AccountFormModal({ account, departments, onClose, onSave }: Prop
 
           <section>
             <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-800">
-              <Landmark className="h-4 w-4 text-blue-600" /> Ngân hàng & ghi chú
+              <Landmark className="h-4 w-4 text-brand-600" /> Ngân hàng & ghi chú
             </h3>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Số tài khoản">
@@ -265,7 +265,7 @@ export function AccountFormModal({ account, departments, onClose, onSave }: Prop
               </div>
             </div>
           </section>
-          <p className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">
+          <p className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
             Mật khẩu được quản lý an toàn bởi Supabase Auth và không lưu trong hồ sơ nhân viên.
           </p>
           {error && <p role="alert" className="text-sm text-rose-600">{error}</p>}

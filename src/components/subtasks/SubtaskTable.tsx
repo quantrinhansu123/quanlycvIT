@@ -70,7 +70,7 @@ export function SubtaskTable({
                 type="checkbox"
                 checked={allSelected}
                 onChange={onToggleSelectAll}
-                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
                 aria-label="Chọn tất cả"
               />
             </th>
@@ -98,7 +98,7 @@ export function SubtaskTable({
                     type="checkbox"
                     checked={selectedIds.includes(subtask.id)}
                     onChange={() => onToggleSelect(subtask.id)}
-                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
                     aria-label={`Chọn task ${subtask.title}`}
                   />
                 </td>
@@ -106,7 +106,7 @@ export function SubtaskTable({
                   <button
                     type="button"
                     onClick={() => onOpenSubtask(subtask)}
-                    className="block w-full truncate text-left text-xs font-semibold text-gray-800 hover:text-blue-600"
+                    className="block w-full truncate text-left text-xs font-semibold text-gray-800 hover:text-brand-600"
                   >
                     {subtask.title}
                   </button>

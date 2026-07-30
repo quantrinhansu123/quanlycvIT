@@ -244,7 +244,7 @@ export function AccountManagementPage() {
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white">
       <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 text-sm">
         <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
-          <span className="flex items-center gap-2 font-bold text-gray-900"><UsersRound className="h-4 w-4 text-blue-600" /> {accounts.length} nhân viên</span>
+          <span className="flex items-center gap-2 font-bold text-gray-900"><UsersRound className="h-4 w-4 text-brand-600" /> {accounts.length} nhân viên</span>
           <span className="text-gray-500"><b>{statistics.activeCount}</b> hoạt động · <b>{accounts.length - statistics.activeCount}</b> khóa</span>
           <span className="text-gray-500"><b>{statistics.adminCount}</b> quản trị · <b>{accounts.length - statistics.adminCount}</b> nhân viên</span>
         </div>
@@ -252,7 +252,7 @@ export function AccountManagementPage() {
           type="button"
           aria-expanded={showDetails}
           onClick={() => setShowDetails((current) => !current)}
-          className="flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-blue-600"
+          className="flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-brand-600"
         >
           Chi tiết <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", showDetails && "rotate-180")} />
         </button>
@@ -263,7 +263,7 @@ export function AccountManagementPage() {
           <div className="grid gap-2.5 md:grid-cols-3">
             <StatisticsCard
               icon={UsersRound}
-              iconClassName="bg-blue-600 text-white"
+              iconClassName="bg-brand-600 text-white"
               value={accounts.length}
               label="Tổng nhân viên"
               description={`${statistics.activeCount} hoạt động`}
@@ -319,7 +319,7 @@ export function AccountManagementPage() {
         <button type="button" onClick={() => history.back()} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50"><ArrowLeft className="h-4 w-4" /></button>
         <div className="relative min-w-[180px] flex-1 xl:max-w-[470px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm theo tên, mã NV, email..." className="h-9 w-full rounded-xl border border-gray-200 pl-9 pr-9 text-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm theo tên, mã NV, email..." className="h-9 w-full rounded-xl border border-gray-200 pl-9 pr-9 text-xs outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100" />
           {search && <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"><X className="h-4 w-4" /></button>}
         </div>
         <Filter value={department} onChange={setDepartment} label="Phòng ban" options={departments.map((item) => ({ value: item.id, label: item.name }))} />
@@ -329,7 +329,7 @@ export function AccountManagementPage() {
         {activeFilters > 0 && <button title="Xóa bộ lọc" onClick={() => { setDepartment(""); setPosition(""); setRole(""); setStatus(""); }} className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100"><FilterX className="h-4 w-4" /></button>}
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
           {selected.length > 0 && <>
-            <span className="text-xs font-medium text-blue-600">{selected.length} đã chọn</span>
+            <span className="text-xs font-medium text-brand-600">{selected.length} đã chọn</span>
             <button title="Mở khóa" onClick={() => void bulkStatus("active")} className="icon-button"><UnlockKeyhole className="h-4 w-4" /></button>
             <button title="Khóa" onClick={() => void bulkStatus("inactive")} className="icon-button"><LockKeyhole className="h-4 w-4" /></button>
           </>}
@@ -364,7 +364,7 @@ export function AccountManagementPage() {
               <tr key={account.id} className="data-table-row group border-b border-gray-200">
                 <td className="sticky left-0 z-[2] px-4 py-3"><input type="checkbox" checked={selected.includes(account.id)} onChange={() => setSelected((current) => current.includes(account.id) ? current.filter((id) => id !== account.id) : [...current, account.id])} /></td>
                 <td className="px-4 py-3 font-medium text-gray-600">{account.employeeCode}</td>
-                <td className="px-4 py-2.5"><button onClick={() => router.push(`/nhan-vien/${account.id}`)} className="flex items-center gap-3 text-left hover:text-blue-600">
+                <td className="px-4 py-2.5"><button onClick={() => router.push(`/nhan-vien/${account.id}`)} className="flex items-center gap-3 text-left hover:text-brand-600">
                   {account.avatarUrl ? (
                     // URL ảnh nhân sự là dữ liệu động bên ngoài, không giới hạn hostname trong next/image.
                     // eslint-disable-next-line @next/next/no-img-element
@@ -375,8 +375,8 @@ export function AccountManagementPage() {
                 <td className="px-4 py-3 font-semibold text-gray-900">{account.username ?? "—"}</td>
                 <td className="px-4 py-3 font-medium text-gray-800">{account.department?.name ?? "—"}</td>
                 <td className="px-4 py-3 font-medium text-gray-800">{account.position ?? "—"}</td>
-                <td className="px-4 py-3"><span className={cn("rounded-full border px-2.5 py-1 text-xs font-medium", account.role === "admin" ? "border-blue-600 bg-blue-600 text-white" : account.role === "manager" ? "border-violet-200 bg-violet-50 text-violet-700" : "border-gray-200 bg-white text-gray-700")}>{ROLE_LABEL[account.role]}</span></td>
-                <td className="px-4 py-3"><span className={cn("rounded-full px-2.5 py-1 text-xs font-medium", account.status === "active" ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-600")}>{account.status === "active" ? "Hoạt động" : "Đã khóa"}</span></td>
+                <td className="px-4 py-3"><span className={cn("rounded-full border px-2.5 py-1 text-xs font-medium", account.role === "admin" ? "border-brand-600 bg-brand-600 text-white" : account.role === "manager" ? "border-violet-200 bg-violet-50 text-violet-700" : "border-gray-200 bg-white text-gray-700")}>{ROLE_LABEL[account.role]}</span></td>
+                <td className="px-4 py-3"><span className={cn("rounded-full px-2.5 py-1 text-xs font-medium", account.status === "active" ? "bg-brand-600 text-white" : "bg-gray-200 text-gray-600")}>{account.status === "active" ? "Hoạt động" : "Đã khóa"}</span></td>
                 <td className="px-4 py-3">{account.phone ?? "—"}</td><td className="px-4 py-3">{account.bankAccount ?? "—"}</td><td className="px-4 py-3">{account.bankName ?? "—"}</td><td className="max-w-[230px] truncate px-4 py-3">{account.address ?? "—"}</td>
                 <td className="px-4 py-3">{formatDate(account.birthDate)}</td><td className="px-4 py-3">{formatDate(account.startDate)}</td><td className="px-4 py-3">{formatDate(account.createdAt)}</td>
                 <td
@@ -406,7 +406,7 @@ export function AccountManagementPage() {
         <div className="flex items-center gap-1">
           <PageButton onClick={() => setPage(1)} disabled={page <= 1} icon={ChevronsLeft} />
           <PageButton onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} icon={ChevronLeft} />
-          <span className="flex h-9 min-w-9 items-center justify-center rounded-lg bg-blue-600 px-3 font-semibold text-white">{Math.min(page, pageCount)}</span><span className="px-1 text-gray-600">/ {pageCount}</span>
+          <span className="flex h-9 min-w-9 items-center justify-center rounded-lg bg-brand-600 px-3 font-semibold text-white">{Math.min(page, pageCount)}</span><span className="px-1 text-gray-600">/ {pageCount}</span>
           <PageButton onClick={() => setPage((p) => Math.min(pageCount, p + 1))} disabled={page >= pageCount} icon={ChevronRight} />
           <PageButton onClick={() => setPage(pageCount)} disabled={page >= pageCount} icon={ChevronsRight} />
         </div>
@@ -418,7 +418,7 @@ export function AccountManagementPage() {
 }
 
 function Filter({ value, onChange, label, options, count }: { value: string; onChange: (value: string) => void; label: string; options: { value: string; label: string }[]; count?: number }) {
-  return <label className="relative w-[112px] shrink-0"><select value={value} onChange={(e) => onChange(e.target.value)} className={cn("h-9 w-full appearance-none truncate rounded-xl border bg-white pl-8 pr-7 text-xs outline-none hover:bg-gray-50 focus:ring-2 focus:ring-blue-100", value ? "border-blue-400 text-blue-600" : "border-gray-200 text-gray-600")}><option value="">{label}</option>{options.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select><ArrowDownUp className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />{count ? <span className="pointer-events-none absolute right-6 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-blue-600 text-[10px] text-white">{count}</span> : <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />}</label>;
+  return <label className="relative w-[112px] shrink-0"><select value={value} onChange={(e) => onChange(e.target.value)} className={cn("h-9 w-full appearance-none truncate rounded-xl border bg-white pl-8 pr-7 text-xs outline-none hover:bg-gray-50 focus:ring-2 focus:ring-brand-100", value ? "border-brand-400 text-brand-600" : "border-gray-200 text-gray-600")}><option value="">{label}</option>{options.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select><ArrowDownUp className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />{count ? <span className="pointer-events-none absolute right-6 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-brand-600 text-[10px] text-white">{count}</span> : <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />}</label>;
 }
 
 function StatisticsCard({ icon: Icon, iconClassName, value, label, description }: {
@@ -443,7 +443,7 @@ function StatisticsCard({ icon: Icon, iconClassName, value, label, description }
 }
 
 function SortTh({ label, column, sort, onSort, width }: { label: string; column: SortKey; sort: { key: SortKey; direction: string }; onSort: (key: SortKey) => void; width?: string }) {
-  return <th style={{ minWidth: width }} className="px-4 py-3"><button onClick={() => onSort(column)} className="flex items-center gap-2 hover:text-blue-600">{label}<ArrowDownUp className={cn("h-3.5 w-3.5", sort.key === column && "text-blue-600")} /></button></th>;
+  return <th style={{ minWidth: width }} className="px-4 py-3"><button onClick={() => onSort(column)} className="flex items-center gap-2 hover:text-brand-600">{label}<ArrowDownUp className={cn("h-3.5 w-3.5", sort.key === column && "text-brand-600")} /></button></th>;
 }
 
 function PageButton({ icon: Icon, ...props }: { icon: React.ElementType } & React.ButtonHTMLAttributes<HTMLButtonElement>) {

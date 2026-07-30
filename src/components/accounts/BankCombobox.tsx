@@ -68,7 +68,7 @@ export function BankCombobox({ value, onChange, className }: Props) {
         }}
         onBlur={() => window.setTimeout(() => setOpen(false), 150)}
         placeholder="Tìm theo tên hoặc mã ngân hàng"
-        className={cn("h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-9 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100", className)}
+        className={cn("h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-9 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100", className)}
       />
       <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
 
@@ -89,7 +89,7 @@ export function BankCombobox({ value, onChange, className }: Props) {
                 setDraft(bank.shortName);
                 setOpen(false);
               }}
-              className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-blue-50"
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-brand-50"
             >
               {bank.logo ? (
                 // Logo từ VietQR là URL động bên ngoài, không áp dụng next/image hostname.
@@ -100,7 +100,7 @@ export function BankCombobox({ value, onChange, className }: Props) {
                 <span className="block truncate text-sm font-medium text-gray-800">{bank.shortName}</span>
                 <span className="block truncate text-xs text-gray-500">{bank.name} · {bank.code}</span>
               </span>
-              {value === bank.shortName && <Check className="h-4 w-4 text-blue-600" />}
+              {value === bank.shortName && <Check className="h-4 w-4 text-brand-600" />}
             </button>
           ))}
         </div>

@@ -1,5 +1,19 @@
 @import "tailwindcss";
 
+/* Tông màu thương hiệu Việt Nhật IPT (đỏ-đen), thay cho tông xanh dương mặc định. */
+@theme {
+  --color-brand-50:  #fff1f2;
+  --color-brand-100: #ffe1e3;
+  --color-brand-200: #ffc6cb;
+  --color-brand-300: #ff97a0;
+  --color-brand-400: #ff5b6c;
+  --color-brand-500: #ef1b2d;
+  --color-brand-600: #d1122a;
+  --color-brand-700: #b30d1c;
+  --color-brand-800: #8e0c18;
+  --color-brand-900: #5a0710;
+}
+
 :root {
   --background: #f8fafc;
   --foreground: #111827;
@@ -23,34 +37,30 @@ body {
 
 .login-intro {
   background:
-    radial-gradient(circle at 12% 10%, rgb(191 219 254 / 72%), transparent 34%),
-    radial-gradient(circle at 68% 62%, rgb(219 234 254 / 78%), transparent 36%),
-    linear-gradient(135deg, #eef6ff 0%, #f8fbff 62%, #ffffff 100%);
+    radial-gradient(circle at 12% 10%, rgb(255 199 203 / 55%), transparent 34%),
+    radial-gradient(circle at 68% 62%, rgb(255 225 227 / 70%), transparent 36%),
+    linear-gradient(135deg, #fff5f5 0%, #fbf8f8 62%, #ffffff 100%);
 }
 
 .login-grid {
-  background-image: radial-gradient(rgb(37 99 235 / 10%) 0.7px, transparent 0.7px);
+  background-image: radial-gradient(rgb(239 27 45 / 10%) 0.7px, transparent 0.7px);
   background-size: 23px 23px;
 }
 
-.login-logo {
-  background: linear-gradient(145deg, #2dd4bf 0%, #2563eb 58%, #1d4ed8 100%);
-}
-
 html[data-theme="dark"] .login-page {
-  background-color: #0b1220 !important;
+  background-color: #150708 !important;
 }
 
 html[data-theme="dark"] .login-intro {
   background:
-    radial-gradient(circle at 12% 10%, rgb(30 64 175 / 32%), transparent 34%),
-    radial-gradient(circle at 68% 62%, rgb(15 118 110 / 18%), transparent 36%),
-    linear-gradient(135deg, #111827 0%, #0f172a 62%, #0b1220 100%);
-  border-color: #1e293b;
+    radial-gradient(circle at 12% 10%, rgb(90 7 16 / 38%), transparent 34%),
+    radial-gradient(circle at 68% 62%, rgb(15 23 42 / 30%), transparent 36%),
+    linear-gradient(135deg, #1a0a0c 0%, #150708 62%, #0b1220 100%);
+  border-color: #3a1216;
 }
 
 html[data-theme="dark"] .login-grid {
-  background-image: radial-gradient(rgb(148 163 184 / 11%) 0.7px, transparent 0.7px);
+  background-image: radial-gradient(rgb(255 151 160 / 11%) 0.7px, transparent 0.7px);
 }
 
 html[data-theme="dark"] .bg-white {
@@ -104,7 +114,7 @@ html[data-theme="dark"] .data-table-row > td {
 }
 
 html[data-theme="dark"] .data-table-row:hover > td {
-  background-color: #1e3a5f;
+  background-color: #3a1216;
 }
 
 * {
@@ -142,7 +152,7 @@ html[data-theme="dark"] .data-table-row:hover > td {
 }
 
 .data-table-row:hover > td {
-  background-color: #eff6ff;
+  background-color: #fff1f2;
 }
 
 .icon-button {
@@ -159,7 +169,7 @@ html[data-theme="dark"] .data-table-row:hover > td {
 
 .icon-button:hover {
   background: #f9fafb;
-  color: #2563eb;
+  color: #d1122a;
 }
 
 .icon-button:active {

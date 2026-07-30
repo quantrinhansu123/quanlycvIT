@@ -201,7 +201,7 @@ export function SubtaskDetailView({
             <nav className="flex min-w-0 items-center gap-2 text-sm text-gray-400">
               <Link
                 href="/quan-ly-cong-viec/danh-sach-task"
-                className="shrink-0 font-semibold text-gray-600 hover:text-blue-600"
+                className="shrink-0 font-semibold text-gray-600 hover:text-brand-600"
               >
                 Quản lý công việc
               </Link>
@@ -210,7 +210,7 @@ export function SubtaskDetailView({
                 <>
                   <Link
                     href={`/quan-ly-cong-viec/danh-sach-cong-viec/${workTask.id}`}
-                    className="shrink-0 font-semibold text-gray-500 hover:text-blue-600"
+                    className="shrink-0 font-semibold text-gray-500 hover:text-brand-600"
                   >
                     Công việc {workTask.title}
                   </Link>
@@ -225,7 +225,7 @@ export function SubtaskDetailView({
 
           <Button
             onClick={() => setEditing(true)}
-            className="shrink-0 rounded-full bg-blue-600 hover:bg-blue-700"
+            className="shrink-0 rounded-full bg-brand-600 hover:bg-brand-700"
           >
             <Pencil className="h-4 w-4" />
             <span className="hidden sm:inline">Chỉnh sửa Task</span>
@@ -371,7 +371,7 @@ export function SubtaskDetailView({
                     href={`/quan-ly-cong-viec/danh-sach-cong-viec/${workTask.id}`}
                     className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50/80 p-3 transition-colors hover:bg-gray-100"
                   >
-                    <FileClock className="h-5 w-5 shrink-0 text-blue-500" />
+                    <FileClock className="h-5 w-5 shrink-0 text-brand-500" />
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-bold text-gray-900">
                         {workTask.title}
@@ -549,7 +549,7 @@ function DetailDescription({
             href={part}
             target="_blank"
             rel="noreferrer"
-            className="whitespace-nowrap text-blue-600 underline-offset-2 hover:underline"
+            className="whitespace-nowrap text-brand-600 underline-offset-2 hover:underline"
           >
             {part}
           </a>
@@ -694,7 +694,7 @@ function BottomTab({
       className={cn(
         "flex min-w-[190px] flex-1 items-center justify-center gap-2 rounded-lg px-5 py-2 text-sm font-semibold transition-colors",
         active
-          ? "bg-blue-600 text-white shadow-sm"
+          ? "bg-brand-600 text-white shadow-sm"
           : "bg-gray-50 text-gray-500 hover:bg-gray-100"
       )}
     >
@@ -704,7 +704,7 @@ function BottomTab({
         <span
           className={cn(
             "rounded-full px-1.5 py-0.5 text-[10px] font-bold",
-            active ? "bg-white/20 text-white" : "bg-blue-50 text-blue-600"
+            active ? "bg-white/20 text-white" : "bg-brand-50 text-brand-600"
           )}
         >
           {count}

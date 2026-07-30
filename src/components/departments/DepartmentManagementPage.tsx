@@ -262,7 +262,7 @@ export function DepartmentManagementPage() {
               setPage(1);
             }}
             placeholder="Tìm phòng ban, chức vụ..."
-            className="h-9 w-full rounded-xl border border-gray-200 pl-9 pr-9 text-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            className="h-9 w-full rounded-xl border border-gray-200 pl-9 pr-9 text-xs outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
           />
           {search && (
             <button
@@ -359,7 +359,7 @@ export function DepartmentManagementPage() {
                   <td className="px-4 py-3">
                     <span className={cn(
                       "inline-flex rounded-full px-2.5 py-1 text-[11px] font-medium",
-                      department.status === "active" ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-600"
+                      department.status === "active" ? "bg-brand-600 text-white" : "bg-gray-200 text-gray-600"
                     )}>
                       {department.status === "active" ? "Hoạt động" : "Ngừng hoạt động"}
                     </span>
@@ -412,7 +412,7 @@ export function DepartmentManagementPage() {
         <div className="flex items-center gap-1">
           <PageButton onClick={() => setPage(1)} disabled={currentPage <= 1} icon={ChevronsLeft} />
           <PageButton onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={currentPage <= 1} icon={ChevronLeft} />
-          <span className="flex h-9 min-w-9 items-center justify-center rounded-lg bg-blue-600 px-3 font-semibold text-white">{currentPage}</span>
+          <span className="flex h-9 min-w-9 items-center justify-center rounded-lg bg-brand-600 px-3 font-semibold text-white">{currentPage}</span>
           <span className="px-1 text-gray-600">/ {pageCount}</span>
           <PageButton onClick={() => setPage((value) => Math.min(pageCount, value + 1))} disabled={currentPage >= pageCount} icon={ChevronRight} />
           <PageButton onClick={() => setPage(pageCount)} disabled={currentPage >= pageCount} icon={ChevronsRight} />
@@ -446,9 +446,9 @@ function SortTh({
 }) {
   return (
     <th style={{ minWidth: width }} className="px-4 py-3">
-      <button type="button" onClick={() => onSort(column)} className="flex items-center gap-2 hover:text-blue-600">
+      <button type="button" onClick={() => onSort(column)} className="flex items-center gap-2 hover:text-brand-600">
         {label}
-        <ArrowDownUp className={cn("h-3.5 w-3.5", sort.key === column && "text-blue-600")} />
+        <ArrowDownUp className={cn("h-3.5 w-3.5", sort.key === column && "text-brand-600")} />
       </button>
     </th>
   );

@@ -45,7 +45,7 @@ export function TaskCard({
       </div>
 
       <button type="button" onClick={() => onOpen(task)} className="text-left">
-        <p className="line-clamp-1 text-sm font-semibold text-gray-800 hover:text-blue-600">{task.title}</p>
+        <p className="line-clamp-1 text-sm font-semibold text-gray-800 hover:text-brand-600">{task.title}</p>
         {task.description && <p className="mt-1 line-clamp-2 text-xs text-gray-400">{task.description}</p>}
       </button>
 

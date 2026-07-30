@@ -520,8 +520,8 @@ export function TaskFormModal({
               onChange={(event) => setForm((prev) => ({ ...prev, title: event.target.value }))}
               placeholder="VD: Lập trình giao diện, thiết kế logo..."
               className={cn(
-                "h-10 w-full rounded-lg border px-3 text-sm outline-none focus:ring-2 focus:ring-blue-100",
-                errors.title ? "border-rose-400" : "border-gray-200 focus:border-blue-400"
+                "h-10 w-full rounded-lg border px-3 text-sm outline-none focus:ring-2 focus:ring-brand-100",
+                errors.title ? "border-rose-400" : "border-gray-200 focus:border-brand-400"
               )}
             />
             {errors.title && <p className="mt-1 text-xs text-rose-500">{errors.title}</p>}
@@ -539,7 +539,7 @@ export function TaskFormModal({
               placeholder="Chi tiết yêu cầu công việc..."
               rows={3}
               style={{ maxHeight: DESCRIPTION_MAX_HEIGHT }}
-              className="w-full resize-none overflow-y-auto rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              className="w-full resize-none overflow-y-auto rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
             />
           </div>
 
@@ -652,8 +652,8 @@ export function TaskFormModal({
                 value={form.startDate}
                 onChange={(event) => setForm((prev) => ({ ...prev, startDate: event.target.value }))}
                 className={cn(
-                  "h-10 w-full rounded-lg border px-3 text-sm outline-none focus:ring-2 focus:ring-blue-100",
-                  errors.startDate ? "border-rose-400" : "border-gray-200 focus:border-blue-400"
+                  "h-10 w-full rounded-lg border px-3 text-sm outline-none focus:ring-2 focus:ring-brand-100",
+                  errors.startDate ? "border-rose-400" : "border-gray-200 focus:border-brand-400"
                 )}
               />
               {errors.startDate && <p className="mt-1 text-xs text-rose-500">{errors.startDate}</p>}
@@ -667,8 +667,8 @@ export function TaskFormModal({
                 value={form.dueDate}
                 onChange={(event) => setForm((prev) => ({ ...prev, dueDate: event.target.value }))}
                 className={cn(
-                  "h-10 w-full rounded-lg border px-3 text-sm outline-none focus:ring-2 focus:ring-blue-100",
-                  errors.dueDate ? "border-rose-400" : "border-gray-200 focus:border-blue-400"
+                  "h-10 w-full rounded-lg border px-3 text-sm outline-none focus:ring-2 focus:ring-brand-100",
+                  errors.dueDate ? "border-rose-400" : "border-gray-200 focus:border-brand-400"
                 )}
               />
               {errors.dueDate && <p className="mt-1 text-xs text-rose-500">{errors.dueDate}</p>}
@@ -682,7 +682,7 @@ export function TaskFormModal({
               value={form.tagsText}
               onChange={(event) => setForm((prev) => ({ ...prev, tagsText: event.target.value }))}
               placeholder="VD: Frontend, UI/UX, API"
-              className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
             />
           </div>
 

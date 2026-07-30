@@ -218,13 +218,13 @@ function WorkTaskSelect({
           invalid
             ? "border-rose-400"
             : expanded
-              ? "border-blue-400 ring-2 ring-blue-100"
+              ? "border-brand-400 ring-2 ring-brand-100"
               : "border-gray-200"
         )}
       >
         {selected && (
           <span
-            className="flex min-w-0 max-w-[70%] items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700"
+            className="flex min-w-0 max-w-[70%] items-center rounded-md bg-brand-50 px-2 py-1 text-xs font-medium text-brand-700"
             title={selected.title}
           >
             <span className="truncate">{selected.title}</span>
@@ -264,7 +264,7 @@ function WorkTaskSelect({
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Tìm tên công việc..."
               autoFocus
-              className="h-9 w-full rounded-lg bg-gray-50 pl-9 pr-3 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
+              className="h-9 w-full rounded-lg bg-gray-50 pl-9 pr-3 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:bg-white focus:ring-2 focus:ring-brand-100"
             />
           </div>
           <div className="max-h-56 overflow-y-auto p-1.5" role="listbox">
@@ -278,14 +278,14 @@ function WorkTaskSelect({
                   aria-selected={isSelected}
                   onClick={() => select(option.id)}
                   className={cn(
-                    "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-gray-50",
-                    isSelected && "bg-blue-50 hover:bg-blue-50"
+                    "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-brand-50",
+                    isSelected && "bg-brand-50 hover:bg-brand-50"
                   )}
                 >
                   <span className="min-w-0 flex-1 truncate text-sm font-medium text-gray-700">
                     {option.title}
                   </span>
-                  {isSelected && <Check className="h-4 w-4 shrink-0 text-blue-600" />}
+                  {isSelected && <Check className="h-4 w-4 shrink-0 text-brand-600" />}
                 </button>
               );
             })}
@@ -623,8 +623,8 @@ export function SubtaskFormModal({
               onChange={(event) => setForm((prev) => ({ ...prev, title: event.target.value }))}
               placeholder="VD: Bấm đầu dây tầng 1, thiết kế màn hình đăng nhập..."
               className={cn(
-                "h-10 w-full rounded-lg border px-3 text-sm outline-none focus:ring-2 focus:ring-blue-100",
-                errors.title ? "border-rose-400" : "border-gray-200 focus:border-blue-400"
+                "h-10 w-full rounded-lg border px-3 text-sm outline-none focus:ring-2 focus:ring-brand-100",
+                errors.title ? "border-rose-400" : "border-gray-200 focus:border-brand-400"
               )}
             />
             {errors.title && <p className="mt-1 text-xs text-rose-500">{errors.title}</p>}
@@ -642,7 +642,7 @@ export function SubtaskFormModal({
               placeholder="Chi tiết yêu cầu task..."
               rows={3}
               style={{ maxHeight: DESCRIPTION_MAX_HEIGHT }}
-              className="w-full resize-none overflow-y-auto rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              className="w-full resize-none overflow-y-auto rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
             />
           </div>
 
@@ -749,7 +749,7 @@ export function SubtaskFormModal({
                 max={100}
                 value={form.progress}
                 onChange={(event) => setForm((prev) => ({ ...prev, progress: Number(event.target.value) }))}
-                className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
               />
             </div>
           </div>
@@ -764,8 +764,8 @@ export function SubtaskFormModal({
                 value={form.startDate}
                 onChange={(event) => setForm((prev) => ({ ...prev, startDate: event.target.value }))}
                 className={cn(
-                  "h-10 w-full rounded-lg border px-3 text-sm outline-none focus:ring-2 focus:ring-blue-100",
-                  errors.startDate ? "border-rose-400" : "border-gray-200 focus:border-blue-400"
+                  "h-10 w-full rounded-lg border px-3 text-sm outline-none focus:ring-2 focus:ring-brand-100",
+                  errors.startDate ? "border-rose-400" : "border-gray-200 focus:border-brand-400"
                 )}
               />
               {errors.startDate && <p className="mt-1 text-xs text-rose-500">{errors.startDate}</p>}
@@ -779,8 +779,8 @@ export function SubtaskFormModal({
                 value={form.dueDate}
                 onChange={(event) => setForm((prev) => ({ ...prev, dueDate: event.target.value }))}
                 className={cn(
-                  "h-10 w-full rounded-lg border px-3 text-sm outline-none focus:ring-2 focus:ring-blue-100",
-                  errors.dueDate ? "border-rose-400" : "border-gray-200 focus:border-blue-400"
+                  "h-10 w-full rounded-lg border px-3 text-sm outline-none focus:ring-2 focus:ring-brand-100",
+                  errors.dueDate ? "border-rose-400" : "border-gray-200 focus:border-brand-400"
                 )}
               />
               {errors.dueDate && <p className="mt-1 text-xs text-rose-500">{errors.dueDate}</p>}
@@ -794,7 +794,7 @@ export function SubtaskFormModal({
               value={form.tagsText}
               onChange={(event) => setForm((prev) => ({ ...prev, tagsText: event.target.value }))}
               placeholder="VD: Thi công, Khảo sát..."
-              className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
             />
           </div>
 

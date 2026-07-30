@@ -77,7 +77,7 @@ const MODULES: ApplicationModule[] = [
   { id: "permissions", groupId: "employees", name: "Phân Quyền", description: "Quản lý phân quyền", href: "/nhan-vien/phan-quyen", icon: ShieldCheck, color: "text-rose-600", background: "bg-rose-50" },
 
   { id: "attendance", groupId: "attendance", name: "Chấm Công", description: "Quản lý chấm công", href: "/quan-ly-cong/cham-cong", icon: Timer, color: "text-teal-600", background: "bg-teal-50" },
-  { id: "attendance-statistics", groupId: "attendance", name: "Thống Kê Công", description: "Quản lý thống kê công", href: "/quan-ly-cong/thong-ke-cong", icon: BarChart3, color: "text-blue-600", background: "bg-blue-50" },
+  { id: "attendance-statistics", groupId: "attendance", name: "Thống Kê Công", description: "Quản lý thống kê công", href: "/quan-ly-cong/thong-ke-cong", icon: BarChart3, color: "text-brand-600", background: "bg-brand-50" },
   { id: "attendance-approval", groupId: "attendance", name: "Duyệt Công", description: "Quản lý duyệt công", href: "/quan-ly-cong/duyet-cong", icon: CheckSquare2, color: "text-green-600", background: "bg-green-50" },
   { id: "leave", groupId: "attendance", name: "Nghỉ Phép", description: "Quản lý nghỉ phép", href: "/quan-ly-cong/nghi-phep", icon: CalendarOff, color: "text-fuchsia-600", background: "bg-fuchsia-50" },
   { id: "employee-map", groupId: "attendance", name: "Bản Đồ NV", description: "Quản lý bản đồ nhân viên", href: "/quan-ly-cong/ban-do-nhan-vien", icon: Map, color: "text-sky-600", background: "bg-sky-50" },
@@ -90,7 +90,7 @@ const MODULES: ApplicationModule[] = [
   { id: "gantt", groupId: "work", name: "Biểu đồ Gantt", description: "Theo dõi tiến độ bằng Gantt", href: "/quan-ly-cong-viec/bieu-do-gantt", icon: GanttChartSquare, color: "text-indigo-600", background: "bg-indigo-50" },
 
   { id: "assets", groupId: "system", name: "Quản lý tài sản", description: "Quản lý tài sản công ty", href: "/quan-ly-tai-san", icon: PackageSearch, color: "text-amber-600", background: "bg-amber-50" },
-  { id: "documents", groupId: "system", name: "Tài liệu", description: "Quản lý tài liệu nội bộ", href: "/tai-lieu", icon: FileText, color: "text-blue-600", background: "bg-blue-50" },
+  { id: "documents", groupId: "system", name: "Tài liệu", description: "Quản lý tài liệu nội bộ", href: "/tai-lieu", icon: FileText, color: "text-brand-600", background: "bg-brand-50" },
   { id: "system-settings", groupId: "system", name: "Hệ thống", description: "Cấu hình hệ thống", href: "/he-thong", icon: Settings, color: "text-slate-600", background: "bg-slate-100" },
 ];
 
@@ -146,7 +146,7 @@ export function ApplicationHubPage() {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Tìm module theo tên hoặc mô tả..."
-            className="h-10 w-full rounded-xl border border-gray-200 bg-gray-50/50 pl-10 pr-3 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
+            className="h-10 w-full rounded-xl border border-gray-200 bg-gray-50/50 pl-10 pr-3 text-sm outline-none transition focus:border-brand-400 focus:bg-white focus:ring-2 focus:ring-brand-100"
           />
         </div>
         <label className="relative w-32 shrink-0">
@@ -155,7 +155,7 @@ export function ApplicationHubPage() {
             aria-label="Lọc theo nhóm"
             value={group}
             onChange={(event) => setGroup(event.target.value as ModuleGroupId | "")}
-            className="h-10 w-full appearance-none rounded-xl border border-gray-200 bg-white pl-9 pr-8 text-sm text-gray-600 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            className="h-10 w-full appearance-none rounded-xl border border-gray-200 bg-white pl-9 pr-8 text-sm text-gray-600 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
           >
             <option value="">Nhóm</option>
             {GROUPS.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
@@ -207,14 +207,14 @@ export function ApplicationHubPage() {
                       className={cn(
                         "group relative rounded-2xl border border-gray-200 bg-white transition",
                         available
-                          ? "hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
+                          ? "hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-md"
                           : "cursor-not-allowed hover:border-rose-200 hover:bg-rose-50/20"
                       )}
                     >
                       {available ? (
                         <Link href={module.href} className="flex min-h-[88px] items-center gap-4 rounded-2xl px-4 py-3 pr-20">
                           {moduleContent}
-                          <ChevronRight className="absolute right-5 h-4 w-4 text-gray-400 transition group-hover:translate-x-0.5 group-hover:text-blue-500" />
+                          <ChevronRight className="absolute right-5 h-4 w-4 text-gray-400 transition group-hover:translate-x-0.5 group-hover:text-brand-500" />
                         </Link>
                       ) : (
                         <div aria-disabled="true" className="flex min-h-[88px] items-center gap-4 rounded-2xl px-4 py-3 pr-14">
@@ -252,16 +252,16 @@ export function ApplicationHubPage() {
 
       <div className="flex shrink-0 items-center border-t border-gray-200 bg-white px-4 py-2">
         <div className="grid w-full max-w-sm grid-cols-2 rounded-xl bg-gray-100 p-1">
-          <button type="button" onClick={() => setTab("functions")} className={cn("rounded-lg px-4 py-2 text-sm font-semibold transition", tab === "functions" ? "bg-blue-600 text-white shadow-sm" : "text-gray-500 hover:text-gray-700")}>Chức năng</button>
+          <button type="button" onClick={() => setTab("functions")} className={cn("rounded-lg px-4 py-2 text-sm font-semibold transition", tab === "functions" ? "bg-brand-600 text-white shadow-sm" : "text-gray-500 hover:text-gray-700")}>Chức năng</button>
           <button
             type="button"
             onClick={() => setTab("bookmarks")}
             aria-label={`Đánh dấu, ${bookmarks.length} chức năng`}
-            className={cn("flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition", tab === "bookmarks" ? "bg-blue-600 text-white shadow-sm" : "text-gray-500 hover:text-gray-700")}
+            className={cn("flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition", tab === "bookmarks" ? "bg-brand-600 text-white shadow-sm" : "text-gray-500 hover:text-gray-700")}
           >
             Đánh dấu
             {bookmarks.length > 0 && (
-              <span className={cn("flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold", tab === "bookmarks" ? "bg-white/20 text-white" : "bg-blue-100 text-blue-600")}>
+              <span className={cn("flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold", tab === "bookmarks" ? "bg-white/20 text-white" : "bg-brand-100 text-brand-600")}>
                 {bookmarks.length}
               </span>
             )}

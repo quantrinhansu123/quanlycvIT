@@ -543,8 +543,8 @@ export function ProjectFormModal({ mode, project, members, onClose, onSaved }: P
               onChange={(event) => handleNameChange(event.target.value)}
               placeholder="VD: Hệ thống CRM bán hàng, Website công ty..."
               className={cn(
-                "h-10 w-full rounded-lg border px-3 text-sm outline-none focus:ring-2 focus:ring-blue-100",
-                errors.name ? "border-rose-400" : "border-gray-200 focus:border-blue-400"
+                "h-10 w-full rounded-lg border px-3 text-sm outline-none focus:ring-2 focus:ring-brand-100",
+                errors.name ? "border-rose-400" : "border-gray-200 focus:border-brand-400"
               )}
             />
             {errors.name && <p className="mt-1 text-xs text-rose-500">{errors.name}</p>}
@@ -564,8 +564,8 @@ export function ProjectFormModal({ mode, project, members, onClose, onSaved }: P
                 }}
                 placeholder="Tự động sinh từ tên..."
                 className={cn(
-                  "h-10 w-full rounded-lg border px-3 text-sm outline-none focus:ring-2 focus:ring-blue-100",
-                  errors.code ? "border-rose-400" : "border-gray-200 focus:border-blue-400"
+                  "h-10 w-full rounded-lg border px-3 text-sm outline-none focus:ring-2 focus:ring-brand-100",
+                  errors.code ? "border-rose-400" : "border-gray-200 focus:border-brand-400"
                 )}
               />
               {errors.code && <p className="mt-1 text-xs text-rose-500">{errors.code}</p>}
@@ -605,7 +605,7 @@ export function ProjectFormModal({ mode, project, members, onClose, onSaved }: P
                     type="checkbox"
                     checked={step.enabled}
                     onChange={() => toggleStep(step.key)}
-                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
                   />
                   {step.label}
                 </label>
@@ -626,7 +626,7 @@ export function ProjectFormModal({ mode, project, members, onClose, onSaved }: P
               placeholder="Chi tiết yêu cầu dự án..."
               rows={3}
               style={{ maxHeight: DESCRIPTION_MAX_HEIGHT }}
-              className="w-full resize-none overflow-y-auto rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              className="w-full resize-none overflow-y-auto rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
             />
           </div>
 
@@ -666,8 +666,8 @@ export function ProjectFormModal({ mode, project, members, onClose, onSaved }: P
                 value={form.startDate}
                 onChange={(event) => setForm((prev) => ({ ...prev, startDate: event.target.value }))}
                 className={cn(
-                  "h-10 w-full rounded-lg border px-3 text-sm outline-none focus:ring-2 focus:ring-blue-100",
-                  errors.startDate ? "border-rose-400" : "border-gray-200 focus:border-blue-400"
+                  "h-10 w-full rounded-lg border px-3 text-sm outline-none focus:ring-2 focus:ring-brand-100",
+                  errors.startDate ? "border-rose-400" : "border-gray-200 focus:border-brand-400"
                 )}
               />
               {errors.startDate && <p className="mt-1 text-xs text-rose-500">{errors.startDate}</p>}
@@ -681,8 +681,8 @@ export function ProjectFormModal({ mode, project, members, onClose, onSaved }: P
                 value={form.endDate}
                 onChange={(event) => setForm((prev) => ({ ...prev, endDate: event.target.value }))}
                 className={cn(
-                  "h-10 w-full rounded-lg border px-3 text-sm outline-none focus:ring-2 focus:ring-blue-100",
-                  errors.endDate ? "border-rose-400" : "border-gray-200 focus:border-blue-400"
+                  "h-10 w-full rounded-lg border px-3 text-sm outline-none focus:ring-2 focus:ring-brand-100",
+                  errors.endDate ? "border-rose-400" : "border-gray-200 focus:border-brand-400"
                 )}
               />
               {errors.endDate && <p className="mt-1 text-xs text-rose-500">{errors.endDate}</p>}
@@ -700,21 +700,21 @@ export function ProjectFormModal({ mode, project, members, onClose, onSaved }: P
                   errors.managerIds
                     ? "border-rose-400"
                     : managerPickerOpen
-                      ? "border-blue-400 ring-2 ring-blue-100"
+                      ? "border-brand-400 ring-2 ring-brand-100"
                       : "border-gray-200"
                 )}
               >
                 {selectedManagers.map((manager) => (
                   <span
                     key={manager.id}
-                    className="flex max-w-full items-center gap-1.5 rounded-md bg-blue-50 py-1 pl-1.5 pr-1 text-xs font-medium text-blue-700"
+                    className="flex max-w-full items-center gap-1.5 rounded-md bg-brand-50 py-1 pl-1.5 pr-1 text-xs font-medium text-brand-700"
                   >
                     <Avatar name={manager.name} color={manager.avatarColor} size="sm" />
                     <span className="truncate">{manager.name}</span>
                     <button
                       type="button"
                       onClick={() => toggleManager(manager.id)}
-                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-blue-400 hover:bg-blue-100 hover:text-blue-700"
+                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-brand-400 hover:bg-brand-100 hover:text-brand-700"
                       aria-label={`Bỏ chọn quản lý ${manager.name}`}
                     >
                       <X className="h-3 w-3" />
@@ -756,7 +756,7 @@ export function ProjectFormModal({ mode, project, members, onClose, onSaved }: P
                       onChange={(event) => setManagerSearch(event.target.value)}
                       placeholder="Nhập tên, chức vụ hoặc email..."
                       autoFocus
-                      className="h-9 w-full rounded-lg bg-gray-50 pl-9 pr-3 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
+                      className="h-9 w-full rounded-lg bg-gray-50 pl-9 pr-3 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:bg-white focus:ring-2 focus:ring-brand-100"
                     />
                   </div>
                   <div className="max-h-56 overflow-y-auto p-1.5" role="listbox" aria-multiselectable="true">
@@ -770,8 +770,8 @@ export function ProjectFormModal({ mode, project, members, onClose, onSaved }: P
                           aria-selected={selected}
                           onClick={() => toggleManager(manager.id)}
                           className={cn(
-                            "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-gray-50",
-                            selected && "bg-blue-50 hover:bg-blue-50"
+                            "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-brand-50",
+                            selected && "bg-brand-50 hover:bg-brand-50"
                           )}
                         >
                           <Avatar name={manager.name} color={manager.avatarColor} size="sm" />
@@ -787,7 +787,7 @@ export function ProjectFormModal({ mode, project, members, onClose, onSaved }: P
                             className={cn(
                               "flex h-5 w-5 shrink-0 items-center justify-center rounded border",
                               selected
-                                ? "border-blue-600 bg-blue-600 text-white"
+                                ? "border-brand-600 bg-brand-600 text-white"
                                 : "border-gray-300 text-transparent"
                             )}
                           >
@@ -818,7 +818,7 @@ export function ProjectFormModal({ mode, project, members, onClose, onSaved }: P
                 className={cn(
                   "flex min-h-10 flex-wrap items-center gap-1.5 rounded-lg border bg-white p-1.5 transition-shadow",
                   memberPickerOpen
-                    ? "border-blue-400 ring-2 ring-blue-100"
+                    ? "border-brand-400 ring-2 ring-brand-100"
                     : "border-gray-200"
                 )}
               >
@@ -874,7 +874,7 @@ export function ProjectFormModal({ mode, project, members, onClose, onSaved }: P
                       onChange={(event) => setMemberSearch(event.target.value)}
                       placeholder="Nhập tên, chức vụ hoặc email..."
                       autoFocus
-                      className="h-9 w-full rounded-lg bg-gray-50 pl-9 pr-3 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
+                      className="h-9 w-full rounded-lg bg-gray-50 pl-9 pr-3 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:bg-white focus:ring-2 focus:ring-brand-100"
                     />
                   </div>
                   <div className="max-h-56 overflow-y-auto p-1.5" role="listbox" aria-multiselectable="true">
@@ -888,8 +888,8 @@ export function ProjectFormModal({ mode, project, members, onClose, onSaved }: P
                           aria-selected={selected}
                           onClick={() => toggleMember(member.id)}
                           className={cn(
-                            "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-gray-50",
-                            selected && "bg-blue-50 hover:bg-blue-50"
+                            "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-brand-50",
+                            selected && "bg-brand-50 hover:bg-brand-50"
                           )}
                         >
                           <Avatar name={member.name} color={member.avatarColor} size="sm" />
@@ -905,7 +905,7 @@ export function ProjectFormModal({ mode, project, members, onClose, onSaved }: P
                             className={cn(
                               "flex h-5 w-5 shrink-0 items-center justify-center rounded border",
                               selected
-                                ? "border-blue-600 bg-blue-600 text-white"
+                                ? "border-brand-600 bg-brand-600 text-white"
                                 : "border-gray-300 text-transparent"
                             )}
                           >

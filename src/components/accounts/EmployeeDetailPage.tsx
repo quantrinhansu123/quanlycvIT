@@ -115,7 +115,7 @@ export function EmployeeDetailPage({ employeeId }: { employeeId: string }) {
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center text-gray-500">
-        <LoaderCircle className="mr-2 h-5 w-5 animate-spin text-blue-600" />
+        <LoaderCircle className="mr-2 h-5 w-5 animate-spin text-brand-600" />
         Đang tải hồ sơ...
       </div>
     );
@@ -140,7 +140,7 @@ export function EmployeeDetailPage({ employeeId }: { employeeId: string }) {
           <button
             type="button"
             onClick={() => router.push("/nhan-vien")}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-500 transition hover:bg-gray-50 hover:text-blue-600"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-500 transition hover:bg-gray-50 hover:text-brand-600"
             aria-label="Quay lại danh sách nhân viên"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -158,9 +158,9 @@ export function EmployeeDetailPage({ employeeId }: { employeeId: string }) {
 
       <main className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6">
         {tab === "information" && (
-          <section className="overflow-hidden rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-white px-6 py-5 shadow-sm">
+          <section className="overflow-hidden rounded-2xl border border-brand-100 bg-gradient-to-r from-brand-50 via-white to-white px-6 py-5 shadow-sm">
             <div className="flex flex-col items-start gap-5 sm:flex-row sm:items-center">
-              <div className="rounded-full bg-white p-1 shadow-sm ring-2 ring-blue-200">
+              <div className="rounded-full bg-white p-1 shadow-sm ring-2 ring-brand-200">
                 {account.avatarUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={account.avatarUrl} alt={account.name} className="h-20 w-20 rounded-full object-cover" />
@@ -226,7 +226,7 @@ export function EmployeeDetailPage({ employeeId }: { employeeId: string }) {
         ) : (
           <section className="mx-auto max-w-xl rounded-2xl border border-gray-200 bg-white p-7 shadow-sm">
             <div className="flex items-center gap-3">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
                 <LockKeyhole className="h-5 w-5" />
               </span>
               <div>
@@ -289,7 +289,7 @@ function Badge({ children, icon: Icon, tone }: { children: React.ReactNode; icon
   return (
     <span className={cn(
       "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium",
-      tone === "primary" && "border-blue-600 bg-blue-600 text-white",
+      tone === "primary" && "border-brand-600 bg-brand-600 text-white",
       tone === "success" && "border-emerald-200 bg-emerald-50 text-emerald-700",
       tone === "muted" && "border-gray-200 bg-white text-gray-700"
     )}>
@@ -352,7 +352,7 @@ function PasswordField({
           placeholder={placeholder}
           minLength={autoComplete === "new-password" ? 6 : undefined}
           required
-          className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3.5 pr-11 text-sm font-medium text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+          className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3.5 pr-11 text-sm font-medium text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
         />
         <button
           type="button"
@@ -374,7 +374,7 @@ function BottomTab({ active, onClick, icon: Icon, children }: { active: boolean;
       onClick={onClick}
       className={cn(
         "flex h-9 flex-1 items-center justify-center gap-2 rounded-lg text-sm font-medium transition",
-        active ? "bg-blue-600 text-white shadow-sm" : "text-gray-500 hover:bg-white hover:text-gray-800"
+        active ? "bg-brand-600 text-white shadow-sm" : "text-gray-500 hover:bg-white hover:text-gray-800"
       )}
     >
       <Icon className="h-4 w-4" /> {children}

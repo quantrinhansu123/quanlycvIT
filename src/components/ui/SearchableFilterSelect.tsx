@@ -74,8 +74,8 @@ export function SearchableFilterSelect({
         type="button"
         onClick={() => setOpen((prev) => !prev)}
         className={cn(
-          "flex h-9 w-full items-center justify-between gap-1.5 whitespace-nowrap rounded-lg border bg-white px-2.5 text-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100",
-          value ? "border-blue-300 text-blue-600" : "border-gray-200 text-gray-600"
+          "flex h-9 w-full items-center justify-between gap-1.5 whitespace-nowrap rounded-lg border bg-white px-2.5 text-xs outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100",
+          value ? "border-brand-300 text-brand-600" : "border-gray-200 text-gray-600"
         )}
         aria-expanded={open}
         aria-haspopup="listbox"
@@ -89,7 +89,7 @@ export function SearchableFilterSelect({
               event.stopPropagation();
               onChange("");
             }}
-            className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-blue-400 hover:bg-blue-100 hover:text-blue-700"
+            className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-brand-400 hover:bg-brand-100 hover:text-brand-700"
             aria-label="Bỏ lọc"
           >
             <X className="h-3 w-3" />
@@ -111,7 +111,7 @@ export function SearchableFilterSelect({
               onChange={(event) => setSearch(event.target.value)}
               placeholder={searchPlaceholder}
               autoFocus
-              className="h-9 w-full rounded-lg bg-gray-50 pl-9 pr-3 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
+              className="h-9 w-full rounded-lg bg-gray-50 pl-9 pr-3 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:bg-white focus:ring-2 focus:ring-brand-100"
             />
           </div>
           <div className="max-h-56 overflow-y-auto p-1.5" role="listbox">
@@ -125,8 +125,8 @@ export function SearchableFilterSelect({
                   aria-selected={isSelected}
                   onClick={() => select(option.value)}
                   className={cn(
-                    "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-gray-50",
-                    isSelected && "bg-blue-50 hover:bg-blue-50"
+                    "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-brand-50",
+                    isSelected && "bg-brand-50 hover:bg-brand-50"
                   )}
                 >
                   <span className="min-w-0 flex-1">
@@ -135,7 +135,7 @@ export function SearchableFilterSelect({
                       <span className="block truncate text-xs text-gray-400">{option.sublabel}</span>
                     )}
                   </span>
-                  {isSelected && <Check className="h-4 w-4 shrink-0 text-blue-600" />}
+                  {isSelected && <Check className="h-4 w-4 shrink-0 text-brand-600" />}
                 </button>
               );
             })}

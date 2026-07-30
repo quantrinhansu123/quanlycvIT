@@ -41,7 +41,7 @@ export function SubtaskCard({ subtask, workTask, assignee, onOpen, onViewReports
       </div>
 
       <button type="button" onClick={() => onOpen(subtask)} className="text-left">
-        <p className="line-clamp-1 text-sm font-semibold text-gray-800 hover:text-blue-600">{subtask.title}</p>
+        <p className="line-clamp-1 text-sm font-semibold text-gray-800 hover:text-brand-600">{subtask.title}</p>
         {subtask.description && <p className="mt-1 line-clamp-2 text-xs text-gray-400">{subtask.description}</p>}
       </button>
 

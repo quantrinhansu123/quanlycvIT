@@ -130,7 +130,7 @@ function DashboardFilter({
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-10 w-full cursor-pointer appearance-none truncate rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-9 text-xs font-semibold text-slate-700 shadow-sm outline-none transition hover:border-blue-300 hover:shadow-md focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+        className="h-10 w-full cursor-pointer appearance-none truncate rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-9 text-xs font-semibold text-slate-700 shadow-sm outline-none transition hover:border-brand-300 hover:shadow-md focus:border-brand-400 focus:ring-4 focus:ring-brand-100"
       >
         <option value="">{label}</option>
         {options.map((option) => (
@@ -139,7 +139,7 @@ function DashboardFilter({
           </option>
         ))}
       </select>
-      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 transition group-hover:text-blue-500" />
+      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 transition group-hover:text-brand-500" />
     </label>
   );
 }
@@ -163,7 +163,7 @@ function KpiCard({
     slate: "bg-slate-100 text-slate-600 group-hover:bg-slate-700 group-hover:text-white",
     emerald: "bg-emerald-50 text-emerald-600 group-hover:bg-emerald-500 group-hover:text-white",
     amber: "bg-amber-50 text-amber-600 group-hover:bg-amber-500 group-hover:text-white",
-    blue: "bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white",
+    blue: "bg-brand-50 text-brand-600 group-hover:bg-brand-600 group-hover:text-white",
     rose: "bg-rose-50 text-rose-600 group-hover:bg-rose-500 group-hover:text-white",
   };
 
@@ -171,9 +171,9 @@ function KpiCard({
     <button
       type="button"
       onClick={onClick}
-      className="group relative min-h-[138px] overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition duration-300 hover:-translate-y-1 hover:border-blue-200 hover:shadow-lg focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-100"
+      className="group relative min-h-[138px] overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition duration-300 hover:-translate-y-1 hover:border-brand-200 hover:shadow-lg focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-100"
     >
-      <span className="absolute inset-x-0 bottom-0 h-1 origin-left scale-x-0 bg-gradient-to-r from-blue-500 to-violet-500 transition-transform duration-300 group-hover:scale-x-100" />
+      <span className="absolute inset-x-0 bottom-0 h-1 origin-left scale-x-0 bg-gradient-to-r from-brand-500 to-violet-500 transition-transform duration-300 group-hover:scale-x-100" />
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{title}</p>
@@ -217,7 +217,7 @@ function DashboardPanel({
     >
       <header className="border-b border-slate-100 px-5 py-4">
         <div className="flex items-center gap-2">
-          <Icon className="h-4 w-4 text-blue-600" />
+          <Icon className="h-4 w-4 text-brand-600" />
           <h2 className="text-sm font-bold text-slate-950">{title}</h2>
         </div>
         <p className="mt-1 text-xs font-medium text-slate-500">{description}</p>
@@ -502,8 +502,8 @@ function WorkloadChart({
       )}
 
       <div className="flex justify-center gap-5">
-        <span className="flex items-center gap-1.5 text-[11px] font-semibold text-blue-600">
-          <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />
+        <span className="flex items-center gap-1.5 text-[11px] font-semibold text-brand-600">
+          <span className="h-2.5 w-2.5 rounded-full bg-brand-500" />
           Tổng việc
         </span>
         <span className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-600">
@@ -616,7 +616,7 @@ function BurndownChart({ tasks, timeline }: { tasks: WorkTask[]; timeline: Timel
           <p className="mt-2 flex justify-between gap-5 text-slate-500">
             Lý tưởng <strong className="text-slate-900">{ideal[hoveredIndex].toFixed(1)}</strong>
           </p>
-          <p className="mt-1 flex justify-between gap-5 text-blue-600">
+          <p className="mt-1 flex justify-between gap-5 text-brand-600">
             Thực tế <strong>{actual[hoveredIndex]}</strong>
           </p>
         </div>
@@ -627,8 +627,8 @@ function BurndownChart({ tasks, timeline }: { tasks: WorkTask[]; timeline: Timel
           <span className="h-2.5 w-2.5 rounded-full bg-slate-400" />
           Lý tưởng
         </span>
-        <span className="flex items-center gap-1.5 text-[11px] font-semibold text-blue-600">
-          <span className="h-2.5 w-2.5 rounded-full bg-blue-600" />
+        <span className="flex items-center gap-1.5 text-[11px] font-semibold text-brand-600">
+          <span className="h-2.5 w-2.5 rounded-full bg-brand-600" />
           Thực tế
         </span>
       </div>
@@ -828,7 +828,7 @@ export function PerformanceDashboard() {
           <button
             type="button"
             onClick={() => void loadData()}
-            className="mt-5 inline-flex h-10 items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-100"
+            className="mt-5 inline-flex h-10 items-center gap-2 rounded-xl bg-brand-600 px-4 text-sm font-semibold text-white transition hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-100"
           >
             <RefreshCw className="h-4 w-4" />
             Tải lại
@@ -968,11 +968,11 @@ export function PerformanceDashboard() {
                       key={item.member.id}
                       type="button"
                       onClick={() => router.push(`/nhan-vien/${item.member.id}`)}
-                      className="group flex w-full items-center gap-3 rounded-xl border border-slate-200 px-3 py-3 text-left transition duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:bg-blue-50/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-100"
+                      className="group flex w-full items-center gap-3 rounded-xl border border-slate-200 px-3 py-3 text-left transition duration-200 hover:-translate-y-0.5 hover:border-brand-200 hover:bg-brand-50/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-100"
                     >
                       <Avatar name={item.member.name} color={item.member.avatarColor} size="md" />
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-bold text-slate-900 group-hover:text-blue-700">
+                        <span className="block truncate text-sm font-bold text-slate-900 group-hover:text-brand-700">
                           {item.member.name}
                         </span>
                         <span className="mt-0.5 block truncate text-[11px] font-medium text-slate-500">
@@ -1014,13 +1014,13 @@ export function PerformanceDashboard() {
                       key={project.id}
                       type="button"
                       onClick={() => router.push(`/quan-ly-cong-viec/danh-sach-du-an/${project.id}`)}
-                      className="group w-full rounded-xl border border-slate-200 p-3 text-left transition duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:bg-slate-50 hover:shadow-md focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-100"
+                      className="group w-full rounded-xl border border-slate-200 p-3 text-left transition duration-200 hover:-translate-y-0.5 hover:border-brand-200 hover:bg-slate-50 hover:shadow-md focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-100"
                     >
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold text-slate-600">
                           {project.code}
                         </span>
-                        <span className="min-w-0 flex-1 truncate text-sm font-bold text-slate-950 group-hover:text-blue-700">
+                        <span className="min-w-0 flex-1 truncate text-sm font-bold text-slate-950 group-hover:text-brand-700">
                           {project.name}
                         </span>
                         <span
@@ -1042,9 +1042,9 @@ export function PerformanceDashboard() {
                         <span className={overdue > 0 ? "text-rose-600" : ""}>{overdue} trễ</span>
                       </div>
                       <div className="mt-3 flex items-center gap-3">
-                        <div className="h-2 flex-1 overflow-hidden rounded-full bg-blue-100">
+                        <div className="h-2 flex-1 overflow-hidden rounded-full bg-brand-100">
                           <div
-                            className="h-full rounded-full bg-gradient-to-r from-blue-600 to-cyan-400 transition-all duration-700 group-hover:from-violet-600 group-hover:to-blue-500"
+                            className="h-full rounded-full bg-gradient-to-r from-brand-600 to-cyan-400 transition-all duration-700 group-hover:from-violet-600 group-hover:to-brand-500"
                             style={{ width: `${progress}%` }}
                           />
                         </div>
@@ -1067,21 +1067,21 @@ export function PerformanceDashboard() {
                     key={item.status}
                     type="button"
                     onClick={() => router.push("/quan-ly-cong-viec/danh-sach-cong-viec")}
-                    className="group flex w-full items-center gap-3 rounded-xl border border-slate-200 px-3 py-3 text-left transition duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:bg-blue-50/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-100"
+                    className="group flex w-full items-center gap-3 rounded-xl border border-slate-200 px-3 py-3 text-left transition duration-200 hover:-translate-y-0.5 hover:border-brand-200 hover:bg-brand-50/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-100"
                   >
                     <span
                       className="h-9 w-1.5 rounded-full transition group-hover:scale-y-110"
                       style={{ backgroundColor: STATUS_COLORS[item.status] }}
                     />
                     <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-bold text-slate-900 group-hover:text-blue-700">
+                      <span className="block text-sm font-bold text-slate-900 group-hover:text-brand-700">
                         {TASK_STATUS_META[item.status].label}
                       </span>
                       <span className="mt-0.5 block text-[11px] font-medium text-slate-500">
                         {item.averageAge} ngày tuổi trung bình
                       </span>
                     </span>
-                    <span className="flex h-7 min-w-7 items-center justify-center rounded-full bg-slate-100 px-2 text-xs font-bold text-blue-600 transition group-hover:bg-blue-600 group-hover:text-white">
+                    <span className="flex h-7 min-w-7 items-center justify-center rounded-full bg-slate-100 px-2 text-xs font-bold text-brand-600 transition group-hover:bg-brand-600 group-hover:text-white">
                       {item.count}
                     </span>
                   </button>

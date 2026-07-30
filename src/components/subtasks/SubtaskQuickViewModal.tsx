@@ -126,7 +126,7 @@ export function SubtaskQuickViewModal({
                   router.push(`/quan-ly-cong-viec/danh-sach-task/${subtask.id}`)
                 }
                 title="Mở trang đầy đủ"
-                className="mt-3 block max-w-full truncate text-left text-2xl font-bold text-gray-900 hover:text-blue-600"
+                className="mt-3 block max-w-full truncate text-left text-2xl font-bold text-gray-900 hover:text-brand-600"
               >
                 {subtask.title}
               </button>
@@ -180,11 +180,11 @@ export function SubtaskQuickViewModal({
                 <div className="rounded-xl border border-gray-200 px-4 py-3.5">
                   <div className="mb-2.5 flex items-center justify-between">
                     <p className="text-sm font-semibold text-gray-700">Tiến độ thực tế</p>
-                    <span className="text-sm font-bold text-blue-600">{progress}%</span>
+                    <span className="text-sm font-bold text-brand-600">{progress}%</span>
                   </div>
                   <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
                     <div
-                      className="h-full rounded-full bg-blue-600 transition-all"
+                      className="h-full rounded-full bg-brand-600 transition-all"
                       style={{ width: `${progress}%` }}
                     />
                   </div>
@@ -193,7 +193,7 @@ export function SubtaskQuickViewModal({
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <InfoCard
                     icon={CalendarDays}
-                    iconClassName="bg-blue-50 text-blue-500"
+                    iconClassName="bg-brand-50 text-brand-500"
                     label="Ngày bắt đầu"
                     value={formatDateVN(subtask.startDate)}
                   />

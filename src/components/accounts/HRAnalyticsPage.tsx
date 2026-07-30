@@ -54,7 +54,7 @@ function SelectFilter({ label, value, onChange, children }: {
     <label className="relative min-w-0 sm:min-w-48">
       <span className="sr-only">{label}</span>
       <select value={value} onChange={(e) => onChange(e.target.value)}
-        className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-3 pr-9 text-sm font-medium text-slate-700 shadow-sm outline-none transition hover:border-blue-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-100">
+        className="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-3 pr-9 text-sm font-medium text-slate-700 shadow-sm outline-none transition hover:border-brand-300 focus:border-brand-500 focus:ring-4 focus:ring-brand-100">
         {children}
       </select>
       <ChevronDown className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-slate-400" />
@@ -70,7 +70,7 @@ function Panel({ title, subtitle, icon: Icon, children, className = "" }: {
     <section className={`overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm ${className}`}>
       <header className="border-b border-slate-100 px-5 py-4">
         <div className="flex items-center gap-2">
-          <Icon className="h-5 w-5 text-blue-600" />
+          <Icon className="h-5 w-5 text-brand-600" />
           <h2 className="font-semibold text-slate-950">{title}</h2>
         </div>
         <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
@@ -85,14 +85,14 @@ function StatCard({ label, value, note, icon: Icon, tone, onClick }: {
   tone: "blue" | "emerald" | "violet" | "amber" | "rose"; onClick?: () => void;
 }) {
   const styles = {
-    blue: "bg-blue-50 text-blue-600", emerald: "bg-emerald-50 text-emerald-600",
+    blue: "bg-brand-50 text-brand-600", emerald: "bg-emerald-50 text-emerald-600",
     violet: "bg-violet-50 text-violet-600", amber: "bg-amber-50 text-amber-600",
     rose: "bg-rose-50 text-rose-600",
   };
   const Tag = onClick ? "button" : "div";
   return (
     <Tag type={onClick ? "button" : undefined} onClick={onClick}
-      className="group min-w-0 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md">
+      className="group min-w-0 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-md">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
@@ -241,7 +241,7 @@ export function HRAnalyticsPage() {
         <AlertCircle className="mx-auto h-10 w-10 text-rose-500" />
         <h1 className="mt-4 text-lg font-semibold text-slate-950">Dữ liệu chưa sẵn sàng</h1>
         <p className="mt-2 text-sm text-slate-500">{error}</p>
-        <button type="button" onClick={() => void load()} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+        <button type="button" onClick={() => void load()} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700">
           <RefreshCw className="h-4 w-4" /> Thử lại
         </button>
       </div>
@@ -269,15 +269,15 @@ export function HRAnalyticsPage() {
       </div>
 
       <div className="mx-auto max-w-[1600px] space-y-4 p-4 sm:p-6">
-        <details className="group rounded-2xl border border-blue-100 bg-blue-50/70 shadow-sm open:bg-white">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-blue-700 outline-none transition hover:text-blue-900 focus-visible:ring-2 focus-visible:ring-blue-500 sm:px-5">
+        <details className="group rounded-2xl border border-brand-100 bg-brand-50/70 shadow-sm open:bg-white">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-brand-700 outline-none transition hover:text-brand-900 focus-visible:ring-2 focus-visible:ring-brand-500 sm:px-5">
             <span className="flex items-center gap-2">
               <Info className="h-4 w-4" />
               Cách tính số liệu trên trang
             </span>
             <ChevronDown className="h-4 w-4 transition-transform duration-200 group-open:rotate-180" />
           </summary>
-          <div className="grid gap-3 border-t border-blue-100 px-4 py-4 text-sm text-slate-600 sm:grid-cols-2 sm:px-5 xl:grid-cols-3">
+          <div className="grid gap-3 border-t border-brand-100 px-4 py-4 text-sm text-slate-600 sm:grid-cols-2 sm:px-5 xl:grid-cols-3">
             <div className="rounded-xl bg-slate-50 p-3">
               <strong className="block text-slate-900">Nhân sự mới</strong>
               <span>Tính theo ngày vào làm. Nếu chưa có ngày vào làm, hệ thống dùng ngày tạo hồ sơ.</span>
@@ -305,9 +305,9 @@ export function HRAnalyticsPage() {
           </div>
         </details>
 
-        {hasFilters && <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50 px-4 py-2 text-sm text-blue-700">
+        {hasFilters && <div className="flex items-center justify-between rounded-xl border border-brand-100 bg-brand-50 px-4 py-2 text-sm text-brand-700">
           <span>Đang hiển thị {filtered.length}/{accounts.length} nhân sự theo bộ lọc.</span>
-          <button type="button" onClick={() => { setDepartment(""); setStatus(""); setRole(""); }} className="inline-flex items-center gap-1.5 font-semibold hover:text-blue-900"><FilterX className="h-4 w-4" /> Xóa lọc</button>
+          <button type="button" onClick={() => { setDepartment(""); setStatus(""); setRole(""); }} className="inline-flex items-center gap-1.5 font-semibold hover:text-brand-900"><FilterX className="h-4 w-4" /> Xóa lọc</button>
         </div>}
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
@@ -329,7 +329,7 @@ export function HRAnalyticsPage() {
                     : index === deptStats.length - 1
                       ? "right-0"
                       : "left-1/2 -translate-x-1/2";
-                  return <button key={x.id} type="button" onClick={() => setDepartment(x.id)} className="group relative flex h-full min-w-0 flex-1 flex-col items-center justify-end focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500" aria-label={`Lọc theo ${x.name}: ${x.active} hoạt động, ${x.inactive} tạm nghỉ`}>
+                  return <button key={x.id} type="button" onClick={() => setDepartment(x.id)} className="group relative flex h-full min-w-0 flex-1 flex-col items-center justify-end focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500" aria-label={`Lọc theo ${x.name}: ${x.active} hoạt động, ${x.inactive} tạm nghỉ`}>
                     <div className="relative flex w-full max-w-36 flex-col justify-end overflow-hidden rounded-t-lg shadow-sm transition group-hover:-translate-y-1 group-hover:shadow-md" style={{ height: `${Math.max(12, x.people.length / max * 82)}%` }}>
                       {x.inactive > 0 && <div className="bg-amber-400" style={{ height: `${x.inactive / x.people.length * 100}%` }} />}
                       <div className="bg-emerald-500" style={{ height: `${x.active / x.people.length * 100}%` }} />
@@ -348,14 +348,14 @@ export function HRAnalyticsPage() {
 
           <Panel title="Trạng thái & vai trò" subtitle="Tỉ trọng nhân sự theo vai trò vận hành" icon={BadgeCheck}>
             <div className="p-5">
-              <div tabIndex={0} className="group relative mx-auto h-44 w-44 rounded-full transition-transform duration-500 hover:rotate-3 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-100" style={{ background: roles.length ? `conic-gradient(${donut})` : "#e2e8f0" }} aria-label={`Cơ cấu vai trò: ${roles.map((x) => `${x.label} ${x.value}`).join(", ")}`}>
+              <div tabIndex={0} className="group relative mx-auto h-44 w-44 rounded-full transition-transform duration-500 hover:rotate-3 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-100" style={{ background: roles.length ? `conic-gradient(${donut})` : "#e2e8f0" }} aria-label={`Cơ cấu vai trò: ${roles.map((x) => `${x.label} ${x.value}`).join(", ")}`}>
                 <div className="absolute inset-7 flex flex-col items-center justify-center rounded-full bg-white shadow-inner"><span className="text-3xl font-bold text-slate-950">{filtered.length}</span><span className="text-xs text-slate-500">nhân sự</span></div>
                 <ChartTip className="bottom-4 left-1/2 -translate-x-1/2">
                   {roles.map((x) => <span key={x.key} className="block">{x.label}: {x.value} ({Math.round(x.value / roleTotal * 100)}%)</span>)}
                 </ChartTip>
               </div>
               <div className="mt-6 grid gap-2 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
-                {roles.map((x) => <button key={x.key} type="button" onClick={() => setRole(x.key)} className="rounded-xl border border-slate-200 p-3 text-left transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-sm">
+                {roles.map((x) => <button key={x.key} type="button" onClick={() => setRole(x.key)} className="rounded-xl border border-slate-200 p-3 text-left transition hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-sm">
                   <span className="flex items-center gap-2 text-xs text-slate-500"><i className="h-2.5 w-2.5 rounded-full" style={{ background: ROLE_COLOR[x.key] }} />{x.label}</span><strong className="mt-1 block text-xl text-slate-950">{x.value}</strong><span className="text-xs text-slate-500">{Math.round(x.value / roleTotal * 100)}% tổng số</span>
                 </button>)}
               </div>
@@ -369,8 +369,8 @@ export function HRAnalyticsPage() {
               <div className="relative h-64 border-b border-l border-dashed border-slate-200">
                 {[0, 25, 50, 75, 100].map((n) => <i key={n} className="absolute left-0 right-0 border-t border-dashed border-slate-100" style={{ bottom: `${n}%` }} />)}
                 <div className="absolute inset-0 flex items-end justify-around gap-2 px-2">
-                  {months.map((x, index) => <div key={x.key} tabIndex={0} className="group relative flex h-full flex-1 items-end justify-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500" aria-label={`${x.label}: ${x.joined} tuyển mới, ${x.retained} còn hoạt động`}>
-                    <div className="w-3 rounded-t bg-blue-600 transition group-hover:bg-blue-700 sm:w-5" style={{ height: `${Math.max(x.joined ? 6 : 1, x.joined / hireMax * 82)}%` }} />
+                  {months.map((x, index) => <div key={x.key} tabIndex={0} className="group relative flex h-full flex-1 items-end justify-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500" aria-label={`${x.label}: ${x.joined} tuyển mới, ${x.retained} còn hoạt động`}>
+                    <div className="w-3 rounded-t bg-brand-600 transition group-hover:bg-brand-700 sm:w-5" style={{ height: `${Math.max(x.joined ? 6 : 1, x.joined / hireMax * 82)}%` }} />
                     <div className="w-3 rounded-t bg-emerald-500 transition group-hover:bg-emerald-600 sm:w-5" style={{ height: `${Math.max(x.retained ? 6 : 1, x.retained / hireMax * 82)}%` }} />
                     <ChartTip className={`bottom-7 ${index === 0 ? "left-0" : index === months.length - 1 ? "right-0" : "left-1/2 -translate-x-1/2"}`}>
                       <strong className="block">{x.label}</strong>{x.joined} tuyển mới · {x.retained} còn hoạt động
@@ -379,15 +379,15 @@ export function HRAnalyticsPage() {
                   </div>)}
                 </div>
               </div>
-              <div className="mt-10 flex justify-center gap-5 text-xs text-slate-500"><span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full bg-blue-600" />Tuyển mới</span><span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full bg-emerald-500" />Còn hoạt động</span></div>
+              <div className="mt-10 flex justify-center gap-5 text-xs text-slate-500"><span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full bg-brand-600" />Tuyển mới</span><span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full bg-emerald-500" />Còn hoạt động</span></div>
             </div>
           </Panel>
 
           <Panel title="Mức phủ thông tin" subtitle="Các trường hồ sơ cần HR theo dõi định kỳ" icon={BadgeCheck}>
             <div className="space-y-5 p-5">{coverage.map((x) => <div key={x.key}>
               <div className="mb-2 flex items-center justify-between text-sm"><span className="text-slate-600">{x.label}</span><span className="font-semibold text-slate-950">{x.percent}%</span></div>
-              <div tabIndex={0} className="group relative flex items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500" aria-label={`${x.label}: ${x.count} trên ${filtered.length}, đạt ${x.percent}%`}>
-                <div className="h-2 flex-1 overflow-hidden rounded-full bg-blue-100"><div className="h-full rounded-full bg-blue-600 transition-all duration-700" style={{ width: `${x.percent}%` }} /></div><span className="w-12 text-right text-xs text-slate-500">{x.count}/{filtered.length}</span>
+              <div tabIndex={0} className="group relative flex items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500" aria-label={`${x.label}: ${x.count} trên ${filtered.length}, đạt ${x.percent}%`}>
+                <div className="h-2 flex-1 overflow-hidden rounded-full bg-brand-100"><div className="h-full rounded-full bg-brand-600 transition-all duration-700" style={{ width: `${x.percent}%` }} /></div><span className="w-12 text-right text-xs text-slate-500">{x.count}/{filtered.length}</span>
                 <ChartTip className="right-0 top-4">{x.label}: {x.count}/{filtered.length} hồ sơ · {x.percent}%</ChartTip>
               </div>
             </div>)}</div>
@@ -396,25 +396,25 @@ export function HRAnalyticsPage() {
 
         <div className="grid gap-4 lg:grid-cols-3">
           <Panel title="Sinh nhật 30 ngày" subtitle="Nhân sự có ngày sinh sắp tới" icon={CalendarDays}>
-            <div className="p-4">{birthdays.length ? <div className="space-y-2">{birthdays.map(({ item, days }) => <Link key={item.id} href={`/nhan-vien/${item.id}`} className="flex items-center gap-3 rounded-xl border border-slate-100 p-3 transition hover:border-blue-200 hover:bg-blue-50/50">
+            <div className="p-4">{birthdays.length ? <div className="space-y-2">{birthdays.map(({ item, days }) => <Link key={item.id} href={`/nhan-vien/${item.id}`} className="flex items-center gap-3 rounded-xl border border-slate-100 p-3 transition hover:border-brand-200 hover:bg-brand-50/50">
               <Avatar name={item.name} color={avatarColor(item.name)} /><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-900">{item.name}</p><p className="text-xs text-slate-500">{days === 0 ? "Hôm nay" : `Còn ${days} ngày`}</p></div>
             </Link>)}</div> : <Empty>Không có sinh nhật sắp tới.</Empty>}</div>
           </Panel>
           <Panel title="Mốc thử việc" subtitle="Nhân sự đang hoạt động và làm việc dưới 3 tháng" icon={UserCheck}>
-            <div className="p-4">{probation.length ? <div className="space-y-2">{probation.map((item) => <Link key={item.id} href={`/nhan-vien/${item.id}`} className="flex items-center gap-3 rounded-xl border border-slate-100 p-3 transition hover:border-blue-200 hover:bg-blue-50/50">
+            <div className="p-4">{probation.length ? <div className="space-y-2">{probation.map((item) => <Link key={item.id} href={`/nhan-vien/${item.id}`} className="flex items-center gap-3 rounded-xl border border-slate-100 p-3 transition hover:border-brand-200 hover:bg-brand-50/50">
               <Avatar name={item.name} color={avatarColor(item.name)} /><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-900">{item.name}</p><p className="text-xs text-slate-500">Đã làm việc {tenure(monthsAtCompany(item.startDate))}</p></div>
             </Link>)}</div> : <Empty>Không có mốc thử việc gần hạn.</Empty>}</div>
           </Panel>
           <Panel title="Hồ sơ cần bổ sung" subtitle="Ưu tiên nhân sự thiếu nhiều trường dữ liệu" icon={ContactRound}>
-            <div className="max-h-80 space-y-2 overflow-y-auto p-4">{missingPeople.length ? missingPeople.slice(0, 6).map(({ item, fields }) => <Link key={item.id} href={`/nhan-vien/${item.id}`} className="flex items-start gap-3 rounded-xl border border-slate-200 p-3 transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-sm">
-              <Avatar name={item.name} color={avatarColor(item.name)} /><div className="min-w-0 flex-1"><div className="flex justify-between gap-2"><p className="truncate text-sm font-semibold text-slate-950">{item.name}</p><span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] text-blue-600">{fields.length} thiếu</span></div><p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{fields.join(", ")}</p></div>
+            <div className="max-h-80 space-y-2 overflow-y-auto p-4">{missingPeople.length ? missingPeople.slice(0, 6).map(({ item, fields }) => <Link key={item.id} href={`/nhan-vien/${item.id}`} className="flex items-start gap-3 rounded-xl border border-slate-200 p-3 transition hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-sm">
+              <Avatar name={item.name} color={avatarColor(item.name)} /><div className="min-w-0 flex-1"><div className="flex justify-between gap-2"><p className="truncate text-sm font-semibold text-slate-950">{item.name}</p><span className="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-[11px] text-brand-600">{fields.length} thiếu</span></div><p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{fields.join(", ")}</p></div>
             </Link>) : <Empty>Tất cả hồ sơ đã đầy đủ.</Empty>}</div>
           </Panel>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-3">
           <Panel title="Top chức vụ" subtitle="Nhóm chức vụ có nhiều nhân sự nhất" icon={BriefcaseBusiness} className="lg:col-span-2">
-            <div className="space-y-4 p-5">{positionStats.length ? positionStats.map((x, i) => <div key={x.position} tabIndex={0} className="group relative grid grid-cols-[minmax(90px,160px)_1fr_32px] items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500" aria-label={`${x.position}: ${x.count} nhân sự`}>
+            <div className="space-y-4 p-5">{positionStats.length ? positionStats.map((x, i) => <div key={x.position} tabIndex={0} className="group relative grid grid-cols-[minmax(90px,160px)_1fr_32px] items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500" aria-label={`${x.position}: ${x.count} nhân sự`}>
               <span className="truncate text-sm font-medium text-slate-600" title={x.position}>{x.position}</span><div className="h-10 overflow-hidden rounded-r-lg bg-slate-50"><div className="h-full rounded-r-lg transition-all duration-700 group-hover:brightness-95" style={{ width: `${Math.max(8, x.count / positionMax * 100)}%`, background: COLORS[i % COLORS.length] }} /></div><strong className="text-right text-sm">{x.count}</strong>
               <ChartTip className="right-10 top-1/2 -translate-y-1/2">{x.position}: {x.count} nhân sự</ChartTip>
             </div>) : <Empty>Chưa có dữ liệu chức vụ.</Empty>}</div>
@@ -423,10 +423,10 @@ export function HRAnalyticsPage() {
             <div className="max-h-[420px] space-y-3 overflow-y-auto p-4">{deptStats.length ? deptStats.map((x) => {
               const completion = Math.round(x.people.reduce((sum, p) => sum + FIELDS.length - missing(p).length, 0) / (x.people.length * FIELDS.length) * 100);
               const average = Math.round(x.people.reduce((sum, p) => sum + monthsAtCompany(p.startDate), 0) / x.people.length);
-              return <button key={x.id} type="button" onClick={() => setDepartment(x.id)} className="w-full rounded-xl border border-slate-200 p-4 text-left transition hover:border-blue-200 hover:shadow-sm">
+              return <button key={x.id} type="button" onClick={() => setDepartment(x.id)} className="w-full rounded-xl border border-slate-200 p-4 text-left transition hover:border-brand-200 hover:shadow-sm">
                 <div className="flex items-center justify-between gap-3"><strong className="truncate text-sm">{x.name}</strong><span className={`rounded-full px-2.5 py-1 text-xs ${completion >= 80 ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"}`}>{completion}%</span></div>
                 <p className="mt-1 text-xs text-slate-500">{x.active} hoạt động · thâm niên TB {tenure(average)}</p>
-                <div className="group relative mt-3 flex items-center gap-3"><div className="h-2 flex-1 overflow-hidden rounded-full bg-blue-100"><div className="h-full rounded-full bg-blue-600" style={{ width: `${completion}%` }} /></div><span className="text-xs text-slate-500">{x.people.length} NV</span>
+                <div className="group relative mt-3 flex items-center gap-3"><div className="h-2 flex-1 overflow-hidden rounded-full bg-brand-100"><div className="h-full rounded-full bg-brand-600" style={{ width: `${completion}%` }} /></div><span className="text-xs text-slate-500">{x.people.length} NV</span>
                   <ChartTip className="bottom-4 right-0">{completion}% hồ sơ hoàn thiện · {x.people.length} nhân sự</ChartTip>
                 </div>
               </button>;
@@ -441,7 +441,7 @@ export function HRAnalyticsPage() {
           <StatCard label="Tài khoản khóa" value={filtered.filter((x) => x.status === "inactive").length} note="Trạng thái tài khoản đang tạm ngưng" icon={ShieldCheck} tone="blue" onClick={() => setStatus("inactive")} />
           <StatCard label="Nghỉ việc" value={filtered.filter((x) => x.endDate).length} note="Hồ sơ đã có ngày nghỉ việc" icon={CircleUserRound} tone="blue" />
         </div>
-        <div className="flex justify-end"><Link href="/nhan-vien" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-blue-300 hover:text-blue-600"><UserPlus className="h-4 w-4" /> Quản lý hồ sơ nhân sự</Link></div>
+        <div className="flex justify-end"><Link href="/nhan-vien" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-brand-300 hover:text-brand-600"><UserPlus className="h-4 w-4" /> Quản lý hồ sơ nhân sự</Link></div>
       </div>
     </div>
   );

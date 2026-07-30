@@ -386,7 +386,7 @@ export function Header({ onToggleSidebar, onOpenMobileMenu }: HeaderProps) {
               onClick={() => {
                 router.push(account ? `/nhan-vien/${account.id}` : "/nhan-vien");
               }}
-              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-xs text-gray-600 transition-colors hover:bg-gray-50 hover:text-blue-600"
+              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-xs text-gray-600 transition-colors hover:bg-brand-50 hover:text-brand-600"
               role="menuitem"
             >
               <UserCircle className="h-4 w-4" />

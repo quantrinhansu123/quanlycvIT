@@ -26,9 +26,9 @@ export function FilterSelect({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className={cn(
-          "w-full appearance-none truncate rounded-lg border bg-white outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100",
+          "w-full appearance-none truncate rounded-lg border bg-white outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100",
           compact ? "h-9 py-1.5 pl-2.5 pr-7 text-xs" : "h-10 py-2 pl-3 pr-8 text-sm",
-          value ? "border-blue-300 text-blue-600" : "border-gray-200 text-gray-600"
+          value ? "border-brand-300 text-brand-600" : "border-gray-200 text-gray-600"
         )}
       >
         <option value="">{label}</option>
