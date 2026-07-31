@@ -24,6 +24,7 @@ import { ProgressReportItem } from "@/components/tasks/ProgressReportItem";
 import { formatDateVN, cn } from "@/lib/utils";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
+import { useCurrentAccount } from "@/hooks/useCurrentAccount";
 
 type QuickViewTab = "info" | "reports" | "timeline";
 
@@ -46,6 +47,8 @@ export function SubtaskQuickViewModal({
 }: SubtaskQuickViewModalProps) {
   const router = useRouter();
   const { notify } = useFeedback();
+  const { account } = useCurrentAccount();
+  const canReport = account?.role !== "admin";
   const [tab, setTab] = useState<QuickViewTab>(initialTab);
   const [reports, setReports] = useState<SubtaskReport[]>([]);
   const [reportsLoaded, setReportsLoaded] = useState(false);
@@ -232,10 +235,10 @@ export function SubtaskQuickViewModal({
               <div>
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                   <p className="text-base font-bold text-gray-900">Báo cáo từ nhân sự</p>
-                  <Button onClick={() => setReportDrawerOpen(true)}>
+                  {canReport && <Button onClick={() => setReportDrawerOpen(true)}>
                     <Plus className="h-4 w-4" />
                     Báo cáo tiến độ
-                  </Button>
+                  </Button>}
                 </div>
 
                 {!reportsLoaded ? (
@@ -278,7 +281,7 @@ export function SubtaskQuickViewModal({
         </div>
       </div>
 
-      {reportDrawerOpen && (
+      {reportDrawerOpen && canReport && (
         <TaskReportDrawer
           task={{
             id: subtask.id,

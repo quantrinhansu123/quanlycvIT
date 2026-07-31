@@ -80,6 +80,7 @@ interface ProjectRow {
 interface AssignmentEmbedRow {
   tai_khoan_id: string;
   la_chinh: boolean;
+  xac_nhan_luc?: string | null;
   tai_khoan: AccountRow | null;
 }
 
@@ -208,7 +209,7 @@ const WORK_TASK_SELECT =
 const SUBTASK_SELECT =
   "id,ten_task,mo_ta,created_at,updated_at,ngay_bat_dau,ngay_ket_thuc,nguoi_phu_trach_id,trang_thai,uu_tien,tien_do_thuc_te,nhan_tag,hinh_anh,tep_dinh_kem,lien_ket_dinh_kem,task_tien_de_id,cong_viec_id," +
   `legacy_assignee:tai_khoan!nguoi_phu_trach_id(${ACCOUNT_SELECT}),` +
-  `task_phu_trach(tai_khoan_id,la_chinh,tai_khoan(${ACCOUNT_SELECT}))`;
+  `task_phu_trach(tai_khoan_id,la_chinh,xac_nhan_luc,tai_khoan(${ACCOUNT_SELECT}))`;
 
 function avatarColor(value: string): string {
   const colors = ["#F59E0B", "#1F2937", "#DC2626", "#0EA5E9", "#16A34A", "#7C5CFC"];
@@ -257,9 +258,10 @@ function deriveSubtaskStatus(progress: number): TaskStatus {
 }
 
 function normalizeSubtaskStatus(status: string, progress: number): TaskStatus {
-  return toApiStatus(status) === "done" && progress === 100
-    ? "done"
-    : deriveSubtaskStatus(progress);
+  const normalized = toApiStatus(status);
+  if (normalized === "done" && progress === 100) return "done";
+  if (normalized === "inProgress" && progress < 100) return "inProgress";
+  return deriveSubtaskStatus(progress);
 }
 
 function toPriority(priority: string): TaskPriority {
@@ -1019,18 +1021,6 @@ function withWorkTaskAssignees(
   };
 }
 
-function withSubtaskAssignees(
-  row: SubtaskRow,
-  assigneeIds: string[],
-  accountsById: Map<string, AccountRow>
-): SubtaskRow {
-  return {
-    ...row,
-    legacy_assignee: accountsById.get(assigneeIds[0]) ?? row.legacy_assignee,
-    task_phu_trach: assignmentRows(assigneeIds, accountsById),
-  };
-}
-
 /** Người phụ trách công việc bắt buộc phải tham gia dự án của công việc đó. */
 async function assertProjectParticipants(
   supabase: ApiSupabaseClient,
@@ -1359,6 +1349,9 @@ function hydrateSubtasks(rows: SubtaskRow[]): Subtask[] {
       workTaskId: row.cong_viec_id,
       assigneeId: primary?.id ?? "",
       assignees: assignees.length > 0 ? assignees : primary ? [primary] : [],
+      acceptedAssigneeIds: (row.task_phu_trach ?? [])
+        .filter((assignment) => Boolean(assignment.xac_nhan_luc))
+        .map((assignment) => assignment.tai_khoan_id),
       status: normalizeSubtaskStatus(row.trang_thai, row.tien_do_thuc_te),
       priority: toPriority(row.uu_tien),
       startDate: row.ngay_bat_dau ?? "",
@@ -1535,7 +1528,7 @@ export async function createSubtask(
   supabase: ApiSupabaseClient,
   input: SubtaskInput
 ): Promise<Subtask> {
-  const [{ ids: assigneeIds, accountsById }] = await Promise.all([
+  const [{ ids: assigneeIds }] = await Promise.all([
     resolveAccounts(supabase, input.assigneeIds, "Người phụ trách"),
     assertSubtaskScheduleWithinWorkTask(
       supabase,
@@ -1564,9 +1557,8 @@ export async function createSubtask(
     assigneeIds
   );
 
-  const [subtask] = hydrateSubtasks([
-    withSubtaskAssignees(subtaskRow, assigneeIds, accountsById),
-  ]);
+  const subtask = await getSubtask(supabase, subtaskId);
+  if (!subtask) throw new ApiException("Không thể đọc lại task vừa tạo.", 500);
   return subtask;
 }
 
@@ -1583,7 +1575,7 @@ export async function updateSubtask(
   throwDatabaseError(currentError);
   if (!currentRow) return null;
 
-  const [{ ids: assigneeIds, accountsById }] = await Promise.all([
+  const [{ ids: assigneeIds }] = await Promise.all([
     resolveAccounts(supabase, input.assigneeIds, "Người phụ trách"),
     assertSubtaskScheduleWithinWorkTask(
       supabase,
@@ -1611,9 +1603,62 @@ export async function updateSubtask(
   if (!data) return null;
 
   await syncAssignments(supabase, "task_phu_trach", "task_id", id, assigneeIds);
-  const [subtask] = hydrateSubtasks([
-    withSubtaskAssignees(data as unknown as SubtaskRow, assigneeIds, accountsById),
-  ]);
+  return getSubtask(supabase, id);
+}
+
+/** Nhân viên xác nhận nhận Task; lần xác nhận đầu tiên đưa Task sang "Đang làm". */
+export async function acceptSubtaskAssignment(
+  supabase: ApiSupabaseClient,
+  subtaskId: string,
+  accountId: string
+): Promise<Subtask> {
+  const { data: assignment, error: assignmentError } = await supabase
+    .from("task_phu_trach")
+    .select("xac_nhan_luc")
+    .eq("task_id", subtaskId)
+    .eq("tai_khoan_id", accountId)
+    .maybeSingle();
+  throwDatabaseError(assignmentError);
+  if (!assignment) {
+    throw new ApiException("Bạn không phải người được giao Task này.", 403);
+  }
+
+  if (!assignment.xac_nhan_luc) {
+    const { error: acceptError } = await supabase
+      .from("task_phu_trach")
+      .update({ xac_nhan_luc: new Date().toISOString() })
+      .eq("task_id", subtaskId)
+      .eq("tai_khoan_id", accountId);
+    throwDatabaseError(acceptError);
+  }
+
+  const { data: taskRow, error: taskError } = await supabase
+    .from("task")
+    .select("trang_thai,tien_do_thuc_te")
+    .eq("id", subtaskId)
+    .maybeSingle();
+  throwDatabaseError(taskError);
+  if (!taskRow) throw new ApiException("Không tìm thấy Task.", 404);
+
+  if (toApiStatus(String(taskRow.trang_thai)) === "todo" && Number(taskRow.tien_do_thuc_te) < 100) {
+    const { error: statusError } = await supabase
+      .from("task")
+      .update({ trang_thai: "in_progress" })
+      .eq("id", subtaskId)
+      .eq("trang_thai", "todo");
+    throwDatabaseError(statusError);
+  }
+
+  const { error: notificationError } = await supabase
+    .from("thong_bao")
+    .update({ da_doc: true })
+    .eq("tai_khoan_id", accountId)
+    .eq("task_id", subtaskId)
+    .eq("loai", "task_assigned");
+  throwDatabaseError(notificationError);
+
+  const subtask = await getSubtask(supabase, subtaskId);
+  if (!subtask) throw new ApiException("Không tìm thấy Task.", 404);
   return subtask;
 }
 
@@ -2067,7 +2112,7 @@ export async function createSubtaskReport(
       .from("task")
       .update({
         tien_do_thuc_te: input.progress,
-        trang_thai: toDatabaseStatus(deriveSubtaskStatus(input.progress)),
+        trang_thai: toDatabaseStatus(normalizeSubtaskStatus(subtask.status, input.progress)),
       })
       .eq("id", subtaskId);
     throwDatabaseError(progressError);

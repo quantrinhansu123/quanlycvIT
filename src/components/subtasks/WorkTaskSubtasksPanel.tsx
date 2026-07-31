@@ -64,6 +64,7 @@ export function WorkTaskSubtasksPanel({
   const { confirm, notify } = useFeedback();
   const { account } = useCurrentAccount();
   const isAdmin = account?.role === "admin";
+  const isMember = account?.role === "member";
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -77,6 +78,7 @@ export function WorkTaskSubtasksPanel({
   const [quickView, setQuickView] = useState<QuickViewState>(null);
   const [reportDrawer, setReportDrawer] = useState<Subtask | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [pageSize, setPageSize] = useState(100);
   const [page, setPage] = useState(1);
 
@@ -202,6 +204,30 @@ export function WorkTaskSubtasksPanel({
         title: "Duyệt task thất bại",
         description: getErrorMessage(approveError, "Không thể duyệt task. Vui lòng thử lại."),
       });
+    }
+  }
+
+  async function handleAccept(subtask: Subtask) {
+    if (acceptingId) return;
+    setAcceptingId(subtask.id);
+    try {
+      const accepted = await subtaskService.acceptSubtask(subtask.id);
+      setSubtasks((current) => current.map((item) => item.id === accepted.id ? accepted : item));
+      window.dispatchEvent(new CustomEvent("app:notifications-changed"));
+      notify({
+        type: "success",
+        title: "Đã xác nhận nhận Task",
+        description: `Task “${subtask.title}” đã chuyển sang Đang làm.`,
+      });
+      onSubtasksChanged();
+    } catch (acceptError) {
+      notify({
+        type: "error",
+        title: "Không thể xác nhận Task",
+        description: getErrorMessage(acceptError, "Vui lòng thử lại."),
+      });
+    } finally {
+      setAcceptingId(null);
     }
   }
 
@@ -360,6 +386,11 @@ export function WorkTaskSubtasksPanel({
             hideWorkTaskColumn
             canApprove={isAdmin}
             onApprove={handleApprove}
+            isMember={isMember}
+            currentAccountId={account?.id}
+            acceptingId={acceptingId}
+            onAccept={handleAccept}
+            canReport={!isAdmin}
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3">
@@ -378,6 +409,10 @@ export function WorkTaskSubtasksPanel({
                 onDelete={handleDelete}
                 canApprove={isAdmin}
                 onApprove={handleApprove}
+                isMember={isMember}
+                currentAccountId={account?.id}
+                acceptingId={acceptingId}
+                onAccept={handleAccept}
               />
             ))}
           </div>
@@ -428,7 +463,7 @@ export function WorkTaskSubtasksPanel({
         />
       )}
 
-      {reportDrawer && (
+      {reportDrawer && !isAdmin && (
         <TaskReportDrawer
           task={{
             id: reportDrawer.id,

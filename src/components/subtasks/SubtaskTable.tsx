@@ -35,6 +35,11 @@ interface SubtaskTableProps {
   /** Chỉ quản trị viên mới thấy thao tác Duyệt khi task đang chờ đánh giá. */
   canApprove?: boolean;
   onApprove?: (subtask: Subtask) => void;
+  isMember?: boolean;
+  currentAccountId?: string;
+  acceptingId?: string | null;
+  onAccept?: (subtask: Subtask) => void;
+  canReport?: boolean;
 }
 
 export function SubtaskTable({
@@ -53,6 +58,11 @@ export function SubtaskTable({
   projectsById,
   canApprove = false,
   onApprove,
+  isMember = false,
+  currentAccountId,
+  acceptingId,
+  onAccept,
+  canReport = true,
 }: SubtaskTableProps) {
   const allSelected = subtasks.length > 0 && selectedIds.length === subtasks.length;
   const showProjectColumn = !hideWorkTaskColumn && Boolean(projectsById);
@@ -93,6 +103,11 @@ export function SubtaskTable({
             const workTask = workTasksById.get(subtask.workTaskId);
             const assignee = membersById.get(subtask.assigneeId);
             const overdue = isSubtaskOverdue(subtask);
+            const needsAcceptance = Boolean(
+              isMember &&
+              currentAccountId &&
+              !subtask.acceptedAssigneeIds.includes(currentAccountId)
+            );
 
             return (
               <tr key={subtask.id} className="data-table-row group">
@@ -170,6 +185,15 @@ export function SubtaskTable({
                 </td>
                 <td className="px-3 py-3 align-top">
                   <div className="flex min-w-[152px] items-center justify-start gap-1.5">
+                    {needsAcceptance && onAccept ? (
+                      <ActionIconButton
+                        icon={CheckCircle2}
+                        label="Xác nhận nhận Task"
+                        tone="success"
+                        disabled={acceptingId === subtask.id}
+                        onClick={() => onAccept(subtask)}
+                      />
+                    ) : <>
                     {canApprove && subtask.status === "review" && subtask.progress === 100 && onApprove && (
                       <ActionIconButton
                         icon={CheckCircle2}
@@ -178,7 +202,7 @@ export function SubtaskTable({
                         onClick={() => onApprove(subtask)}
                       />
                     )}
-                    {subtask.status !== "done" && (
+                    {canReport && subtask.status !== "done" && (
                       <ActionIconButton
                         icon={FilePenLine}
                         label="Báo cáo tiến độ"
@@ -202,6 +226,7 @@ export function SubtaskTable({
                       tone="danger"
                       onClick={() => onDelete(subtask)}
                     />
+                    </>}
                   </div>
                 </td>
               </tr>

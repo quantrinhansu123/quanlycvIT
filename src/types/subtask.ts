@@ -22,6 +22,8 @@ export interface Subtask {
   assigneeId: string;
   /** Toàn bộ người phụ trách, phần tử đầu tiên là người chính. */
   assignees: ProjectMember[];
+  /** UUID tài khoản của những người đã xác nhận nhận Task. */
+  acceptedAssigneeIds: string[];
   status: TaskStatus;
   priority: TaskPriority;
   startDate: string;

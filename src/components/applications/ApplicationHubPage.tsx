@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  Ban,
   BarChart3,
   Building2,
   ChevronDown,
@@ -19,6 +20,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useCurrentAccount } from "@/hooks/useCurrentAccount";
 
 type ModuleGroupId = "employees" | "work" | "finance";
 
@@ -66,6 +68,7 @@ function normalize(value: string) {
 }
 
 export function ApplicationHubPage() {
+  const { account, loading: accountLoading } = useCurrentAccount();
   const [search, setSearch] = useState("");
   const [group, setGroup] = useState<ModuleGroupId | "">("");
   const [tab, setTab] = useState<"functions" | "bookmarks">("functions");
@@ -155,13 +158,38 @@ export function ApplicationHubPage() {
                 {groupModules.map((module) => {
                   const ModuleIcon = module.icon;
                   const bookmarked = bookmarks.includes(module.id);
+                  const restrictedForMember =
+                    module.groupId === "employees" &&
+                    (accountLoading || !account || account.role === "member");
                   const moduleContent = (
                     <>
-                      <span className={cn("flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl", module.background)}>
-                        <ModuleIcon className={cn("h-6 w-6", module.color)} />
+                      <span
+                        className={cn(
+                          "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl",
+                          module.background,
+                          restrictedForMember && "group-hover:bg-rose-50"
+                        )}
+                      >
+                        <ModuleIcon
+                          className={cn(
+                            "h-6 w-6",
+                            module.color,
+                            restrictedForMember && "group-hover:hidden"
+                          )}
+                        />
+                        {restrictedForMember && (
+                          <Ban className="hidden h-6 w-6 text-rose-600 group-hover:block" />
+                        )}
                       </span>
                       <span className="min-w-0">
-                        <b className="block truncate text-base text-slate-800">{module.name}</b>
+                        <b
+                          className={cn(
+                            "block truncate text-base text-slate-800",
+                            restrictedForMember && "group-hover:text-rose-600"
+                          )}
+                        >
+                          {module.name}
+                        </b>
                         <span className="mt-0.5 block truncate text-xs text-gray-500">{module.description}</span>
                       </span>
                     </>
@@ -169,13 +197,31 @@ export function ApplicationHubPage() {
                   return (
                     <div
                       key={module.id}
-                      className="group relative rounded-2xl border border-gray-200 bg-white transition hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-md"
+                      className={cn(
+                        "group relative rounded-2xl border border-gray-200 bg-white transition",
+                        restrictedForMember
+                          ? "cursor-not-allowed hover:border-rose-200 hover:bg-rose-50/30"
+                          : "hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-md"
+                      )}
                     >
-                      <Link href={module.href} className="flex min-h-[88px] items-center gap-4 rounded-2xl px-4 py-3 pr-20">
-                        {moduleContent}
-                        <ChevronRight className="absolute right-5 h-4 w-4 text-gray-400 transition group-hover:translate-x-0.5 group-hover:text-brand-500" />
-                      </Link>
-                      <button
+                      {restrictedForMember ? (
+                        <div
+                          role="link"
+                          aria-disabled="true"
+                          title="Tài khoản nhân viên không có quyền truy cập chức năng này"
+                          className="flex min-h-[88px] cursor-not-allowed items-center gap-4 rounded-2xl px-4 py-3 pr-20"
+                        >
+                          {moduleContent}
+                          <ChevronRight className="absolute right-5 h-4 w-4 text-gray-400 group-hover:hidden" />
+                          <Ban className="absolute right-5 hidden h-5 w-5 text-rose-600 group-hover:block" />
+                        </div>
+                      ) : (
+                        <Link href={module.href} className="flex min-h-[88px] items-center gap-4 rounded-2xl px-4 py-3 pr-20">
+                          {moduleContent}
+                          <ChevronRight className="absolute right-5 h-4 w-4 text-gray-400 transition group-hover:translate-x-0.5 group-hover:text-brand-500" />
+                        </Link>
+                      )}
+                      {!restrictedForMember && <button
                         type="button"
                         title={bookmarked ? "Bỏ đánh dấu" : "Đánh dấu"}
                         aria-label={bookmarked ? `Bỏ đánh dấu ${module.name}` : `Đánh dấu ${module.name}`}
@@ -183,7 +229,7 @@ export function ApplicationHubPage() {
                         className={cn("absolute right-10 top-1/2 -translate-y-1/2 rounded-lg p-2 transition", bookmarked ? "text-amber-500" : "text-gray-300 opacity-0 hover:text-amber-500 group-hover:opacity-100")}
                       >
                         <Star className={cn("h-4 w-4", bookmarked && "fill-current")} />
-                      </button>
+                      </button>}
                     </div>
                   );
                 })}

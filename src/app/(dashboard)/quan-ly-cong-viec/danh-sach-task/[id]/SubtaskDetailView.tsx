@@ -42,6 +42,7 @@ import { cn, formatDateVN } from "@/lib/utils";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 import { DetailAttachments } from "@/components/tasks/DetailAttachments";
+import { useCurrentAccount } from "@/hooks/useCurrentAccount";
 
 const SubtaskFormModal = dynamic(
   () => import("@/components/subtasks/SubtaskFormModal").then((mod) => mod.SubtaskFormModal),
@@ -81,6 +82,7 @@ export function SubtaskDetailView({
 }: SubtaskDetailViewProps) {
   const router = useRouter();
   const { notify } = useFeedback();
+  const { account } = useCurrentAccount();
   const [subtask, setSubtask] = useState<Subtask | null>(initialSubtask);
   const [workTasks, setWorkTasks] = useState<WorkTask[]>(initialWorkTasks);
   const [reports, setReports] = useState<SubtaskReport[]>(initialReports);
@@ -90,6 +92,7 @@ export function SubtaskDetailView({
   const [editing, setEditing] = useState(false);
   const [reportDrawerOpen, setReportDrawerOpen] = useState(false);
   const [quickUpdating, setQuickUpdating] = useState(false);
+  const [accepting, setAccepting] = useState(false);
   const load = useCallback(async () => {
     try {
       const [subtaskData, workTaskList, reportData, memberData] =
@@ -157,6 +160,29 @@ export function SubtaskDetailView({
     }
   }
 
+  async function handleAccept() {
+    if (!subtask || accepting) return;
+    setAccepting(true);
+    try {
+      const accepted = await subtaskService.acceptSubtask(subtask.id);
+      setSubtask(accepted);
+      window.dispatchEvent(new CustomEvent("app:notifications-changed"));
+      notify({
+        type: "success",
+        title: "Đã xác nhận nhận Task",
+        description: `Task “${subtask.title}” đã chuyển sang Đang làm.`,
+      });
+    } catch (acceptError) {
+      notify({
+        type: "error",
+        title: "Không thể xác nhận Task",
+        description: getErrorMessage(acceptError, "Vui lòng thử lại."),
+      });
+    } finally {
+      setAccepting(false);
+    }
+  }
+
   if (error) {
     return (
       <div className="mx-auto max-w-[1080px] px-4 py-10 sm:px-6">
@@ -181,6 +207,10 @@ export function SubtaskDetailView({
   const assignee = members.find((member) => member.id === subtask.assigneeId);
   const dueDistance = getDayDistance(subtask.dueDate);
   const overdue = isSubtaskOverdue(subtask);
+  const needsAcceptance = Boolean(
+    account?.role === "member" &&
+    !subtask.acceptedAssigneeIds.includes(account.id)
+  );
 
   return (
     <div className="min-h-full bg-white pb-2">
@@ -220,13 +250,24 @@ export function SubtaskDetailView({
             </nav>
           </div>
 
-          <Button
-            onClick={() => setEditing(true)}
-            className="shrink-0 rounded-full bg-brand-600 hover:bg-brand-700"
-          >
-            <Pencil className="h-4 w-4" />
-            <span className="hidden sm:inline">Chỉnh sửa Task</span>
-          </Button>
+          {needsAcceptance ? (
+            <Button
+              onClick={() => void handleAccept()}
+              disabled={accepting}
+              className="shrink-0 rounded-full bg-emerald-600 hover:bg-emerald-700"
+            >
+              <CircleCheck className="h-4 w-4" />
+              <span className="hidden sm:inline">{accepting ? "Đang xác nhận..." : "Xác nhận nhận Task"}</span>
+            </Button>
+          ) : (
+            <Button
+              onClick={() => setEditing(true)}
+              className="shrink-0 rounded-full bg-brand-600 hover:bg-brand-700"
+            >
+              <Pencil className="h-4 w-4" />
+              <span className="hidden sm:inline">Chỉnh sửa Task</span>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -443,10 +484,10 @@ export function SubtaskDetailView({
                   Các báo cáo tiến độ đã gửi cho Task
                 </p>
               </div>
-              <Button onClick={() => setReportDrawerOpen(true)}>
+              {account?.role !== "admin" && <Button onClick={() => setReportDrawerOpen(true)}>
                 <Plus className="h-4 w-4" />
                 Báo cáo tiến độ
-              </Button>
+              </Button>}
             </div>
             {reports.length === 0 ? (
               <EmptyState
@@ -497,7 +538,7 @@ export function SubtaskDetailView({
         />
       )}
 
-      {reportDrawerOpen && (
+      {reportDrawerOpen && account?.role !== "admin" && (
         <TaskReportDrawer
           task={{
             id: subtask.id,

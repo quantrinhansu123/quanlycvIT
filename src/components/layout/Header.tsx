@@ -1,17 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCurrentAccount } from "@/hooks/useCurrentAccount";
 import {
   Bell,
+  CheckCheck,
   ChevronDown,
   Clock,
+  ClipboardCheck,
   FileText,
   Home,
   Layers,
   LogOut,
+  LoaderCircle,
   Menu,
   Monitor,
   Moon,
@@ -25,6 +28,8 @@ import {
 import { BREADCRUMB_LABELS } from "@/constants/navigation";
 import { Avatar } from "@/components/ui/Avatar";
 import { createClient } from "@/lib/supabase/client";
+import { notificationService } from "@/services/notification-service";
+import type { AppNotification } from "@/types/notification";
 
 const WEEKDAYS = [
   "Chủ nhật",
@@ -63,6 +68,18 @@ function useNow() {
   }, []);
 
   return now;
+}
+
+function formatNotificationTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString("vi-VN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
 }
 
 function Breadcrumb() {
@@ -189,7 +206,11 @@ export function Header({ onToggleSidebar, onOpenMobileMenu }: HeaderProps) {
   const router = useRouter();
   const now = useNow();
   const { account } = useCurrentAccount();
+  const notificationRef = useRef<HTMLDivElement>(null);
   const [themePanelOpen, setThemePanelOpen] = useState(false);
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [notificationLoading, setNotificationLoading] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
     if (typeof window === "undefined") return "system";
     const stored = window.localStorage.getItem("goal-app:theme");
@@ -215,6 +236,68 @@ export function Header({ onToggleSidebar, onOpenMobileMenu }: HeaderProps) {
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [themePanelOpen]);
+
+  const loadNotifications = useCallback(async () => {
+    if (!account?.id) {
+      setNotifications([]);
+      return;
+    }
+    setNotificationLoading(true);
+    try {
+      setNotifications(await notificationService.getNotifications());
+    } catch {
+      // Chuông không làm gián đoạn chức năng chính nếu mạng tạm thời lỗi.
+    } finally {
+      setNotificationLoading(false);
+    }
+  }, [account?.id]);
+
+  useEffect(() => {
+    const initialTimer = window.setTimeout(() => void loadNotifications(), 0);
+    const timer = window.setInterval(() => void loadNotifications(), 30_000);
+    const refresh = () => void loadNotifications();
+    window.addEventListener("app:notifications-changed", refresh);
+    return () => {
+      window.clearTimeout(initialTimer);
+      window.clearInterval(timer);
+      window.removeEventListener("app:notifications-changed", refresh);
+    };
+  }, [loadNotifications]);
+
+  useEffect(() => {
+    if (!notificationOpen) return;
+    const close = (event: MouseEvent) => {
+      if (!notificationRef.current?.contains(event.target as Node)) {
+        setNotificationOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setNotificationOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [notificationOpen]);
+
+  async function openNotification(notification: AppNotification) {
+    if (!notification.read) {
+      setNotifications((current) =>
+        current.map((item) => item.id === notification.id ? { ...item, read: true } : item)
+      );
+      try {
+        await notificationService.markRead(notification.id);
+      } catch {
+        void loadNotifications();
+      }
+    }
+    setNotificationOpen(false);
+    if (notification.taskId) {
+      router.push(`/quan-ly-cong-viec/danh-sach-task/${notification.taskId}`);
+    }
+  }
 
   const changeTheme = (mode: ThemeMode) => {
     setThemeMode(mode);
@@ -244,6 +327,7 @@ export function Header({ onToggleSidebar, onOpenMobileMenu }: HeaderProps) {
         now.getMonth() + 1
       ).padStart(2, "0")}/${now.getFullYear()}`
     : "";
+  const unreadCount = notifications.filter((notification) => !notification.read).length;
 
   return (
     <>
@@ -277,13 +361,86 @@ export function Header({ onToggleSidebar, onOpenMobileMenu }: HeaderProps) {
         <span className="font-medium">{dateLabel}</span>
       </div>
 
-      <button
-        type="button"
-        className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100"
-        aria-label="Thông báo"
-      >
-        <Bell className="h-5 w-5" />
-      </button>
+      <div ref={notificationRef} className="relative">
+        <button
+          type="button"
+          onClick={() => {
+            setNotificationOpen((current) => !current);
+            void loadNotifications();
+          }}
+          className="relative flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100"
+          aria-label={`Thông báo${unreadCount > 0 ? `, ${unreadCount} chưa đọc` : ""}`}
+          aria-haspopup="dialog"
+          aria-expanded={notificationOpen}
+        >
+          <Bell className="h-5 w-5" />
+          {unreadCount > 0 && (
+            <span className="absolute right-0.5 top-0.5 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-brand-600 px-1 text-[9px] font-bold leading-none text-white ring-2 ring-white">
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </span>
+          )}
+        </button>
+
+        {notificationOpen && (
+          <section
+            role="dialog"
+            aria-label="Thông báo Task"
+            className="absolute right-0 top-11 z-50 w-[min(380px,calc(100vw-24px))] overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl"
+          >
+            <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3.5">
+              <div>
+                <h2 className="text-sm font-bold text-gray-900">Thông báo</h2>
+                <p className="mt-0.5 text-[11px] text-gray-400">
+                  {unreadCount > 0 ? `${unreadCount} thông báo chưa đọc` : "Bạn đã xem tất cả thông báo"}
+                </p>
+              </div>
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
+                <CheckCheck className="h-4 w-4" />
+              </span>
+            </div>
+
+            <div className="max-h-[420px] overflow-y-auto">
+              {notificationLoading && notifications.length === 0 ? (
+                <div className="flex min-h-36 items-center justify-center text-gray-400">
+                  <LoaderCircle className="h-5 w-5 animate-spin" />
+                </div>
+              ) : notifications.length === 0 ? (
+                <div className="flex min-h-40 flex-col items-center justify-center px-6 text-center">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-full bg-gray-50 text-gray-300">
+                    <Bell className="h-5 w-5" />
+                  </span>
+                  <p className="mt-3 text-sm font-semibold text-gray-700">Chưa có thông báo</p>
+                  <p className="mt-1 text-xs text-gray-400">Task mới được giao sẽ hiển thị tại đây.</p>
+                </div>
+              ) : (
+                <ul className="divide-y divide-gray-100">
+                  {notifications.map((notification) => (
+                    <li key={notification.id}>
+                      <button
+                        type="button"
+                        onClick={() => void openNotification(notification)}
+                        className={`relative flex w-full gap-3 px-4 py-3.5 text-left transition hover:bg-gray-50 ${notification.read ? "bg-white" : "bg-brand-50/60"}`}
+                      >
+                        <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
+                          <ClipboardCheck className="h-[18px] w-[18px]" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-xs font-bold text-gray-900">{notification.title}</span>
+                          <span className="mt-1 block text-xs leading-5 text-gray-600">{notification.content}</span>
+                          <span className="mt-1.5 block text-[10px] text-gray-400">{formatNotificationTime(notification.createdAt)}</span>
+                        </span>
+                        {!notification.read && (
+                          <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-brand-600" aria-label="Chưa đọc" />
+                        )}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </section>
+        )}
+      </div>
       <button
         type="button"
         onClick={() => {

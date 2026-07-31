@@ -114,6 +114,10 @@ export const subtaskService = {
     return apiClient.post<Subtask>(`/subtasks/${id}/approve`);
   },
 
+  async acceptSubtask(id: string): Promise<Subtask> {
+    return apiClient.post<Subtask>(`/subtasks/${id}/accept`);
+  },
+
   async getSubtaskReports(subtaskId: string): Promise<SubtaskReport[]> {
     return apiClient.get<SubtaskReport[]>(`/subtasks/${subtaskId}/reports`);
   },

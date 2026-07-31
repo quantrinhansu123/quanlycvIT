@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays } from "lucide-react";
+import { CalendarDays, CheckCircle2, LoaderCircle } from "lucide-react";
 import type { Subtask } from "@/types/subtask";
 import { isSubtaskOverdue } from "@/types/subtask";
 import type { WorkTask } from "@/types/task";
@@ -23,6 +23,10 @@ interface SubtaskCardProps {
   onEdit: (subtask: Subtask) => void;
   onDelete: (subtask: Subtask) => void;
   onApprove?: (subtask: Subtask) => void;
+  isMember?: boolean;
+  currentAccountId?: string;
+  acceptingId?: string | null;
+  onAccept?: (subtask: Subtask) => void;
 }
 
 export function SubtaskCard({
@@ -35,8 +39,17 @@ export function SubtaskCard({
   onEdit,
   onDelete,
   onApprove,
+  isMember = false,
+  currentAccountId,
+  acceptingId,
+  onAccept,
 }: SubtaskCardProps) {
   const overdue = isSubtaskOverdue(subtask);
+  const needsAcceptance = Boolean(
+    isMember &&
+    currentAccountId &&
+    !subtask.acceptedAssigneeIds.includes(currentAccountId)
+  );
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
@@ -46,7 +59,21 @@ export function SubtaskCard({
         ) : (
           <span />
         )}
-        <TaskActionMenu
+        {needsAcceptance && onAccept ? (
+          <button
+            type="button"
+            onClick={() => onAccept(subtask)}
+            disabled={acceptingId === subtask.id}
+            className="flex h-8 items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-wait disabled:opacity-60"
+          >
+            {acceptingId === subtask.id ? (
+              <LoaderCircle className="h-4 w-4 animate-spin" />
+            ) : (
+              <CheckCircle2 className="h-4 w-4" />
+            )}
+            Xác nhận
+          </button>
+        ) : <TaskActionMenu
           onViewReports={() => onViewReports(subtask)}
           onApprove={
             canApprove && subtask.status === "review" && subtask.progress === 100 && onApprove
@@ -55,7 +82,7 @@ export function SubtaskCard({
           }
           onEdit={() => onEdit(subtask)}
           onDelete={() => onDelete(subtask)}
-        />
+        />}
       </div>
 
       <button type="button" onClick={() => onOpen(subtask)} className="text-left">
