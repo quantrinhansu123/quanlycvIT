@@ -11,6 +11,7 @@ Các migration:
 - `migrations/20260729000700_multiple_project_managers.sql`
 - `migrations/20260729000900_separate_project_managers_members.sql`
 - `migrations/20260729001000_subtask_progress_reports.sql`
+- `migrations/20260731000100_production_rls_cleanup.sql`
 
 ## Nguồn dữ liệu
 
@@ -55,5 +56,6 @@ npx supabase db push
 - Trong giai đoạn phát triển, migration `20260729000300_dev_anon_project_api.sql`
   tạm cho role `anon` CRUD các bảng `du_an`, `du_an_thanh_vien`, `cong_viec`,
   `task`, đồng thời chỉ đọc các cột danh bạ cần thiết từ `tai_khoan`.
-- Trước khi production phải thu hồi các policy `*_anon_dev` và chuyển lại sang
-  role `authenticated`.
+- Trước khi production chạy migration `20260731000100_production_rls_cleanup.sql`
+  để thu hồi các policy/grant `anon` tạm thời. API client đã chuyển access token
+  của phiên đăng nhập vào API route để Supabase áp dụng role `authenticated`.

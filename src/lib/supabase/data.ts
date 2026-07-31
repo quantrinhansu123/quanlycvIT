@@ -293,6 +293,12 @@ function isUuid(value: string): boolean {
   );
 }
 
+function toPostgrestInValues(values: string[]): string {
+  return values
+    .map((value) => `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`)
+    .join(",");
+}
+
 async function resolveAccountId(
   supabase: ApiSupabaseClient,
   reference: string,
@@ -311,16 +317,60 @@ async function resolveAccountId(
   return data.id as string;
 }
 
+interface ResolvedAccounts {
+  ids: string[];
+  accountsById: Map<string, AccountRow>;
+}
+
+async function resolveAccounts(
+  supabase: ApiSupabaseClient,
+  references: string[],
+  label: string
+): Promise<ResolvedAccounts> {
+  const uniqueReferences = [...new Set(references)];
+  if (uniqueReferences.length === 0) return { ids: [], accountsById: new Map() };
+
+  const uuidReferences = uniqueReferences.filter(isUuid);
+  const employeeCodes = uniqueReferences.filter((reference) => !isUuid(reference));
+
+  let query = supabase.from("tai_khoan").select(ACCOUNT_SELECT);
+  if (uuidReferences.length === 0) {
+    query = query.in("ma_nv", employeeCodes);
+  } else if (employeeCodes.length === 0) {
+    query = query.in("id", uuidReferences);
+  } else {
+    query = query.or(
+      `id.in.(${toPostgrestInValues(uuidReferences)}),ma_nv.in.(${toPostgrestInValues(employeeCodes)})`
+    );
+  }
+
+  const { data, error } = await query;
+  throwDatabaseError(error);
+
+  const accounts = (data ?? []) as AccountRow[];
+  const accountIdsById = new Map(accounts.map((account) => [account.id, account.id]));
+  const accountIdsByEmployeeCode = new Map(
+    accounts.map((account) => [account.ma_nv, account.id])
+  );
+
+  const ids = uniqueReferences.map((reference) => {
+    const accountId = isUuid(reference)
+      ? accountIdsById.get(reference)
+      : accountIdsByEmployeeCode.get(reference);
+    if (!accountId) {
+      throw new ApiException(`${label} không tồn tại trong bảng tài khoản.`, 400);
+    }
+    return accountId;
+  });
+  return { ids, accountsById: new Map(accounts.map((account) => [account.id, account])) };
+}
+
 async function resolveAccountIds(
   supabase: ApiSupabaseClient,
   references: string[],
   label: string
 ): Promise<string[]> {
-  return Promise.all(
-    [...new Set(references)].map((reference) =>
-      resolveAccountId(supabase, reference, label)
-    )
-  );
+  return (await resolveAccounts(supabase, references, label)).ids;
 }
 
 /**
@@ -401,34 +451,23 @@ async function syncProjectMembers(
   projectId: string,
   memberIds: string[]
 ): Promise<void> {
-  const { data: currentData, error: currentError } = await supabase
-    .from("du_an_thanh_vien")
-    .select("tai_khoan_id")
-    .eq("du_an_id", projectId);
-  throwDatabaseError(currentError);
-
-  const currentIds = (currentData ?? []).map((row) => row.tai_khoan_id as string);
-  const newIds = memberIds.filter((id) => !currentIds.includes(id));
-  const removedIds = currentIds.filter((id) => !memberIds.includes(id));
-
-  if (newIds.length > 0) {
-    const { error } = await supabase.from("du_an_thanh_vien").insert(
-      newIds.map((accountId) => ({
+  if (memberIds.length > 0) {
+    const { error: upsertError } = await supabase.from("du_an_thanh_vien").upsert(
+      memberIds.map((accountId) => ({
         du_an_id: projectId,
         tai_khoan_id: accountId,
-      }))
+      })),
+      { onConflict: "du_an_id,tai_khoan_id" }
     );
-    throwDatabaseError(error);
+    throwDatabaseError(upsertError);
   }
 
-  if (removedIds.length > 0) {
-    const { error } = await supabase
-      .from("du_an_thanh_vien")
-      .delete()
-      .eq("du_an_id", projectId)
-      .in("tai_khoan_id", removedIds);
-    throwDatabaseError(error);
+  let deleteQuery = supabase.from("du_an_thanh_vien").delete().eq("du_an_id", projectId);
+  if (memberIds.length > 0) {
+    deleteQuery = deleteQuery.not("tai_khoan_id", "in", `(${toPostgrestInValues(memberIds)})`);
   }
+  const { error: deleteError } = await deleteQuery;
+  throwDatabaseError(deleteError);
 }
 
 async function syncProjectManagers(
@@ -436,49 +475,66 @@ async function syncProjectManagers(
   projectId: string,
   managerIds: string[]
 ): Promise<void> {
-  const { data: currentData, error: currentError } = await supabase
-    .from("du_an_quan_ly")
-    .select("tai_khoan_id")
-    .eq("du_an_id", projectId);
-  throwDatabaseError(currentError);
-
-  const currentIds = (currentData ?? []).map((row) => row.tai_khoan_id as string);
-  const newIds = managerIds.filter((id) => !currentIds.includes(id));
-  const removedIds = currentIds.filter((id) => !managerIds.includes(id));
-
-  if (newIds.length > 0) {
-    const { error } = await supabase.from("du_an_quan_ly").insert(
-      newIds.map((accountId) => ({
+  if (managerIds.length > 0) {
+    const { error: upsertError } = await supabase.from("du_an_quan_ly").upsert(
+      managerIds.map((accountId) => ({
         du_an_id: projectId,
         tai_khoan_id: accountId,
-        la_chinh: false,
-      }))
+        la_chinh: accountId === managerIds[0],
+      })),
+      { onConflict: "du_an_id,tai_khoan_id" }
     );
-    throwDatabaseError(error);
+    throwDatabaseError(upsertError);
   }
 
-  if (removedIds.length > 0) {
-    const { error } = await supabase
-      .from("du_an_quan_ly")
-      .delete()
-      .eq("du_an_id", projectId)
-      .in("tai_khoan_id", removedIds);
-    throwDatabaseError(error);
+  let deleteQuery = supabase.from("du_an_quan_ly").delete().eq("du_an_id", projectId);
+  if (managerIds.length > 0) {
+    deleteQuery = deleteQuery.not("tai_khoan_id", "in", `(${toPostgrestInValues(managerIds)})`);
   }
+  const { error: deleteError } = await deleteQuery;
+  throwDatabaseError(deleteError);
+}
 
-  const { error: resetPrimaryError } = await supabase
-    .from("du_an_quan_ly")
-    .update({ la_chinh: false })
-    .eq("du_an_id", projectId)
-    .eq("la_chinh", true);
-  throwDatabaseError(resetPrimaryError);
+function withProjectPeople(
+  row: ProjectRow,
+  managerIds: string[],
+  memberIds: string[],
+  accountsById: Map<string, AccountRow>
+): ProjectRow {
+  return {
+    ...row,
+    legacy_manager: accountsById.get(managerIds[0]) ?? row.legacy_manager,
+    du_an_quan_ly: managerIds.map((accountId) => ({
+      tai_khoan_id: accountId,
+      la_chinh: accountId === managerIds[0],
+      tai_khoan: accountsById.get(accountId) ?? null,
+    })),
+    du_an_thanh_vien: memberIds.map((accountId) => ({
+      tai_khoan_id: accountId,
+      tai_khoan: accountsById.get(accountId) ?? null,
+    })),
+  };
+}
 
-  const { error: primaryError } = await supabase
-    .from("du_an_quan_ly")
-    .update({ la_chinh: true })
-    .eq("du_an_id", projectId)
-    .eq("tai_khoan_id", managerIds[0]);
-  throwDatabaseError(primaryError);
+/** Đồng bộ quản lý và thành viên song song, nhưng luôn đợi cả hai hoàn tất trước khi trả lỗi. */
+async function syncProjectPeople(
+  supabase: ApiSupabaseClient,
+  projectId: string,
+  managerIds: string[],
+  memberIds: string[]
+): Promise<void> {
+  const results = await Promise.all([
+    syncProjectManagers(supabase, projectId, managerIds).then(
+      () => undefined,
+      (error: unknown) => error
+    ),
+    syncProjectMembers(supabase, projectId, memberIds).then(
+      () => undefined,
+      (error: unknown) => error
+    ),
+  ]);
+  const failure = results.find((result) => result !== undefined);
+  if (failure !== undefined) throw failure;
 }
 
 export async function listProjects(
@@ -562,17 +618,17 @@ export async function createProject(
   supabase: ApiSupabaseClient,
   input: ProjectInput
 ): Promise<Project> {
-  const managerIds = await resolveAccountIds(
-    supabase,
-    input.managerIds,
-    "Người quản lý"
-  );
-  const resolvedMemberIds = await resolveAccountIds(
-    supabase,
-    input.memberIds,
-    "Thành viên dự án"
-  );
+  const [resolvedManagers, resolvedMembers] = await Promise.all([
+    resolveAccounts(supabase, input.managerIds, "Người quản lý"),
+    resolveAccounts(supabase, input.memberIds, "Thành viên dự án"),
+  ]);
+  const managerIds = resolvedManagers.ids;
+  const resolvedMemberIds = resolvedMembers.ids;
   const memberIds = resolvedMemberIds.filter((id) => !managerIds.includes(id));
+  const accountsById = new Map([
+    ...resolvedManagers.accountsById,
+    ...resolvedMembers.accountsById,
+  ]);
 
   const { data, error } = await supabase
     .from("du_an")
@@ -589,21 +645,27 @@ export async function createProject(
       tep_dinh_kem: input.files,
       lien_ket_dinh_kem: input.links,
     })
-    .select("id")
+    .select(PROJECT_SELECT)
     .single();
   throwDatabaseError(error);
   if (!data) throw new ApiException("Supabase không trả về dự án vừa tạo.", 500);
+  const projectRow = data as unknown as ProjectRow;
 
   try {
-    await syncProjectManagers(supabase, data.id as string, managerIds);
-    await syncProjectMembers(supabase, data.id as string, memberIds);
+    await syncProjectPeople(supabase, projectRow.id, managerIds, memberIds);
   } catch (syncError) {
-    await supabase.from("du_an").delete().eq("id", data.id);
+    await supabase.from("du_an").delete().eq("id", projectRow.id);
     throw syncError;
   }
 
-  const project = await getProject(supabase, data.id as string);
-  if (!project) throw new ApiException("Không thể đọc lại dự án vừa tạo.", 500);
+  const [project] = hydrateProjects([
+    withProjectPeople(
+      projectRow,
+      managerIds,
+      memberIds,
+      accountsById
+    ),
+  ]);
   return project;
 }
 
@@ -612,17 +674,17 @@ export async function updateProject(
   id: string,
   input: ProjectInput
 ): Promise<Project | null> {
-  const managerIds = await resolveAccountIds(
-    supabase,
-    input.managerIds,
-    "Người quản lý"
-  );
-  const resolvedMemberIds = await resolveAccountIds(
-    supabase,
-    input.memberIds,
-    "Thành viên dự án"
-  );
+  const [resolvedManagers, resolvedMembers] = await Promise.all([
+    resolveAccounts(supabase, input.managerIds, "Người quản lý"),
+    resolveAccounts(supabase, input.memberIds, "Thành viên dự án"),
+  ]);
+  const managerIds = resolvedManagers.ids;
+  const resolvedMemberIds = resolvedMembers.ids;
   const memberIds = resolvedMemberIds.filter((id) => !managerIds.includes(id));
+  const accountsById = new Map([
+    ...resolvedManagers.accountsById,
+    ...resolvedMembers.accountsById,
+  ]);
 
   const { data, error } = await supabase
     .from("du_an")
@@ -640,14 +702,21 @@ export async function updateProject(
       lien_ket_dinh_kem: input.links,
     })
     .eq("id", id)
-    .select("id")
+    .select(PROJECT_SELECT)
     .maybeSingle();
   throwDatabaseError(error);
   if (!data) return null;
 
-  await syncProjectManagers(supabase, id, managerIds);
-  await syncProjectMembers(supabase, id, memberIds);
-  return getProject(supabase, id);
+  await syncProjectPeople(supabase, id, managerIds, memberIds);
+  const [project] = hydrateProjects([
+    withProjectPeople(
+      data as unknown as ProjectRow,
+      managerIds,
+      memberIds,
+      accountsById
+    ),
+  ]);
+  return project;
 }
 
 export async function deleteProject(
@@ -848,50 +917,59 @@ async function syncAssignments(
   ownerId: string,
   accountIds: string[]
 ): Promise<void> {
-  const { data: currentData, error: currentError } = await supabase
-    .from(table)
-    .select("tai_khoan_id")
-    .eq(ownerColumn, ownerId);
-  throwDatabaseError(currentError);
-
-  const currentIds = (currentData ?? []).map((row) => row.tai_khoan_id as string);
-  const removedIds = currentIds.filter((id) => !accountIds.includes(id));
-  const newIds = accountIds.filter((id) => !currentIds.includes(id));
-
-  if (removedIds.length > 0) {
-    const { error } = await supabase
-      .from(table)
-      .delete()
-      .eq(ownerColumn, ownerId)
-      .in("tai_khoan_id", removedIds);
-    throwDatabaseError(error);
-  }
-
-  if (newIds.length > 0) {
-    const { error } = await supabase.from(table).insert(
-      newIds.map((accountId) => ({
+  if (accountIds.length > 0) {
+    const { error: upsertError } = await supabase.from(table).upsert(
+      accountIds.map((accountId) => ({
         [ownerColumn]: ownerId,
         tai_khoan_id: accountId,
-        la_chinh: false,
-      }))
+        la_chinh: accountId === accountIds[0],
+      })),
+      { onConflict: `${ownerColumn},tai_khoan_id` }
     );
-    throwDatabaseError(error);
+    throwDatabaseError(upsertError);
   }
 
-  // Chỉ một người được đánh dấu là người phụ trách chính.
-  const { error: resetError } = await supabase
-    .from(table)
-    .update({ la_chinh: false })
-    .eq(ownerColumn, ownerId)
-    .neq("tai_khoan_id", accountIds[0]);
-  throwDatabaseError(resetError);
+  let deleteQuery = supabase.from(table).delete().eq(ownerColumn, ownerId);
+  if (accountIds.length > 0) {
+    deleteQuery = deleteQuery.not("tai_khoan_id", "in", `(${toPostgrestInValues(accountIds)})`);
+  }
+  const { error: deleteError } = await deleteQuery;
+  throwDatabaseError(deleteError);
+}
 
-  const { error: primaryError } = await supabase
-    .from(table)
-    .update({ la_chinh: true })
-    .eq(ownerColumn, ownerId)
-    .eq("tai_khoan_id", accountIds[0]);
-  throwDatabaseError(primaryError);
+function assignmentRows(
+  accountIds: string[],
+  accountsById: Map<string, AccountRow>
+): AssignmentEmbedRow[] {
+  return accountIds.map((accountId) => ({
+    tai_khoan_id: accountId,
+    la_chinh: accountId === accountIds[0],
+    tai_khoan: accountsById.get(accountId) ?? null,
+  }));
+}
+
+function withWorkTaskAssignees(
+  row: WorkTaskRow,
+  assigneeIds: string[],
+  accountsById: Map<string, AccountRow>
+): WorkTaskRow {
+  return {
+    ...row,
+    legacy_assignee: accountsById.get(assigneeIds[0]) ?? row.legacy_assignee,
+    cong_viec_phu_trach: assignmentRows(assigneeIds, accountsById),
+  };
+}
+
+function withSubtaskAssignees(
+  row: SubtaskRow,
+  assigneeIds: string[],
+  accountsById: Map<string, AccountRow>
+): SubtaskRow {
+  return {
+    ...row,
+    legacy_assignee: accountsById.get(assigneeIds[0]) ?? row.legacy_assignee,
+    task_phu_trach: assignmentRows(assigneeIds, accountsById),
+  };
 }
 
 /** Người phụ trách công việc bắt buộc phải tham gia dự án của công việc đó. */
@@ -965,7 +1043,7 @@ export async function createWorkTask(
   supabase: ApiSupabaseClient,
   input: WorkTaskInput
 ): Promise<WorkTask> {
-  const assigneeIds = await resolveAccountIds(
+  const { ids: assigneeIds, accountsById } = await resolveAccounts(
     supabase,
     input.assigneeIds,
     "Người phụ trách"
@@ -976,12 +1054,13 @@ export async function createWorkTask(
   const { data, error } = await supabase
     .from("cong_viec")
     .insert(payload)
-    .select("id")
+    .select(WORK_TASK_SELECT)
     .single();
   throwDatabaseError(error);
   if (!data) throw new ApiException("Supabase không trả về công việc vừa tạo.", 500);
+  const taskRow = data as unknown as WorkTaskRow;
 
-  const taskId = data.id as string;
+  const taskId = taskRow.id;
   await syncAssignments(
     supabase,
     "cong_viec_phu_trach",
@@ -990,8 +1069,9 @@ export async function createWorkTask(
     assigneeIds
   );
 
-  const task = await getWorkTask(supabase, taskId);
-  if (!task) throw new ApiException("Không thể đọc lại công việc vừa tạo.", 500);
+  const [task] = hydrateWorkTasks([
+    withWorkTaskAssignees(taskRow, assigneeIds, accountsById),
+  ]);
   return task;
 }
 
@@ -1003,7 +1083,7 @@ export async function updateWorkTask(
   const current = await getWorkTask(supabase, id);
   if (!current) return null;
 
-  const assigneeIds = await resolveAccountIds(
+  const { ids: assigneeIds, accountsById } = await resolveAccounts(
     supabase,
     input.assigneeIds,
     "Người phụ trách"
@@ -1017,7 +1097,7 @@ export async function updateWorkTask(
     .from("cong_viec")
     .update(payload)
     .eq("id", id)
-    .select("id")
+    .select(WORK_TASK_SELECT)
     .maybeSingle();
   throwDatabaseError(error);
   if (!data) return null;
@@ -1030,7 +1110,10 @@ export async function updateWorkTask(
     assigneeIds
   );
 
-  return getWorkTask(supabase, id);
+  const [task] = hydrateWorkTasks([
+    withWorkTaskAssignees(data as unknown as WorkTaskRow, assigneeIds, accountsById),
+  ]);
+  return task;
 }
 
 /**
@@ -1289,7 +1372,7 @@ export async function createSubtask(
   supabase: ApiSupabaseClient,
   input: SubtaskInput
 ): Promise<Subtask> {
-  const assigneeIds = await resolveAccountIds(
+  const { ids: assigneeIds, accountsById } = await resolveAccounts(
     supabase,
     input.assigneeIds,
     "Người phụ trách"
@@ -1299,12 +1382,13 @@ export async function createSubtask(
   const { data, error } = await supabase
     .from("task")
     .insert(subtaskPayload(input, assigneeIds[0]))
-    .select("id")
+    .select(SUBTASK_SELECT)
     .single();
   throwDatabaseError(error);
   if (!data) throw new ApiException("Supabase không trả về task vừa tạo.", 500);
+  const subtaskRow = data as unknown as SubtaskRow;
 
-  const subtaskId = data.id as string;
+  const subtaskId = subtaskRow.id;
   await syncAssignments(
     supabase,
     "task_phu_trach",
@@ -1313,8 +1397,9 @@ export async function createSubtask(
     assigneeIds
   );
 
-  const subtask = await getSubtask(supabase, subtaskId);
-  if (!subtask) throw new ApiException("Không thể đọc lại task vừa tạo.", 500);
+  const [subtask] = hydrateSubtasks([
+    withSubtaskAssignees(subtaskRow, assigneeIds, accountsById),
+  ]);
   return subtask;
 }
 
@@ -1323,7 +1408,7 @@ export async function updateSubtask(
   id: string,
   input: SubtaskInput
 ): Promise<Subtask | null> {
-  const assigneeIds = await resolveAccountIds(
+  const { ids: assigneeIds, accountsById } = await resolveAccounts(
     supabase,
     input.assigneeIds,
     "Người phụ trách"
@@ -1334,13 +1419,16 @@ export async function updateSubtask(
     .from("task")
     .update(subtaskPayload(input, assigneeIds[0]))
     .eq("id", id)
-    .select("id")
+    .select(SUBTASK_SELECT)
     .maybeSingle();
   throwDatabaseError(error);
   if (!data) return null;
 
   await syncAssignments(supabase, "task_phu_trach", "task_id", id, assigneeIds);
-  return getSubtask(supabase, id);
+  const [subtask] = hydrateSubtasks([
+    withSubtaskAssignees(data as unknown as SubtaskRow, assigneeIds, accountsById),
+  ]);
+  return subtask;
 }
 
 export async function deleteSubtask(

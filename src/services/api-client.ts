@@ -1,4 +1,5 @@
 import type { ApiResponse } from "@/types/project";
+import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "/api";
@@ -13,6 +14,17 @@ export class ApiError extends Error {
   }
 }
 
+async function sessionHeaders(): Promise<HeadersInit> {
+  if (typeof window === "undefined") return {};
+
+  const {
+    data: { session },
+  } = await createBrowserSupabaseClient().auth.getSession();
+  return session?.access_token
+    ? { Authorization: `Bearer ${session.access_token}` }
+    : {};
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const { headers, ...rest } = options;
 
@@ -20,6 +32,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const isFormData = rest.body instanceof FormData;
   const finalHeaders: HeadersInit = {
     ...(isFormData ? {} : { "Content-Type": "application/json" }),
+    ...(await sessionHeaders()),
     ...headers,
   };
 

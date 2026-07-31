@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { X } from "lucide-react";
 import type {
   TaskFileAttachment,
@@ -32,7 +32,10 @@ interface TaskFormModalProps {
   defaultProjectId?: string;
   defaultStatus?: WorkTaskInput["status"];
   onClose: () => void;
-  onSaved: () => void;
+  /** Trang danh sách truyền callback này để optimistic-update từ response API. */
+  onSave?: (input: WorkTaskInput) => Promise<WorkTask | null>;
+  /** Tương thích với các màn hình chi tiết chưa dùng optimistic update. */
+  onSaved?: () => void;
 }
 
 interface FormState {
@@ -160,6 +163,7 @@ export function TaskFormModal({
   defaultProjectId,
   defaultStatus,
   onClose,
+  onSave,
   onSaved,
 }: TaskFormModalProps) {
   const { notify } = useFeedback();
@@ -167,7 +171,7 @@ export function TaskFormModal({
     buildInitialState(task, projects, defaultProjectId, defaultStatus)
   );
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
-  const [submitting, setSubmitting] = useState(false);
+  const [isPending, startTransition] = useTransition();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [pendingImages, setPendingImages] = useState<PendingTaskImage[]>([]);
   const [imageError, setImageError] = useState("");
@@ -202,11 +206,11 @@ export function TaskFormModal({
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && !submitting) onClose();
+      if (event.key === "Escape" && !isPending) onClose();
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose, submitting]);
+  }, [isPending, onClose]);
 
   const projectParticipants = useMemo(
     () => participantsOf(projects.find((project) => project.id === form.projectId)),
@@ -425,58 +429,59 @@ export function TaskFormModal({
     event.preventDefault();
     if (!validate()) return;
 
-    setSubmitting(true);
-    setSubmitError(null);
-    try {
-      const [uploadedImages, uploadedFiles] = await Promise.all([
-        Promise.all(pendingImages.map((image) => taskService.uploadImage(image.file))),
-        Promise.all(pendingFiles.map((pending) => taskService.uploadFile(pending.file))),
-      ]);
-      const input: WorkTaskInput = {
-        title: form.title.trim(),
-        description: form.description || undefined,
-        projectId: form.projectId,
-        assigneeIds: form.assigneeIds,
-        status: form.status,
-        priority: form.priority,
-        startDate: form.startDate,
-        dueDate: form.dueDate,
-        progress: task?.progress ?? 0,
-        files: [...form.files, ...uploadedFiles],
-        links: normalizedLinks(),
-        images: [...form.images, ...uploadedImages],
-        tags: form.tagsText
-          .split(",")
-          .map((tag) => tag.trim())
-          .filter(Boolean),
-        dependsOnTaskId: form.dependsOnTaskId || undefined,
-      };
+    startTransition(async () => {
+      setSubmitError(null);
+      try {
+        const [uploadedImages, uploadedFiles] = await Promise.all([
+          Promise.all(pendingImages.map((image) => taskService.uploadImage(image.file))),
+          Promise.all(pendingFiles.map((pending) => taskService.uploadFile(pending.file))),
+        ]);
+        const input: WorkTaskInput = {
+          title: form.title.trim(),
+          description: form.description || undefined,
+          projectId: form.projectId,
+          assigneeIds: form.assigneeIds,
+          status: form.status,
+          priority: form.priority,
+          startDate: form.startDate,
+          dueDate: form.dueDate,
+          progress: task?.progress ?? 0,
+          files: [...form.files, ...uploadedFiles],
+          links: normalizedLinks(),
+          images: [...form.images, ...uploadedImages],
+          tags: form.tagsText
+            .split(",")
+            .map((tag) => tag.trim())
+            .filter(Boolean),
+          dependsOnTaskId: form.dependsOnTaskId || undefined,
+        };
 
-      if (mode === "edit" && task) {
-        await taskService.updateTask(task.id, input);
-      } else {
-        await taskService.createTask(input);
+        const saved = onSave
+          ? await onSave(input)
+          : mode === "edit" && task
+            ? await taskService.updateTask(task.id, input)
+            : await taskService.createTask(input);
+        if (!saved) throw new Error("Không tìm thấy công việc để cập nhật.");
+        notify({
+          type: "success",
+          title: mode === "edit" ? "Đã cập nhật công việc" : "Đã tạo công việc",
+          description: `Công việc “${input.title}” đã được lưu thành công.`,
+        });
+        onSaved?.();
+        onClose();
+      } catch (error) {
+        const message = getErrorMessage(error, "Không thể lưu công việc. Vui lòng thử lại.");
+        setSubmitError(message);
+        notify({ type: "error", title: "Lưu công việc thất bại", description: message });
       }
-      notify({
-        type: "success",
-        title: mode === "edit" ? "Đã cập nhật công việc" : "Đã tạo công việc",
-        description: `Công việc “${input.title}” đã được lưu thành công.`,
-      });
-      onSaved();
-    } catch (error) {
-      const message = getErrorMessage(error, "Không thể lưu công việc. Vui lòng thử lại.");
-      setSubmitError(message);
-      notify({ type: "error", title: "Lưu công việc thất bại", description: message });
-    } finally {
-      setSubmitting(false);
-    }
+    });
   }
 
   return (
     <div
       className="account-overlay fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 p-4"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !submitting) onClose();
+        if (event.target === event.currentTarget && !isPending) onClose();
       }}
     >
       <form
@@ -493,7 +498,7 @@ export function TaskFormModal({
           <button
             type="button"
             onClick={onClose}
-            disabled={submitting}
+            disabled={isPending}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100"
             aria-label="Đóng"
           >
@@ -554,7 +559,7 @@ export function TaskFormModal({
             maxFiles={MAX_TASK_FILES}
             maxLinks={MAX_TASK_LINKS}
             maxImages={MAX_TASK_IMAGES}
-            submitting={submitting}
+            submitting={isPending}
             fileError={fileError}
             linkError={errors.links}
             imageError={imageError}
@@ -703,11 +708,11 @@ export function TaskFormModal({
         </div>
 
         <div className="flex shrink-0 items-center justify-end gap-3 border-t border-gray-100 px-6 py-4">
-          <Button type="button" variant="secondary" onClick={onClose} disabled={submitting}>
+          <Button type="button" variant="secondary" onClick={onClose} disabled={isPending}>
             Hủy
           </Button>
-          <Button type="submit" disabled={submitting || projects.length === 0 || members.length === 0}>
-            {submitting
+          <Button type="submit" disabled={isPending || projects.length === 0 || members.length === 0}>
+            {isPending
               ? "Đang lưu..."
               : projects.length === 0
                 ? "Chưa có dự án"

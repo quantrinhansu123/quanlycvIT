@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Check, ChevronDown, Search, X } from "lucide-react";
 import type {
   Project,
@@ -24,7 +24,10 @@ interface ProjectFormModalProps {
   project?: Project;
   members: ProjectMember[];
   onClose: () => void;
-  onSaved: () => void;
+  /** Trang danh sách truyền callback này để optimistic-update từ response API. */
+  onSave?: (input: ProjectInput) => Promise<Project | null>;
+  /** Tương thích với các màn hình chi tiết chưa dùng optimistic update. */
+  onSaved?: () => void;
 }
 
 interface FormState {
@@ -124,12 +127,12 @@ function buildInitialState(project: Project | undefined, members: ProjectMember[
   };
 }
 
-export function ProjectFormModal({ mode, project, members, onClose, onSaved }: ProjectFormModalProps) {
+export function ProjectFormModal({ mode, project, members, onClose, onSave, onSaved }: ProjectFormModalProps) {
   const { notify } = useFeedback();
   const [form, setForm] = useState<FormState>(() => buildInitialState(project, members));
   const [codeTouched, setCodeTouched] = useState(mode === "edit");
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
-  const [submitting, setSubmitting] = useState(false);
+  const [isPending, startTransition] = useTransition();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [managerPickerOpen, setManagerPickerOpen] = useState(false);
   const [managerSearch, setManagerSearch] = useState("");
@@ -170,7 +173,7 @@ export function ProjectFormModal({ mode, project, members, onClose, onSaved }: P
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key !== "Escape" || submitting) return;
+      if (event.key !== "Escape" || isPending) return;
       if (memberPickerOpen) {
         setMemberPickerOpen(false);
         setMemberSearch("");
@@ -183,7 +186,7 @@ export function ProjectFormModal({ mode, project, members, onClose, onSaved }: P
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [managerPickerOpen, memberPickerOpen, onClose, submitting]);
+  }, [isPending, managerPickerOpen, memberPickerOpen, onClose]);
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
@@ -452,55 +455,56 @@ export function ProjectFormModal({ mode, project, members, onClose, onSaved }: P
     event.preventDefault();
     if (!validate()) return;
 
-    setSubmitting(true);
-    setSubmitError(null);
-    try {
-      const [uploadedImages, uploadedFiles] = await Promise.all([
-        Promise.all(pendingImages.map((image) => projectService.uploadImage(image.file))),
-        Promise.all(pendingFiles.map((pending) => projectService.uploadFile(pending.file))),
-      ]);
-      const input: ProjectInput = {
-        name: form.name.trim(),
-        code: form.code.trim(),
-        color: form.color,
-        steps: form.steps,
-        description: form.description || undefined,
-        startDate: form.startDate,
-        endDate: form.endDate,
-        managerIds: form.managerIds,
-        memberIds: form.memberIds.filter(
-          (memberId) => !form.managerIds.includes(memberId)
-        ),
-        files: [...form.files, ...uploadedFiles],
-        links: normalizedLinks(),
-        images: [...form.images, ...uploadedImages],
-      };
+    startTransition(async () => {
+      setSubmitError(null);
+      try {
+        const [uploadedImages, uploadedFiles] = await Promise.all([
+          Promise.all(pendingImages.map((image) => projectService.uploadImage(image.file))),
+          Promise.all(pendingFiles.map((pending) => projectService.uploadFile(pending.file))),
+        ]);
+        const input: ProjectInput = {
+          name: form.name.trim(),
+          code: form.code.trim(),
+          color: form.color,
+          steps: form.steps,
+          description: form.description || undefined,
+          startDate: form.startDate,
+          endDate: form.endDate,
+          managerIds: form.managerIds,
+          memberIds: form.memberIds.filter(
+            (memberId) => !form.managerIds.includes(memberId)
+          ),
+          files: [...form.files, ...uploadedFiles],
+          links: normalizedLinks(),
+          images: [...form.images, ...uploadedImages],
+        };
 
-      if (mode === "edit" && project) {
-        await projectService.updateProject(project.id, input);
-      } else {
-        await projectService.createProject(input);
+        const saved = onSave
+          ? await onSave(input)
+          : mode === "edit" && project
+            ? await projectService.updateProject(project.id, input)
+            : await projectService.createProject(input);
+        if (!saved) throw new Error("Không tìm thấy dự án để cập nhật.");
+        notify({
+          type: "success",
+          title: mode === "edit" ? "Đã cập nhật dự án" : "Đã tạo dự án",
+          description: `Dự án “${input.name}” đã được lưu thành công.`,
+        });
+        onSaved?.();
+        onClose();
+      } catch (error) {
+        const message = getErrorMessage(error, "Không thể lưu dự án. Vui lòng thử lại.");
+        setSubmitError(message);
+        notify({ type: "error", title: "Lưu dự án thất bại", description: message });
       }
-      notify({
-        type: "success",
-        title: mode === "edit" ? "Đã cập nhật dự án" : "Đã tạo dự án",
-        description: `Dự án “${input.name}” đã được lưu thành công.`,
-      });
-      onSaved();
-    } catch (error) {
-      const message = getErrorMessage(error, "Không thể lưu dự án. Vui lòng thử lại.");
-      setSubmitError(message);
-      notify({ type: "error", title: "Lưu dự án thất bại", description: message });
-    } finally {
-      setSubmitting(false);
-    }
+    });
   }
 
   return (
     <div
       className="account-overlay fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 p-4"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !submitting) onClose();
+        if (event.target === event.currentTarget && !isPending) onClose();
       }}
     >
       <form
@@ -517,7 +521,7 @@ export function ProjectFormModal({ mode, project, members, onClose, onSaved }: P
           <button
             type="button"
             onClick={onClose}
-            disabled={submitting}
+            disabled={isPending}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100"
             aria-label="Đóng"
           >
@@ -641,7 +645,7 @@ export function ProjectFormModal({ mode, project, members, onClose, onSaved }: P
             maxFiles={MAX_PROJECT_FILES}
             maxLinks={MAX_PROJECT_LINKS}
             maxImages={MAX_PROJECT_IMAGES}
-            submitting={submitting}
+            submitting={isPending}
             fileError={fileError}
             linkError={errors.links}
             imageError={imageError}
@@ -932,11 +936,11 @@ export function ProjectFormModal({ mode, project, members, onClose, onSaved }: P
         </div>
 
         <div className="flex shrink-0 items-center justify-end gap-3 border-t border-gray-100 px-6 py-4">
-          <Button type="button" variant="secondary" onClick={onClose} disabled={submitting}>
+          <Button type="button" variant="secondary" onClick={onClose} disabled={isPending}>
             Hủy
           </Button>
-          <Button type="submit" disabled={submitting || members.length === 0}>
-            {submitting ? "Đang lưu..." : members.length === 0 ? "Chưa có nhân sự" : mode === "edit" ? "Cập nhật" : "Tạo mới"}
+          <Button type="submit" disabled={isPending || members.length === 0}>
+            {isPending ? "Đang lưu..." : members.length === 0 ? "Chưa có nhân sự" : mode === "edit" ? "Cập nhật" : "Tạo mới"}
           </Button>
         </div>
       </form>

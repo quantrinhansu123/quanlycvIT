@@ -9,6 +9,12 @@ import { Avatar, AvatarStack } from "@/components/ui/Avatar";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { TaskPriorityBadge, TaskStatusBadge, OverdueTag } from "@/components/tasks/TaskBadges";
 import { ActionIconButton } from "@/components/ui/ActionIconButton";
+import {
+  subtaskColumnWidths,
+  WORK_ITEM_PROGRESS_CLASS,
+  WORK_ITEM_TABLE_CLASS,
+  WORK_ITEM_TITLE_CLASS,
+} from "@/components/ui/work-item-table-layout";
 import { formatDateVN } from "@/lib/utils";
 
 interface SubtaskTableProps {
@@ -45,23 +51,15 @@ export function SubtaskTable({
 }: SubtaskTableProps) {
   const allSelected = subtasks.length > 0 && selectedIds.length === subtasks.length;
   const showProjectColumn = !hideWorkTaskColumn && Boolean(projectsById);
+  const columnWidths = subtaskColumnWidths(hideWorkTaskColumn, showProjectColumn);
 
   return (
     <div className="min-w-0">
       <table
-        className={`w-full ${hideWorkTaskColumn ? "min-w-[820px]" : showProjectColumn ? "min-w-[980px]" : "min-w-[900px]"} table-fixed border-collapse text-xs xl:min-w-0`}
+        className={`${WORK_ITEM_TABLE_CLASS} ${hideWorkTaskColumn ? "min-w-[820px]" : showProjectColumn ? "min-w-[980px]" : "min-w-[900px]"}`}
       >
         <colgroup>
-          <col className="w-9" />
-          <col className={hideWorkTaskColumn ? "w-[25%]" : "w-[16%]"} />
-          {!hideWorkTaskColumn && <col className="w-[11%]" />}
-          {showProjectColumn && <col className="w-[10%]" />}
-          <col className="w-[14%]" />
-          <col className="w-[12%]" />
-          <col className="w-[11%]" />
-          <col className="w-[9%]" />
-          <col className="w-[8%]" />
-          <col className="w-[176px]" />
+          {columnWidths.map((width, index) => <col key={index} className={width} />)}
         </colgroup>
         <thead className="sticky top-0 z-10 bg-gray-50">
           <tr className="border-b border-gray-100 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
@@ -106,7 +104,7 @@ export function SubtaskTable({
                   <button
                     type="button"
                     onClick={() => onOpenSubtask(subtask)}
-                    className="block w-full truncate text-left text-xs font-semibold text-gray-800 hover:text-brand-600"
+                    className={WORK_ITEM_TITLE_CLASS}
                   >
                     {subtask.title}
                   </button>
@@ -157,7 +155,7 @@ export function SubtaskTable({
                   {overdue && <OverdueTag className="mt-1" />}
                 </td>
                 <td className="px-2 py-3 align-top">
-                  <ProgressBar value={subtask.progress} className="w-12 2xl:w-16" />
+                  <ProgressBar value={subtask.progress} className={WORK_ITEM_PROGRESS_CLASS} />
                 </td>
                 <td className="px-2 py-3 align-top">
                   <TaskPriorityBadge priority={subtask.priority} className="px-1.5 py-0.5 text-[11px]" />

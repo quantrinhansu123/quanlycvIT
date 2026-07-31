@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
@@ -16,8 +16,8 @@ import {
 import { projectService } from "@/services/project-service";
 import { taskService, type TaskFilters } from "@/services/task-service";
 import type { Project, ProjectMember } from "@/types/project";
-import type { WorkTask, TaskPriority, TaskStatus } from "@/types/task";
-import { TASK_PRIORITY_OPTIONS, TASK_STATUS_OPTIONS } from "@/types/task";
+import type { WorkTask, WorkTaskInput, TaskPriority, TaskStatus } from "@/types/task";
+import { isTaskOverdue, TASK_PRIORITY_OPTIONS, TASK_STATUS_OPTIONS } from "@/types/task";
 import { Button } from "@/components/ui/Button";
 import { FilterSelect } from "@/components/ui/FilterSelect";
 import { SearchableFilterSelect } from "@/components/ui/SearchableFilterSelect";
@@ -40,6 +40,51 @@ const TaskFormModal = dynamic(
 
 type ViewMode = "table" | "grid";
 type FormModalState = { mode: "create" } | { mode: "edit"; task: WorkTask } | null;
+type TaskOptimisticAction = { task: WorkTask; visible: boolean; insert: boolean };
+
+function matchesTaskFilters(task: WorkTask, filters: TaskFilters): boolean {
+  const term = filters.search?.trim().toLocaleLowerCase();
+  if (term && !task.title.toLocaleLowerCase().includes(term)) return false;
+  if (filters.projectId && task.projectId !== filters.projectId) return false;
+  if (filters.assigneeIds?.length && !task.assignees.some((assignee) => filters.assigneeIds!.includes(assignee.id))) {
+    return false;
+  }
+  if (filters.priority && task.priority !== filters.priority) return false;
+  if (filters.status && task.status !== filters.status) return false;
+  return !filters.overdueOnly || isTaskOverdue(task);
+}
+
+function buildOptimisticTask(
+  input: WorkTaskInput,
+  members: ProjectMember[],
+  existing?: WorkTask
+): WorkTask {
+  const membersById = new Map(members.map((member) => [member.id, member]));
+  const assignees = input.assigneeIds
+    .map((id) => membersById.get(id))
+    .filter((member): member is ProjectMember => Boolean(member));
+
+  return {
+    id: existing?.id ?? `optimistic-task-${crypto.randomUUID()}`,
+    title: input.title,
+    description: input.description,
+    createdAt: existing?.createdAt ?? new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    projectId: input.projectId,
+    assigneeId: assignees[0]?.id ?? input.assigneeIds[0],
+    assignees,
+    status: input.status,
+    priority: input.priority,
+    startDate: input.startDate,
+    dueDate: input.dueDate,
+    progress: input.progress,
+    tags: input.tags,
+    dependsOnTaskId: input.dependsOnTaskId,
+    files: input.files,
+    links: input.links,
+    images: input.images,
+  };
+}
 
 export default function TaskListPage() {
   const router = useRouter();
@@ -66,6 +111,16 @@ export default function TaskListPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [pageSize, setPageSize] = useState(50);
   const [page, setPage] = useState(1);
+  const [, startTransition] = useTransition();
+  const [optimisticTasks, addOptimisticTask] = useOptimistic(
+    tasks,
+    (current, action: TaskOptimisticAction) => {
+      if (!action.visible) return current.filter((task) => task.id !== action.task.id);
+      const exists = current.some((task) => task.id === action.task.id);
+      if (exists) return current.map((task) => task.id === action.task.id ? action.task : task);
+      return action.insert ? [action.task, ...current].slice(0, pageSize) : current;
+    }
+  );
 
   const projectsById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
   const membersById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
@@ -146,7 +201,7 @@ export default function TaskListPage() {
   }
 
   function toggleSelectAll() {
-    const visibleIds = tasks.map((task) => task.id);
+    const visibleIds = optimisticTasks.map((task) => task.id);
     const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
     setSelectedIds((current) =>
       allVisibleSelected
@@ -180,6 +235,50 @@ export default function TaskListPage() {
     } finally {
       setDeletingId(null);
     }
+  }
+
+  function saveTask(input: WorkTaskInput): Promise<WorkTask> {
+    const existing = formModal?.mode === "edit" ? formModal.task : undefined;
+    const filters = currentFilters();
+    const optimisticTask = buildOptimisticTask(input, members, existing);
+    const wasVisible = existing ? matchesTaskFilters(existing, filters) : false;
+    const willBeVisible = matchesTaskFilters(optimisticTask, filters);
+
+    return new Promise((resolve, reject) => {
+      startTransition(async () => {
+        addOptimisticTask({
+          task: optimisticTask,
+          visible: willBeVisible,
+          insert: !existing && page === 1,
+        });
+        try {
+          const saved = existing
+            ? await taskService.updateTask(existing.id, input)
+            : await taskService.createTask(input);
+          if (!saved) throw new Error("Không tìm thấy công việc để cập nhật.");
+
+          const isVisible = matchesTaskFilters(saved, filters);
+          setTasks((current) => {
+            if (!isVisible) return current.filter((task) => task.id !== saved.id);
+            const exists = current.some((task) => task.id === saved.id);
+            if (exists) return current.map((task) => task.id === saved.id ? saved : task);
+            return !existing && page === 1 ? [saved, ...current].slice(0, pageSize) : current;
+          });
+          setDependencyTasks((current) => {
+            const exists = current.some((task) => task.id === saved.id);
+            return exists
+              ? current.map((task) => task.id === saved.id ? saved : task)
+              : [saved, ...current];
+          });
+          if (wasVisible !== isVisible || (!existing && isVisible)) {
+            setTotal((current) => current + (isVisible ? 1 : -1));
+          }
+          resolve(saved);
+        } catch (saveError) {
+          reject(saveError);
+        }
+      });
+    });
   }
 
   async function handleExportCsv() {
@@ -320,7 +419,7 @@ export default function TaskListPage() {
           <TableSkeleton rows={5} />
         ) : error ? (
           <ErrorState onRetry={() => loadTasks(currentFilters(), page, pageSize)} />
-        ) : tasks.length === 0 ? (
+        ) : optimisticTasks.length === 0 ? (
           <EmptyState
             icon={ListChecks}
             title="Không tìm thấy công việc nào"
@@ -334,7 +433,7 @@ export default function TaskListPage() {
           />
         ) : viewMode === "table" ? (
           <TaskTable
-            tasks={tasks}
+            tasks={optimisticTasks}
             projectsById={projectsById}
             membersById={membersById}
             selectedIds={selectedIds}
@@ -348,7 +447,7 @@ export default function TaskListPage() {
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3">
-            {tasks.map((task) => (
+            {optimisticTasks.map((task) => (
               <TaskCard
                 key={task.id}
                 task={task}
@@ -387,11 +486,7 @@ export default function TaskListPage() {
           members={members}
           otherTasks={dependencyTasks}
           onClose={() => setFormModal(null)}
-          onSaved={() => {
-            setFormModal(null);
-            loadTasks(currentFilters(), page, pageSize);
-            refreshDependencyTasks();
-          }}
+          onSave={saveTask}
         />
       )}
 

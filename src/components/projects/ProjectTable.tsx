@@ -43,7 +43,7 @@ export function ProjectTable({
               />
             </th>
             <th className="px-3 py-3">Mã dự án</th>
-            <th className="px-3 py-3">Tên dự án</th>
+            <th className="w-80 px-3 py-3">Tên dự án</th>
             <th className="w-32 whitespace-nowrap px-3 py-3">Quản lý (PM)</th>
             <th className="px-3 py-3">Ngày bắt đầu</th>
             <th className="px-3 py-3">Ngày kết thúc</th>
@@ -67,11 +67,11 @@ export function ProjectTable({
               <td className="px-3 py-4 align-top">
                 <Badge color={project.color}>{project.code}</Badge>
               </td>
-              <td className="max-w-xs px-3 py-4 align-top">
+              <td className="w-80 max-w-xs px-3 py-4 align-top">
                 <button
                   type="button"
                   onClick={() => router.push(`/quan-ly-cong-viec/danh-sach-du-an/${project.id}`)}
-                  className="block truncate text-left text-xs font-semibold text-gray-800 hover:text-brand-600"
+                  className="block w-full whitespace-normal break-all text-left text-xs font-semibold leading-5 text-gray-800 hover:text-brand-600"
                 >
                   {project.name}
                 </button>

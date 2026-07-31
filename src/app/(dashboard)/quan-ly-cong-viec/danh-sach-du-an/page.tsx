@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { ArrowLeft, Download, LayoutGrid, Plus, Search, Table as TableIcon, FolderOpen } from "lucide-react";
 import { projectService } from "@/services/project-service";
-import type { Project, ProjectMember } from "@/types/project";
+import type { Project, ProjectInput, ProjectMember } from "@/types/project";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -25,6 +25,54 @@ const ProjectFormModal = dynamic(
 
 type ViewMode = "table" | "grid";
 type ModalState = { mode: "create" } | { mode: "edit"; project: Project } | null;
+type ProjectOptimisticAction = { project: Project; visible: boolean; insert: boolean };
+
+function matchesProjectSearch(project: Project, search: string): boolean {
+  const term = search.trim().toLocaleLowerCase();
+  return !term || project.name.toLocaleLowerCase().includes(term) || project.code.toLocaleLowerCase().includes(term);
+}
+
+function buildOptimisticProject(
+  input: ProjectInput,
+  members: ProjectMember[],
+  existing?: Project
+): Project {
+  const membersById = new Map(members.map((member) => [member.id, member]));
+  const managers = input.managerIds
+    .map((id) => membersById.get(id))
+    .filter((member): member is ProjectMember => Boolean(member));
+  const projectMembers = input.memberIds
+    .filter((id) => !input.managerIds.includes(id))
+    .map((id) => membersById.get(id))
+    .filter((member): member is ProjectMember => Boolean(member));
+  const today = new Date().toISOString().slice(0, 10);
+  const status = existing?.stats.total && existing.stats.done === existing.stats.total
+    ? "done"
+    : input.endDate < today
+      ? "overdue"
+      : input.startDate > today
+        ? "notStarted"
+        : "inProgress";
+
+  return {
+    id: existing?.id ?? `optimistic-project-${crypto.randomUUID()}`,
+    code: input.code,
+    name: input.name,
+    description: input.description,
+    color: input.color,
+    steps: input.steps,
+    startDate: input.startDate,
+    endDate: input.endDate,
+    status,
+    managers,
+    manager: managers[0] ?? existing?.manager ?? { id: "", name: "Chưa phân công", avatarColor: "#9CA3AF" },
+    members: projectMembers,
+    stats: existing?.stats ?? { total: 0, done: 0, inProgress: 0, overdue: 0 },
+    files: input.files,
+    links: input.links,
+    images: input.images,
+  };
+}
 
 export default function ProjectListPage() {
   const router = useRouter();
@@ -41,6 +89,18 @@ export default function ProjectListPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [pageSize, setPageSize] = useState(50);
   const [page, setPage] = useState(1);
+  const [, startTransition] = useTransition();
+  const [optimisticProjects, addOptimisticProject] = useOptimistic(
+    projects,
+    (current, action: ProjectOptimisticAction) => {
+      if (!action.visible) return current.filter((project) => project.id !== action.project.id);
+      const exists = current.some((project) => project.id === action.project.id);
+      if (exists) {
+        return current.map((project) => project.id === action.project.id ? action.project : project);
+      }
+      return action.insert ? [action.project, ...current].slice(0, pageSize) : current;
+    }
+  );
 
   const loadProjects = useCallback(async (query: string | undefined, targetPage: number, size: number) => {
     setLoading(true);
@@ -91,7 +151,7 @@ export default function ProjectListPage() {
   }
 
   function toggleSelectAll() {
-    const visibleIds = projects.map((project) => project.id);
+    const visibleIds = optimisticProjects.map((project) => project.id);
     const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
     setSelectedIds((current) =>
       allVisibleSelected
@@ -124,6 +184,43 @@ export default function ProjectListPage() {
     } finally {
       setDeletingId(null);
     }
+  }
+
+  function saveProject(input: ProjectInput): Promise<Project> {
+    const existing = modalState?.mode === "edit" ? modalState.project : undefined;
+    const optimisticProject = buildOptimisticProject(input, members, existing);
+    const wasVisible = existing ? matchesProjectSearch(existing, search) : false;
+    const willBeVisible = matchesProjectSearch(optimisticProject, search);
+
+    return new Promise((resolve, reject) => {
+      startTransition(async () => {
+        addOptimisticProject({
+          project: optimisticProject,
+          visible: willBeVisible,
+          insert: !existing && page === 1,
+        });
+        try {
+          const saved = existing
+            ? await projectService.updateProject(existing.id, input)
+            : await projectService.createProject(input);
+          if (!saved) throw new Error("Không tìm thấy dự án để cập nhật.");
+
+          const isVisible = matchesProjectSearch(saved, search);
+          setProjects((current) => {
+            if (!isVisible) return current.filter((project) => project.id !== saved.id);
+            const exists = current.some((project) => project.id === saved.id);
+            if (exists) return current.map((project) => project.id === saved.id ? saved : project);
+            return !existing && page === 1 ? [saved, ...current].slice(0, pageSize) : current;
+          });
+          if (wasVisible !== isVisible || (!existing && isVisible)) {
+            setTotal((current) => current + (isVisible ? 1 : -1));
+          }
+          resolve(saved);
+        } catch (saveError) {
+          reject(saveError);
+        }
+      });
+    });
   }
 
   async function handleExportCsv() {
@@ -223,7 +320,7 @@ export default function ProjectListPage() {
           <TableSkeleton rows={4} />
         ) : error ? (
           <ErrorState onRetry={() => loadProjects(search, page, pageSize)} />
-        ) : projects.length === 0 ? (
+        ) : optimisticProjects.length === 0 ? (
           <EmptyState
             icon={FolderOpen}
             title="Không tìm thấy dự án nào"
@@ -237,7 +334,7 @@ export default function ProjectListPage() {
           />
         ) : viewMode === "table" ? (
           <ProjectTable
-            projects={projects}
+            projects={optimisticProjects}
             selectedIds={selectedIds}
             onToggleSelect={toggleSelect}
             onToggleSelectAll={toggleSelectAll}
@@ -246,7 +343,7 @@ export default function ProjectListPage() {
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3">
-            {projects.map((project) => (
+            {optimisticProjects.map((project) => (
               <ProjectCard
                 key={project.id}
                 project={project}
@@ -278,10 +375,7 @@ export default function ProjectListPage() {
           project={modalState.mode === "edit" ? modalState.project : undefined}
           members={members}
           onClose={() => setModalState(null)}
-          onSaved={() => {
-            setModalState(null);
-            loadProjects(search, page, pageSize);
-          }}
+          onSave={saveProject}
         />
       )}
     </div>

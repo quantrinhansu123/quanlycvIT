@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 
 /** Google Apps Script Web App giới hạn payload; giữ dư an toàn dưới ngưỡng đó. */
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
+const UPLOAD_TIMEOUT_MS = 30_000;
 
 function configuration() {
   const uploadUrl = process.env.GOOGLE_APPS_SCRIPT_UPLOAD_URL;
@@ -36,16 +37,28 @@ export async function POST(request: Request) {
     const { uploadUrl, secret } = configuration();
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    const response = await fetch(uploadUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        secret,
-        fileName: file.name,
-        mimeType: file.type || "application/octet-stream",
-        dataBase64: buffer.toString("base64"),
-      }),
-    });
+    let response: Response;
+    try {
+      response = await fetch(uploadUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          secret,
+          fileName: file.name,
+          mimeType: file.type || "application/octet-stream",
+          dataBase64: buffer.toString("base64"),
+        }),
+        signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
+      });
+    } catch (uploadError) {
+      if (
+        uploadError instanceof Error &&
+        (uploadError.name === "TimeoutError" || uploadError.name === "AbortError")
+      ) {
+        throw new ApiException("Tải tệp lên Google Drive quá thời gian chờ. Vui lòng thử lại.", 504);
+      }
+      throw uploadError;
+    }
 
     const payload = (await response.json().catch(() => null)) as
       | { url?: string; error?: string }

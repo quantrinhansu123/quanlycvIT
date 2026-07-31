@@ -155,6 +155,16 @@ html[data-theme="dark"] .data-table-row:hover > td {
   background-color: #fff1f2;
 }
 
+/* Tiêu đề trong các bảng Công việc/Task: ưu tiên xuống dòng thay vì làm tràn bảng. */
+.work-item-title {
+  display: block;
+  width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.25rem;
+}
+
 .icon-button {
   display: inline-flex;
   height: 2.25rem;
