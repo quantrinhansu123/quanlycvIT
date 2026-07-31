@@ -9,7 +9,7 @@ interface ActionIconButtonProps {
   icon: LucideIcon;
   label: string;
   onClick: () => void;
-  tone?: "default" | "warning" | "danger";
+  tone?: "default" | "warning" | "danger" | "success";
   disabled?: boolean;
 }
 
@@ -74,7 +74,9 @@ export function ActionIconButton({
             ? "border-rose-100 text-rose-500 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
             : tone === "warning"
               ? "border-amber-100 text-amber-600 hover:border-amber-200 hover:bg-amber-50"
-              : "border-gray-200 text-gray-500 hover:border-brand-200 hover:bg-brand-50 hover:text-brand-600"
+              : tone === "success"
+                ? "border-emerald-100 text-emerald-600 hover:border-emerald-200 hover:bg-emerald-50"
+                : "border-gray-200 text-gray-500 hover:border-brand-200 hover:bg-brand-50 hover:text-brand-600"
         )}
       >
         <Icon className="h-4 w-4" />

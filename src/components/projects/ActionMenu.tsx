@@ -8,9 +8,10 @@ interface ActionMenuProps {
   onView: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  readOnly?: boolean;
 }
 
-export function ActionMenu({ onView, onEdit, onDelete }: ActionMenuProps) {
+export function ActionMenu({ onView, onEdit, onDelete, readOnly = false }: ActionMenuProps) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
@@ -23,7 +24,7 @@ export function ActionMenu({ onView, onEdit, onDelete }: ActionMenuProps) {
 
     const rect = button.getBoundingClientRect();
     const menuWidth = 208;
-    const menuHeight = 136;
+    const menuHeight = readOnly ? 48 : 136;
     const gap = 4;
     const viewportPadding = 8;
     const openUpward =
@@ -37,7 +38,7 @@ export function ActionMenu({ onView, onEdit, onDelete }: ActionMenuProps) {
         window.innerWidth - menuWidth - viewportPadding
       ),
     });
-  }, []);
+  }, [readOnly]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -95,7 +96,7 @@ export function ActionMenu({ onView, onEdit, onDelete }: ActionMenuProps) {
           style={{ top: position.top, left: position.left }}
           role="menu"
         >
-          <button
+          {!readOnly && <button
             type="button"
             role="menuitem"
             onClick={() => {
@@ -106,8 +107,8 @@ export function ActionMenu({ onView, onEdit, onDelete }: ActionMenuProps) {
           >
             <Eye className="h-4 w-4" />
             Xem chi tiết dự án
-          </button>
-          <button
+          </button>}
+          {!readOnly && <button
             type="button"
             role="menuitem"
             onClick={() => {
@@ -118,7 +119,7 @@ export function ActionMenu({ onView, onEdit, onDelete }: ActionMenuProps) {
           >
             <Pencil className="h-4 w-4" />
             Chỉnh sửa
-          </button>
+          </button>}
           <button
             type="button"
             role="menuitem"

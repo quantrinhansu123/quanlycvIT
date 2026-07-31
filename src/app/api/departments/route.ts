@@ -1,19 +1,15 @@
-import { unstable_cache, revalidateTag } from "next/cache";
+import { revalidateTag } from "next/cache";
 import { apiSuccess, handleApiError, readJsonObject } from "@/lib/api/response";
 import { parseDepartmentInput } from "@/lib/api/department-validation";
-import { createApiSupabaseClient, createServerSupabaseClient } from "@/lib/supabase/api";
+import { createApiSupabaseClient } from "@/lib/supabase/api";
+import { assertManagerOrAdmin, requireRequestAccount } from "@/lib/supabase/authorization";
 import { createDepartment, listDepartments } from "@/lib/supabase/departments";
 
-// Phòng ban thay đổi hiếm khi; cache 1 giờ, xóa sớm hơn qua revalidateTag khi có thay đổi.
-const getCachedDepartments = unstable_cache(
-  async () => listDepartments(createServerSupabaseClient()),
-  ["departments"],
-  { revalidate: 3600, tags: ["departments"] }
-);
-
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    return apiSuccess(await getCachedDepartments());
+    const supabase = createApiSupabaseClient(request);
+    assertManagerOrAdmin(await requireRequestAccount(supabase));
+    return apiSuccess(await listDepartments(supabase));
   } catch (error) {
     return handleApiError(error);
   }
@@ -21,8 +17,10 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const supabase = createApiSupabaseClient(request);
+    assertManagerOrAdmin(await requireRequestAccount(supabase));
     const department = await createDepartment(
-      createApiSupabaseClient(request),
+      supabase,
       parseDepartmentInput(await readJsonObject(request))
     );
     revalidateTag("departments", { expire: 0 });

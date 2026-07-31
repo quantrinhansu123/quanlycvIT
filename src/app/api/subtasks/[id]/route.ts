@@ -6,6 +6,7 @@ import {
 } from "@/lib/api/response";
 import { parseSubtaskInput } from "@/lib/api/validation";
 import { createApiSupabaseClient } from "@/lib/supabase/api";
+import { assertSubtaskReadable, requireRequestAccount } from "@/lib/supabase/authorization";
 import {
   deleteSubtask,
   getSubtask,
@@ -19,7 +20,10 @@ interface RouteParams {
 export async function GET(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
-    const subtask = await getSubtask(createApiSupabaseClient(request), id);
+    const supabase = createApiSupabaseClient(request);
+    const access = await requireRequestAccount(supabase);
+    await assertSubtaskReadable(supabase, access, id);
+    const subtask = await getSubtask(supabase, id);
     if (!subtask) throw new ApiException("Không tìm thấy task.", 404);
     return apiSuccess(subtask);
   } catch (error) {

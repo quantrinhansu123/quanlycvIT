@@ -27,6 +27,7 @@ interface TaskTableProps {
   onEdit: (task: WorkTask) => void;
   onDelete: (task: WorkTask) => void;
   hideProjectColumn?: boolean;
+  readOnly?: boolean;
 }
 
 export function TaskTable({
@@ -40,21 +41,22 @@ export function TaskTable({
   onEdit,
   onDelete,
   hideProjectColumn = false,
+  readOnly = false,
 }: TaskTableProps) {
   const allSelected = tasks.length > 0 && selectedIds.length === tasks.length;
-  const columnWidths = taskColumnWidths(hideProjectColumn);
+  const columnWidths = taskColumnWidths(hideProjectColumn, readOnly);
 
   return (
     <div className="min-w-0">
       <table
-        className={`${WORK_ITEM_TABLE_CLASS} ${hideProjectColumn ? "min-w-[820px]" : "min-w-[900px]"}`}
+        className={`${WORK_ITEM_TABLE_CLASS} ${hideProjectColumn ? "min-w-[760px]" : "min-w-[840px]"}`}
       >
         <colgroup>
           {columnWidths.map((width, index) => <col key={index} className={width} />)}
         </colgroup>
         <thead className="sticky top-0 z-10 bg-gray-50">
           <tr className="border-b border-gray-100 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-            <th className="px-2 py-3">
+            {!readOnly && <th className="px-2 py-3">
               <input
                 type="checkbox"
                 checked={allSelected}
@@ -62,7 +64,7 @@ export function TaskTable({
                 className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
                 aria-label="Chọn tất cả"
               />
-            </th>
+            </th>}
             <th className="whitespace-nowrap px-2 py-3">Tên công việc</th>
             {!hideProjectColumn && <th className="whitespace-nowrap px-2 py-3">Dự án</th>}
             <th className="whitespace-nowrap px-2 py-3">Người phụ trách</th>
@@ -70,7 +72,7 @@ export function TaskTable({
             <th className="whitespace-nowrap px-2 py-3">Tiến độ</th>
             <th className="whitespace-nowrap px-2 py-3">Ưu tiên</th>
             <th className="whitespace-nowrap px-2 py-3">Trạng thái</th>
-            <th className="whitespace-nowrap px-2 py-3 text-left">Thao tác</th>
+            {!readOnly && <th className="whitespace-nowrap px-2 py-3 text-left">Thao tác</th>}
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
@@ -81,7 +83,7 @@ export function TaskTable({
 
             return (
               <tr key={task.id} className="data-table-row group">
-                <td className="px-2 py-3 align-top">
+                {!readOnly && <td className="px-2 py-3 align-top">
                   <input
                     type="checkbox"
                     checked={selectedIds.includes(task.id)}
@@ -89,7 +91,7 @@ export function TaskTable({
                     className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
                     aria-label={`Chọn công việc ${task.title}`}
                   />
-                </td>
+                </td>}
                 <td className="min-w-0 px-2 py-3 align-top">
                   <button
                     type="button"
@@ -150,7 +152,7 @@ export function TaskTable({
                 <td className="px-2 py-3 align-top">
                   <TaskStatusBadge status={task.status} className="px-1.5 py-0.5 text-[11px]" />
                 </td>
-                <td className="px-2 py-3 align-top">
+                {!readOnly && <td className="px-2 py-3 align-top">
                   <div className="flex items-center justify-start gap-1">
                     <ActionIconButton
                       icon={Pencil}
@@ -165,7 +167,7 @@ export function TaskTable({
                       onClick={() => onDelete(task)}
                     />
                   </div>
-                </td>
+                </td>}
               </tr>
             );
           })}

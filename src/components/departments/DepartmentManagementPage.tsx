@@ -12,6 +12,7 @@ import { ActionIconButton } from "@/components/ui/ActionIconButton";
 import { ModalLoadingFallback } from "@/components/ui/ModalLoadingFallback";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
+import { exportTablePdf } from "@/lib/pdf-export";
 import { cn } from "@/lib/utils";
 import { departmentService } from "@/services/department-service";
 import type { DepartmentInput, DepartmentRecord } from "@/types/department";
@@ -26,10 +27,6 @@ type SortKey = "code" | "name" | "level" | "createdAt";
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("vi-VN").format(new Date(value));
-}
-
-function csvCell(value: string | number | undefined) {
-  return `"${String(value ?? "").replaceAll('"', '""')}"`;
 }
 
 function asInput(department: DepartmentRecord): DepartmentInput {
@@ -165,28 +162,28 @@ export function DepartmentManagementPage() {
     }
   }
 
-  function exportCsv() {
-    const headers = ["Mã PB", "Tên phòng ban", "Cấp độ", "Chức vụ", "Mô tả", "Trạng thái", "Ngày tạo"];
-    const rows = filtered.map((department) =>
-      [
-        department.code,
-        department.name,
-        department.level,
-        department.positions.join("; "),
-        department.description,
-        department.status === "active" ? "Hoạt động" : "Ngừng hoạt động",
-        department.createdAt.slice(0, 10),
-      ].map(csvCell).join(",")
-    );
-    const blob = new Blob(
-      ["\uFEFF" + [headers.map(csvCell).join(","), ...rows].join("\n")],
-      { type: "text/csv;charset=utf-8" }
-    );
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `phong-ban-${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(link.href);
+  async function exportPdf() {
+    try {
+      await exportTablePdf({
+        title: "Danh sách phòng ban",
+        filename: `phong-ban-${new Date().toISOString().slice(0, 10)}.pdf`,
+        orientation: "landscape",
+        columns: [
+          { label: "Mã PB", width: 48 }, { label: "Tên phòng ban", width: 90 },
+          { label: "Cấp", width: 35, alignment: "center" }, { label: "Chức vụ", width: 105 },
+          { label: "Mô tả", width: "*" }, { label: "Trạng thái", width: 65 },
+          { label: "Ngày tạo", width: 55, alignment: "center" },
+        ],
+        rows: filtered.map((department) => [
+          department.code, department.name, department.level, department.positions.join("; "),
+          department.description, department.status === "active" ? "Hoạt động" : "Ngừng hoạt động",
+          formatDate(department.createdAt),
+        ]),
+      });
+      notify({ type: "success", title: `Đã xuất ${filtered.length} phòng ban ra PDF` });
+    } catch (error) {
+      notify({ type: "error", title: "Không thể xuất PDF", description: getErrorMessage(error, "Vui lòng thử lại.") });
+    }
   }
 
   async function importCsv(event: React.ChangeEvent<HTMLInputElement>) {
@@ -281,7 +278,7 @@ export function DepartmentManagementPage() {
           </Button>
           <button title="Tùy chỉnh cột" className="icon-button"><Columns3 className="h-4 w-4" /></button>
           <button title="Nhập CSV" onClick={() => fileRef.current?.click()} className="icon-button"><Upload className="h-4 w-4" /></button>
-          <button title="Xuất CSV" onClick={exportCsv} className="icon-button"><Download className="h-4 w-4" /></button>
+          <button title="Xuất PDF" onClick={() => void exportPdf()} className="icon-button"><Download className="h-4 w-4" /></button>
           <button title="Tải lại" onClick={() => void load()} className="icon-button">
             <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
           </button>

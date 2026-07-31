@@ -12,9 +12,10 @@ interface ProjectCardProps {
   project: Project;
   onEdit: (project: Project) => void;
   onDelete: (project: Project) => void;
+  readOnly?: boolean;
 }
 
-export function ProjectCard({ project, onEdit, onDelete }: ProjectCardProps) {
+export function ProjectCard({ project, onEdit, onDelete, readOnly = false }: ProjectCardProps) {
   const router = useRouter();
   const progress =
     project.stats.total > 0 ? Math.round((project.stats.done / project.stats.total) * 100) : 0;
@@ -31,6 +32,7 @@ export function ProjectCard({ project, onEdit, onDelete }: ProjectCardProps) {
           </span>
         </div>
         <ActionMenu
+          readOnly={readOnly}
           onView={() => router.push(`/quan-ly-cong-viec/danh-sach-du-an/${project.id}`)}
           onEdit={() => onEdit(project)}
           onDelete={() => onDelete(project)}

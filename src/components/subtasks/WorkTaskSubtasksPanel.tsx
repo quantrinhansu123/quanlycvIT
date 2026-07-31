@@ -15,6 +15,7 @@ import type { ProjectMember } from "@/types/project";
 import type { Subtask } from "@/types/subtask";
 import type { TaskPriority, TaskStatus, WorkTask } from "@/types/task";
 import { TASK_PRIORITY_OPTIONS, TASK_STATUS_OPTIONS } from "@/types/task";
+import { useCurrentAccount } from "@/hooks/useCurrentAccount";
 import { subtaskService, type SubtaskFilters } from "@/services/subtask-service";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -27,6 +28,7 @@ import { ModalLoadingFallback } from "@/components/ui/ModalLoadingFallback";
 import { ListPaginationFooter } from "@/components/ui/ListPaginationFooter";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
+import { exportTablePdf } from "@/lib/pdf-export";
 import { cn, formatDateVN } from "@/lib/utils";
 
 const SubtaskFormModal = dynamic(
@@ -60,6 +62,8 @@ export function WorkTaskSubtasksPanel({
 }: WorkTaskSubtasksPanelProps) {
   const router = useRouter();
   const { confirm, notify } = useFeedback();
+  const { account } = useCurrentAccount();
+  const isAdmin = account?.role === "admin";
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -182,16 +186,27 @@ export function WorkTaskSubtasksPanel({
     }
   }
 
-  function handleExportCsv() {
+  async function handleApprove(subtask: Subtask) {
     try {
-      const header = [
-        "Tên task",
-        "Người thực hiện",
-        "Hạn hoàn thành",
-        "Tiến độ",
-        "Ưu tiên",
-        "Trạng thái",
-      ];
+      await subtaskService.approveSubtask(subtask.id);
+      notify({
+        type: "success",
+        title: "Đã duyệt task",
+        description: `Task “${subtask.title}” đã chuyển sang Đã hoàn thành.`,
+      });
+      await loadSubtasks(filters);
+      onSubtasksChanged();
+    } catch (approveError) {
+      notify({
+        type: "error",
+        title: "Duyệt task thất bại",
+        description: getErrorMessage(approveError, "Không thể duyệt task. Vui lòng thử lại."),
+      });
+    }
+  }
+
+  async function handleExportPdf() {
+    try {
       const rows = subtasks.map((subtask) => [
         subtask.title,
         subtask.assignees.map((member) => member.name).join(" / "),
@@ -200,26 +215,26 @@ export function WorkTaskSubtasksPanel({
         TASK_PRIORITY_OPTIONS.find((option) => option.value === subtask.priority)?.label ?? "",
         TASK_STATUS_OPTIONS.find((option) => option.value === subtask.status)?.label ?? "",
       ]);
-      const csvContent = [header, ...rows]
-        .map((row) => row.map((cell) => `"${cell}"`).join(","))
-        .join("\n");
-      const blob = new Blob([`﻿${csvContent}`], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "danh-sach-task.csv";
-      link.click();
-      URL.revokeObjectURL(url);
+      await exportTablePdf({
+        title: `Task của công việc ${workTask.title}`,
+        filename: "danh-sach-task.pdf",
+        columns: [
+          { label: "Tên task", width: "*" }, { label: "Người thực hiện", width: 82 },
+          { label: "Hạn", width: 52, alignment: "center" }, { label: "Tiến độ", width: 45, alignment: "right" },
+          { label: "Ưu tiên", width: 48 }, { label: "Trạng thái", width: 60 },
+        ],
+        rows,
+      });
       notify({
         type: "success",
-        title: "Đã xuất danh sách task",
+        title: "Đã xuất danh sách task PDF",
         description: `${subtasks.length} bản ghi đã được xuất.`,
       });
     } catch (exportError) {
       notify({
         type: "error",
-        title: "Xuất file thất bại",
-        description: getErrorMessage(exportError, "Không thể tạo file danh sách task."),
+        title: "Xuất PDF thất bại",
+        description: getErrorMessage(exportError, "Không thể tạo PDF danh sách task."),
       });
     }
   }
@@ -298,10 +313,11 @@ export function WorkTaskSubtasksPanel({
           </div>
           <button
             type="button"
-            onClick={handleExportCsv}
+            onClick={() => void handleExportPdf()}
+            title="Xuất PDF"
             disabled={subtasks.length === 0}
             className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label="Xuất file"
+            aria-label="Xuất PDF"
           >
             <Download className="h-4 w-4" />
           </button>
@@ -342,6 +358,8 @@ export function WorkTaskSubtasksPanel({
             onEdit={(subtask) => setFormModal({ mode: "edit", subtask })}
             onDelete={handleDelete}
             hideWorkTaskColumn
+            canApprove={isAdmin}
+            onApprove={handleApprove}
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3">
@@ -358,6 +376,8 @@ export function WorkTaskSubtasksPanel({
                 onViewReports={(item) => setQuickView({ subtask: item, tab: "reports" })}
                 onEdit={(item) => setFormModal({ mode: "edit", subtask: item })}
                 onDelete={handleDelete}
+                canApprove={isAdmin}
+                onApprove={handleApprove}
               />
             ))}
           </div>

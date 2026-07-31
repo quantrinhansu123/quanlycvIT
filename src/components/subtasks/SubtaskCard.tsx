@@ -15,14 +15,27 @@ interface SubtaskCardProps {
   subtask: Subtask;
   workTask?: WorkTask;
   assignee?: ProjectMember;
+  /** Chỉ quản trị viên mới thấy thao tác Duyệt khi task đang chờ đánh giá. */
+  canApprove?: boolean;
   onOpen: (subtask: Subtask) => void;
   onReport: (subtask: Subtask) => void;
   onViewReports: (subtask: Subtask) => void;
   onEdit: (subtask: Subtask) => void;
   onDelete: (subtask: Subtask) => void;
+  onApprove?: (subtask: Subtask) => void;
 }
 
-export function SubtaskCard({ subtask, workTask, assignee, onOpen, onViewReports, onEdit, onDelete }: SubtaskCardProps) {
+export function SubtaskCard({
+  subtask,
+  workTask,
+  assignee,
+  canApprove = false,
+  onViewReports,
+  onOpen,
+  onEdit,
+  onDelete,
+  onApprove,
+}: SubtaskCardProps) {
   const overdue = isSubtaskOverdue(subtask);
 
   return (
@@ -35,6 +48,11 @@ export function SubtaskCard({ subtask, workTask, assignee, onOpen, onViewReports
         )}
         <TaskActionMenu
           onViewReports={() => onViewReports(subtask)}
+          onApprove={
+            canApprove && subtask.status === "review" && subtask.progress === 100 && onApprove
+              ? () => onApprove(subtask)
+              : undefined
+          }
           onEdit={() => onEdit(subtask)}
           onDelete={() => onDelete(subtask)}
         />

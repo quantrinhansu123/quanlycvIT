@@ -4,34 +4,23 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   BarChart3,
-  Ban,
   Building2,
-  CalendarDays,
-  CalendarOff,
-  CheckSquare2,
   ChevronDown,
   ChevronRight,
   ClipboardList,
-  FileText,
   Filter,
-  GanttChartSquare,
   Layers3,
   ListChecks,
   ListTodo,
-  Map,
-  Network,
-  PackageSearch,
   Search,
-  Settings,
-  ShieldCheck,
   Star,
-  Timer,
   UserRoundCog,
   UsersRound,
+  WalletCards,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type ModuleGroupId = "employees" | "attendance" | "work" | "system";
+type ModuleGroupId = "employees" | "work" | "finance";
 
 interface ApplicationModule {
   id: string;
@@ -53,46 +42,24 @@ interface ModuleGroup {
 
 const GROUPS: ModuleGroup[] = [
   { id: "employees", name: "Nhân viên", icon: UsersRound, iconColor: "text-violet-600" },
-  { id: "attendance", name: "Quản lý công", icon: CalendarDays, iconColor: "text-cyan-600" },
   { id: "work", name: "Quản lý công việc", icon: Layers3, iconColor: "text-indigo-600" },
-  { id: "system", name: "Tiện ích hệ thống", icon: Settings, iconColor: "text-slate-600" },
+  { id: "finance", name: "Tài chính", icon: WalletCards, iconColor: "text-brand-600" },
 ];
 
 const BOOKMARK_STORAGE_KEY = "goal-app:bookmarked-modules";
-const AVAILABLE_MODULE_IDS = new Set([
-  "employee-statistics",
-  "accounts",
-  "departments",
-  "projects",
-  "jobs",
-  "tasks",
-  "deadlines",
-]);
 
 const MODULES: ApplicationModule[] = [
   { id: "employee-statistics", groupId: "employees", name: "Thống kê nhân sự", description: "Quản lý thống kê nhân sự", href: "/nhan-vien/thong-ke-nhan-su", icon: BarChart3, color: "text-emerald-600", background: "bg-emerald-50" },
   { id: "accounts", groupId: "employees", name: "Quản lý tài khoản", description: "Quản lý tài khoản nhân viên", href: "/nhan-vien", icon: UserRoundCog, color: "text-cyan-600", background: "bg-cyan-50" },
   { id: "departments", groupId: "employees", name: "Phòng Ban & Chức Vụ", description: "Quản lý phòng ban và chức vụ", href: "/nhan-vien/phong-ban-chuc-vu", icon: Building2, color: "text-orange-600", background: "bg-orange-50" },
-  { id: "organization", groupId: "employees", name: "Sơ đồ tổ chức", description: "Quản lý sơ đồ tổ chức", href: "/nhan-vien/so-do-to-chuc", icon: Network, color: "text-emerald-600", background: "bg-emerald-50" },
-  { id: "permissions", groupId: "employees", name: "Phân Quyền", description: "Quản lý phân quyền", href: "/nhan-vien/phan-quyen", icon: ShieldCheck, color: "text-rose-600", background: "bg-rose-50" },
-
-  { id: "attendance", groupId: "attendance", name: "Chấm Công", description: "Quản lý chấm công", href: "/quan-ly-cong/cham-cong", icon: Timer, color: "text-teal-600", background: "bg-teal-50" },
-  { id: "attendance-statistics", groupId: "attendance", name: "Thống Kê Công", description: "Quản lý thống kê công", href: "/quan-ly-cong/thong-ke-cong", icon: BarChart3, color: "text-brand-600", background: "bg-brand-50" },
-  { id: "attendance-approval", groupId: "attendance", name: "Duyệt Công", description: "Quản lý duyệt công", href: "/quan-ly-cong/duyet-cong", icon: CheckSquare2, color: "text-green-600", background: "bg-green-50" },
-  { id: "leave", groupId: "attendance", name: "Nghỉ Phép", description: "Quản lý nghỉ phép", href: "/quan-ly-cong/nghi-phep", icon: CalendarOff, color: "text-fuchsia-600", background: "bg-fuchsia-50" },
-  { id: "employee-map", groupId: "attendance", name: "Bản Đồ NV", description: "Quản lý bản đồ nhân viên", href: "/quan-ly-cong/ban-do-nhan-vien", icon: Map, color: "text-sky-600", background: "bg-sky-50" },
-  { id: "holidays", groupId: "attendance", name: "Cấu hình ngày lễ", description: "Quản lý cấu hình ngày lễ", href: "/quan-ly-cong/cau-hinh-ngay-le", icon: CalendarDays, color: "text-pink-600", background: "bg-pink-50" },
 
   { id: "projects", groupId: "work", name: "Danh sách dự án", description: "Quản lý danh sách dự án", href: "/quan-ly-cong-viec/danh-sach-du-an", icon: Layers3, color: "text-violet-600", background: "bg-violet-50" },
   { id: "jobs", groupId: "work", name: "Danh sách công việc", description: "Quản lý danh sách công việc", href: "/quan-ly-cong-viec/danh-sach-cong-viec", icon: ListChecks, color: "text-sky-600", background: "bg-sky-50" },
   { id: "tasks", groupId: "work", name: "Danh sách Task", description: "Quản lý danh sách task", href: "/quan-ly-cong-viec/danh-sach-task", icon: ListTodo, color: "text-emerald-600", background: "bg-emerald-50" },
-  { id: "deadlines", groupId: "work", name: "Lịch hạn chót", description: "Theo dõi lịch hạn chót", href: "/quan-ly-cong-viec/lich-han-chot", icon: CalendarDays, color: "text-rose-600", background: "bg-rose-50" },
-  { id: "gantt", groupId: "work", name: "Biểu đồ Gantt", description: "Theo dõi tiến độ bằng Gantt", href: "/quan-ly-cong-viec/bieu-do-gantt", icon: GanttChartSquare, color: "text-indigo-600", background: "bg-indigo-50" },
-
-  { id: "assets", groupId: "system", name: "Quản lý tài sản", description: "Quản lý tài sản công ty", href: "/quan-ly-tai-san", icon: PackageSearch, color: "text-amber-600", background: "bg-amber-50" },
-  { id: "documents", groupId: "system", name: "Tài liệu", description: "Quản lý tài liệu nội bộ", href: "/tai-lieu", icon: FileText, color: "text-brand-600", background: "bg-brand-50" },
-  { id: "system-settings", groupId: "system", name: "Hệ thống", description: "Cấu hình hệ thống", href: "/he-thong", icon: Settings, color: "text-slate-600", background: "bg-slate-100" },
+  { id: "finance-management", groupId: "finance", name: "Quản lý thu chi", description: "Theo dõi thu, chi và ngân sách", href: "/quan-ly-thu-chi", icon: WalletCards, color: "text-brand-600", background: "bg-brand-50" },
 ];
+
+const AVAILABLE_MODULE_IDS = new Set(MODULES.map((module) => module.id));
 
 function normalize(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -188,7 +155,6 @@ export function ApplicationHubPage() {
                 {groupModules.map((module) => {
                   const ModuleIcon = module.icon;
                   const bookmarked = bookmarks.includes(module.id);
-                  const available = AVAILABLE_MODULE_IDS.has(module.id);
                   const moduleContent = (
                     <>
                       <span className={cn("flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl", module.background)}>
@@ -203,36 +169,21 @@ export function ApplicationHubPage() {
                   return (
                     <div
                       key={module.id}
-                      title={available ? undefined : "Trang này chưa được xây dựng"}
-                      className={cn(
-                        "group relative rounded-2xl border border-gray-200 bg-white transition",
-                        available
-                          ? "hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-md"
-                          : "cursor-not-allowed hover:border-rose-200 hover:bg-rose-50/20"
-                      )}
+                      className="group relative rounded-2xl border border-gray-200 bg-white transition hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-md"
                     >
-                      {available ? (
-                        <Link href={module.href} className="flex min-h-[88px] items-center gap-4 rounded-2xl px-4 py-3 pr-20">
-                          {moduleContent}
-                          <ChevronRight className="absolute right-5 h-4 w-4 text-gray-400 transition group-hover:translate-x-0.5 group-hover:text-brand-500" />
-                        </Link>
-                      ) : (
-                        <div aria-disabled="true" className="flex min-h-[88px] items-center gap-4 rounded-2xl px-4 py-3 pr-14">
-                          {moduleContent}
-                          <Ban className="absolute right-5 h-5 w-5 scale-75 text-rose-500 opacity-0 transition group-hover:scale-100 group-hover:opacity-100" />
-                        </div>
-                      )}
-                      {available && (
-                        <button
-                          type="button"
-                          title={bookmarked ? "Bỏ đánh dấu" : "Đánh dấu"}
-                          aria-label={bookmarked ? `Bỏ đánh dấu ${module.name}` : `Đánh dấu ${module.name}`}
-                          onClick={() => toggleBookmark(module.id)}
-                          className={cn("absolute right-10 top-1/2 -translate-y-1/2 rounded-lg p-2 transition", bookmarked ? "text-amber-500" : "text-gray-300 opacity-0 hover:text-amber-500 group-hover:opacity-100")}
-                        >
-                          <Star className={cn("h-4 w-4", bookmarked && "fill-current")} />
-                        </button>
-                      )}
+                      <Link href={module.href} className="flex min-h-[88px] items-center gap-4 rounded-2xl px-4 py-3 pr-20">
+                        {moduleContent}
+                        <ChevronRight className="absolute right-5 h-4 w-4 text-gray-400 transition group-hover:translate-x-0.5 group-hover:text-brand-500" />
+                      </Link>
+                      <button
+                        type="button"
+                        title={bookmarked ? "Bỏ đánh dấu" : "Đánh dấu"}
+                        aria-label={bookmarked ? `Bỏ đánh dấu ${module.name}` : `Đánh dấu ${module.name}`}
+                        onClick={() => toggleBookmark(module.id)}
+                        className={cn("absolute right-10 top-1/2 -translate-y-1/2 rounded-lg p-2 transition", bookmarked ? "text-amber-500" : "text-gray-300 opacity-0 hover:text-amber-500 group-hover:opacity-100")}
+                      >
+                        <Star className={cn("h-4 w-4", bookmarked && "fill-current")} />
+                      </button>
                     </div>
                   );
                 })}

@@ -7,7 +7,12 @@ export const WORK_ITEM_TITLE_CLASS =
 
 export const WORK_ITEM_PROGRESS_CLASS = "w-full max-w-24";
 
-export function taskColumnWidths(hideProjectColumn: boolean): string[] {
+export function taskColumnWidths(hideProjectColumn: boolean, readOnly = false): string[] {
+  if (readOnly) {
+    return hideProjectColumn
+      ? ["w-[24%]", "w-[20%]", "w-[16%]", "w-[16%]", "w-[11%]", "w-[13%]"]
+      : ["w-[18%]", "w-[14%]", "w-[17%]", "w-[14%]", "w-[14%]", "w-[10%]", "w-[13%]"];
+  }
   return hideProjectColumn
     ? ["w-[4%]", "w-[20%]", "w-[18%]", "w-[14%]", "w-[15%]", "w-[10%]", "w-[12%]", "w-[7%]"]
     : ["w-[4%]", "w-[15%]", "w-[12%]", "w-[16%]", "w-[13%]", "w-[13%]", "w-[9%]", "w-[11%]", "w-[7%]"];

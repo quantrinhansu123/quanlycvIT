@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { apiSuccess, handleApiError, readJsonObject } from "@/lib/api/response";
 import { parseSubtaskInput } from "@/lib/api/validation";
 import { createApiSupabaseClient } from "@/lib/supabase/api";
+import { requireRequestAccount } from "@/lib/supabase/authorization";
 import {
   createSubtask,
   listSubtasks,
@@ -25,7 +26,12 @@ function filtersFromRequest(request: NextRequest): SubtaskFilters {
 export async function GET(request: NextRequest) {
   try {
     const supabase = createApiSupabaseClient(request);
+    const access = await requireRequestAccount(supabase);
     const filters = filtersFromRequest(request);
+    if (access.role === "member") {
+      filters.assigneeId = undefined;
+      filters.assigneeIds = [access.id];
+    }
     const params = request.nextUrl.searchParams;
     const page = params.get("page");
     const pageSize = params.get("pageSize");
@@ -37,9 +43,10 @@ export async function GET(request: NextRequest) {
         ? workTaskIdsParam.split(",").filter(Boolean)
         : undefined;
       const assigneeIdsParam = params.get("assigneeIds");
-      const assigneeIds = assigneeIdsParam
+      let assigneeIds = assigneeIdsParam
         ? assigneeIdsParam.split(",").filter(Boolean)
         : undefined;
+      if (access.role === "member") assigneeIds = [access.id];
 
       const result = await listSubtasksPage(supabase, {
         ...filters,

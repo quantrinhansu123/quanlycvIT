@@ -26,6 +26,7 @@ import { ModalLoadingFallback } from "@/components/ui/ModalLoadingFallback";
 import { ListPaginationFooter } from "@/components/ui/ListPaginationFooter";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
+import { exportTablePdf } from "@/lib/pdf-export";
 import { cn, formatDateVN } from "@/lib/utils";
 
 const TaskFormModal = dynamic(
@@ -40,9 +41,15 @@ interface ProjectTasksPanelProps {
   project: Project;
   members: ProjectMember[];
   onTasksChanged: () => void;
+  readOnly?: boolean;
 }
 
-export function ProjectTasksPanel({ project, members, onTasksChanged }: ProjectTasksPanelProps) {
+export function ProjectTasksPanel({
+  project,
+  members,
+  onTasksChanged,
+  readOnly = false,
+}: ProjectTasksPanelProps) {
   const router = useRouter();
   const { confirm, notify } = useFeedback();
   const [tasks, setTasks] = useState<WorkTask[]>([]);
@@ -122,7 +129,7 @@ export function ProjectTasksPanel({ project, members, onTasksChanged }: ProjectT
   }
 
   async function handleDelete(task: WorkTask) {
-    if (deletingId) return;
+    if (readOnly || deletingId) return;
     const confirmed = await confirm({
       title: "Xóa công việc?",
       description: `Công việc “${task.title}” và các task trực thuộc sẽ bị xóa. Hành động này không thể hoàn tác.`,
@@ -149,9 +156,8 @@ export function ProjectTasksPanel({ project, members, onTasksChanged }: ProjectT
     }
   }
 
-  function handleExportCsv() {
+  async function handleExportPdf() {
     try {
-      const header = ["Tên công việc", "Người phụ trách", "Hạn hoàn thành", "Tiến độ", "Ưu tiên", "Trạng thái"];
       const rows = tasks.map((task) => [
         task.title,
         membersById.get(task.assigneeId)?.name ?? "",
@@ -160,20 +166,23 @@ export function ProjectTasksPanel({ project, members, onTasksChanged }: ProjectT
         TASK_PRIORITY_OPTIONS.find((option) => option.value === task.priority)?.label ?? "",
         TASK_STATUS_OPTIONS.find((option) => option.value === task.status)?.label ?? "",
       ]);
-      const csvContent = [header, ...rows].map((row) => row.map((cell) => `"${cell}"`).join(",")).join("\n");
-      const blob = new Blob([`\uFEFF${csvContent}`], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `cong-viec-${project.code.toLowerCase()}.csv`;
-      link.click();
-      URL.revokeObjectURL(url);
-      notify({ type: "success", title: "Đã xuất danh sách công việc", description: `${tasks.length} bản ghi đã được xuất.` });
+      await exportTablePdf({
+        title: `Công việc dự án ${project.code}`,
+        subtitle: `${project.name} - ${tasks.length} công việc`,
+        filename: `cong-viec-${project.code.toLowerCase()}.pdf`,
+        columns: [
+          { label: "Tên công việc", width: "*" }, { label: "Người phụ trách", width: 78 },
+          { label: "Hạn", width: 52, alignment: "center" }, { label: "Tiến độ", width: 45, alignment: "right" },
+          { label: "Ưu tiên", width: 48 }, { label: "Trạng thái", width: 60 },
+        ],
+        rows,
+      });
+      notify({ type: "success", title: "Đã xuất danh sách công việc PDF", description: `${tasks.length} bản ghi đã được xuất.` });
     } catch (exportError) {
       notify({
         type: "error",
-        title: "Xuất file thất bại",
-        description: getErrorMessage(exportError, "Không thể tạo file danh sách công việc."),
+        title: "Xuất PDF thất bại",
+        description: getErrorMessage(exportError, "Không thể tạo PDF danh sách công việc."),
       });
     }
   }
@@ -213,10 +222,10 @@ export function ProjectTasksPanel({ project, members, onTasksChanged }: ProjectT
           options={TASK_STATUS_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
         />
         <div className="ml-auto flex items-center gap-2">
-          <Button size="sm" onClick={() => setFormModal({ mode: "create" })}>
+          {!readOnly && <Button size="sm" onClick={() => setFormModal({ mode: "create" })}>
             <Plus className="h-4 w-4" />
             Thêm mới
-          </Button>
+          </Button>}
           <div className="flex overflow-hidden rounded-lg border border-gray-200 bg-white">
             <button
               type="button"
@@ -237,10 +246,11 @@ export function ProjectTasksPanel({ project, members, onTasksChanged }: ProjectT
           </div>
           <button
             type="button"
-            onClick={handleExportCsv}
+            onClick={() => void handleExportPdf()}
+            title="Xuất PDF"
             disabled={tasks.length === 0}
             className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label="Xuất file"
+            aria-label="Xuất PDF"
           >
             <Download className="h-4 w-4" />
           </button>
@@ -258,7 +268,7 @@ export function ProjectTasksPanel({ project, members, onTasksChanged }: ProjectT
             icon={ListChecks}
             title="Chưa có công việc nào"
             description="Dự án chưa có công việc được tạo."
-            action={
+            action={readOnly ? undefined :
               <Button size="sm" onClick={() => setFormModal({ mode: "create" })}>
                 <Plus className="h-4 w-4" />
                 Thêm công việc
@@ -279,6 +289,7 @@ export function ProjectTasksPanel({ project, members, onTasksChanged }: ProjectT
             onEdit={(task) => setFormModal({ mode: "edit", task })}
             onDelete={handleDelete}
             hideProjectColumn
+            readOnly={readOnly}
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3">
@@ -293,6 +304,7 @@ export function ProjectTasksPanel({ project, members, onTasksChanged }: ProjectT
                 }
                 onEdit={(item) => setFormModal({ mode: "edit", task: item })}
                 onDelete={handleDelete}
+                readOnly={readOnly}
               />
             ))}
           </div>
@@ -313,7 +325,7 @@ export function ProjectTasksPanel({ project, members, onTasksChanged }: ProjectT
         )}
       </div>
 
-      {formModal && (
+      {formModal && !readOnly && (
         <TaskFormModal
           mode={formModal.mode}
           task={formModal.mode === "edit" ? formModal.task : undefined}

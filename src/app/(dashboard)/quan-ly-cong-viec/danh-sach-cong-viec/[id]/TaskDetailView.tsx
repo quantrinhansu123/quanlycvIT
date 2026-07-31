@@ -29,7 +29,6 @@ import type { Subtask } from "@/types/subtask";
 import type { TaskReport, WorkTask } from "@/types/task";
 import {
   TASK_PRIORITY_OPTIONS,
-  TASK_STATUS_OPTIONS,
   isTaskOverdue,
 } from "@/types/task";
 import { AvatarStack } from "@/components/ui/Avatar";
@@ -46,6 +45,7 @@ import { cn, formatDateVN } from "@/lib/utils";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 import { DetailAttachments } from "@/components/tasks/DetailAttachments";
+import { TaskPriorityBadge, TaskStatusBadge } from "@/components/tasks/TaskBadges";
 
 const TaskFormModal = dynamic(
   () => import("@/components/tasks/TaskFormModal").then((mod) => mod.TaskFormModal),
@@ -72,6 +72,7 @@ interface TaskDetailViewProps {
   initialAllTasks: WorkTask[];
   initialSubtasks: Subtask[];
   initialMembers: ProjectMember[];
+  readOnly: boolean;
 }
 
 export function TaskDetailView({
@@ -82,6 +83,7 @@ export function TaskDetailView({
   initialAllTasks,
   initialSubtasks,
   initialMembers,
+  readOnly,
 }: TaskDetailViewProps) {
   const router = useRouter();
   const { notify } = useFeedback();
@@ -128,11 +130,11 @@ export function TaskDetailView({
   }, [taskId, notify]);
 
   async function handleQuickUpdate(
-    patch: Partial<Pick<WorkTask, "status" | "priority">> & {
+    patch: Partial<Pick<WorkTask, "priority">> & {
       assigneeIds?: string[];
     }
   ) {
-    if (!task || quickUpdating) return;
+    if (!task || readOnly || quickUpdating) return;
     setQuickUpdating(true);
     try {
       const updated = await taskService.updateTask(task.id, {
@@ -240,13 +242,13 @@ export function TaskDetailView({
             </nav>
           </div>
 
-          <Button
+          {!readOnly && <Button
             onClick={() => setEditing(true)}
             className="shrink-0 rounded-full bg-brand-600 hover:bg-brand-700"
           >
             <Pencil className="h-4 w-4" />
             <span className="hidden sm:inline">Chỉnh sửa công việc</span>
-          </Button>
+          </Button>}
         </div>
       </div>
 
@@ -306,14 +308,18 @@ export function TaskDetailView({
                 icon={Flag}
                 iconClassName="bg-orange-50 text-orange-500"
               >
-                <QuickSelect
-                  value={task.priority}
-                  disabled={quickUpdating}
-                  options={TASK_PRIORITY_OPTIONS}
-                  onChange={(value) =>
-                    handleQuickUpdate({ priority: value as WorkTask["priority"] })
-                  }
-                />
+                {readOnly ? (
+                  <TaskPriorityBadge priority={task.priority} />
+                ) : (
+                  <QuickSelect
+                    value={task.priority}
+                    disabled={quickUpdating}
+                    options={TASK_PRIORITY_OPTIONS}
+                    onChange={(value) =>
+                      handleQuickUpdate({ priority: value as WorkTask["priority"] })
+                    }
+                  />
+                )}
               </OverviewCard>
 
               <OverviewCard
@@ -321,14 +327,10 @@ export function TaskDetailView({
                 icon={CircleAlert}
                 iconClassName="bg-teal-50 text-teal-600"
               >
-                <QuickSelect
-                  value={task.status}
-                  disabled={quickUpdating}
-                  options={TASK_STATUS_OPTIONS}
-                  onChange={(value) =>
-                    handleQuickUpdate({ status: value as WorkTask["status"] })
-                  }
-                />
+                <TaskStatusBadge status={task.status} />
+                <p className="mt-2 text-[11px] text-gray-400">
+                  Tự động theo trạng thái các Task
+                </p>
               </OverviewCard>
             </section>
 
@@ -384,7 +386,7 @@ export function TaskDetailView({
                     if (ids.length > 0) handleQuickUpdate({ assigneeIds: ids });
                   }}
                   emptyHint="Dự án chưa có thành viên"
-                  disabled={quickUpdating}
+                  disabled={readOnly || quickUpdating}
                 />
 
                 <p className="mb-2 mt-5 text-xs font-medium text-gray-400">
@@ -533,7 +535,7 @@ export function TaskDetailView({
         </div>
       </div>
 
-      {editing && (
+      {editing && !readOnly && (
         <TaskFormModal
           mode="edit"
           task={task}

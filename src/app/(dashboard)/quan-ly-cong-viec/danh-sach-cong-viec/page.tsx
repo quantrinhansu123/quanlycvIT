@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { projectService } from "@/services/project-service";
 import { taskService, type TaskFilters } from "@/services/task-service";
+import { useCurrentAccount } from "@/hooks/useCurrentAccount";
 import type { Project, ProjectMember } from "@/types/project";
 import type { WorkTask, WorkTaskInput, TaskPriority, TaskStatus } from "@/types/task";
 import { isTaskOverdue, TASK_PRIORITY_OPTIONS, TASK_STATUS_OPTIONS } from "@/types/task";
@@ -32,6 +33,7 @@ import { ListPaginationFooter } from "@/components/ui/ListPaginationFooter";
 import { cn, formatDateVN } from "@/lib/utils";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
+import { exportTablePdf } from "@/lib/pdf-export";
 
 const TaskFormModal = dynamic(
   () => import("@/components/tasks/TaskFormModal").then((mod) => mod.TaskFormModal),
@@ -89,6 +91,9 @@ function buildOptimisticTask(
 export default function TaskListPage() {
   const router = useRouter();
   const { confirm, notify } = useFeedback();
+  const { account, loading: accountLoading } = useCurrentAccount();
+  const isMember = account?.role === "member";
+  const readOnly = accountLoading || !account || isMember;
   const [projects, setProjects] = useState<Project[]>([]);
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [tasks, setTasks] = useState<WorkTask[]>([]);
@@ -211,7 +216,7 @@ export default function TaskListPage() {
   }
 
   async function handleDelete(task: WorkTask) {
-    if (deletingId) return;
+    if (readOnly || deletingId) return;
     const confirmed = await confirm({
       title: "Xóa công việc?",
       description: `Công việc “${task.title}” và các task trực thuộc sẽ bị xóa. Hành động này không thể hoàn tác.`,
@@ -238,6 +243,9 @@ export default function TaskListPage() {
   }
 
   function saveTask(input: WorkTaskInput): Promise<WorkTask> {
+    if (readOnly) {
+      return Promise.reject(new Error("Tài khoản nhân viên không có quyền lưu công việc."));
+    }
     const existing = formModal?.mode === "edit" ? formModal.task : undefined;
     const filters = currentFilters();
     const optimisticTask = buildOptimisticTask(input, members, existing);
@@ -281,10 +289,9 @@ export default function TaskListPage() {
     });
   }
 
-  async function handleExportCsv() {
+  async function handleExportPdf() {
     try {
       const exportTasks = await taskService.getTasks(currentFilters());
-      const header = ["Tên công việc", "Dự án", "Người phụ trách", "Hạn hoàn thành", "Tiến độ", "Ưu tiên", "Trạng thái"];
       const rows = exportTasks.map((task) => [
         task.title,
         projectsById.get(task.projectId)?.name ?? "",
@@ -294,20 +301,24 @@ export default function TaskListPage() {
         TASK_PRIORITY_OPTIONS.find((o) => o.value === task.priority)?.label ?? "",
         TASK_STATUS_OPTIONS.find((o) => o.value === task.status)?.label ?? "",
       ]);
-      const csvContent = [header, ...rows].map((row) => row.map((cell) => `"${cell}"`).join(",")).join("\n");
-      const blob = new Blob([`﻿${csvContent}`], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "danh-sach-cong-viec.csv";
-      link.click();
-      URL.revokeObjectURL(url);
-      notify({ type: "success", title: "Đã xuất danh sách công việc", description: `${exportTasks.length} bản ghi đã được xuất.` });
+      await exportTablePdf({
+        title: "Danh sách công việc",
+        filename: "danh-sach-cong-viec.pdf",
+        orientation: "landscape",
+        columns: [
+          { label: "Tên công việc", width: "*" }, { label: "Dự án", width: 95 },
+          { label: "Người phụ trách", width: 75 }, { label: "Hạn", width: 55, alignment: "center" },
+          { label: "Tiến độ", width: 45, alignment: "right" }, { label: "Ưu tiên", width: 50 },
+          { label: "Trạng thái", width: 62 },
+        ],
+        rows,
+      });
+      notify({ type: "success", title: "Đã xuất danh sách công việc PDF", description: `${exportTasks.length} bản ghi đã được xuất.` });
     } catch (exportError) {
       notify({
         type: "error",
-        title: "Xuất file thất bại",
-        description: getErrorMessage(exportError, "Không thể tạo file danh sách công việc."),
+        title: "Xuất PDF thất bại",
+        description: getErrorMessage(exportError, "Không thể tạo PDF danh sách công việc."),
       });
     }
   }
@@ -343,13 +354,15 @@ export default function TaskListPage() {
           onChange={setProjectId}
           options={projects.map((p) => ({ value: p.id, label: p.name, sublabel: p.code }))}
         />
-        <MemberFilterMultiSelect
-          className="w-[130px] shrink-0 2xl:w-[150px]"
-          label="Người phụ trách"
-          value={assigneeIds}
-          onChange={setAssigneeIds}
-          options={members}
-        />
+        {!isMember && (
+          <MemberFilterMultiSelect
+            className="w-[130px] shrink-0 2xl:w-[150px]"
+            label="Người phụ trách"
+            value={assigneeIds}
+            onChange={setAssigneeIds}
+            options={members}
+          />
+        )}
         <FilterSelect
           compact
           className="w-[112px] shrink-0 2xl:w-[124px]"
@@ -379,10 +392,10 @@ export default function TaskListPage() {
         </button>
 
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          <Button size="sm" className="whitespace-nowrap px-2.5" onClick={() => setFormModal({ mode: "create" })}>
+          {!readOnly && <Button size="sm" className="whitespace-nowrap px-2.5" onClick={() => setFormModal({ mode: "create" })}>
             <Plus className="h-4 w-4" />
             Thêm mới
-          </Button>
+          </Button>}
           <div className="flex overflow-hidden rounded-lg border border-gray-200 bg-white">
             <button
               type="button"
@@ -403,10 +416,11 @@ export default function TaskListPage() {
           </div>
           <button
             type="button"
-            onClick={() => void handleExportCsv()}
+            onClick={() => void handleExportPdf()}
+            title="Xuất PDF"
             disabled={total === 0}
             className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label="Xuất file"
+            aria-label="Xuất PDF"
           >
             <Download className="h-4 w-4" />
           </button>
@@ -424,7 +438,7 @@ export default function TaskListPage() {
             icon={ListChecks}
             title="Không tìm thấy công việc nào"
             description="Thử thay đổi bộ lọc hoặc tạo công việc mới."
-            action={
+            action={readOnly ? undefined :
               <Button size="sm" onClick={() => setFormModal({ mode: "create" })}>
                 <Plus className="h-4 w-4" />
                 Thêm công việc
@@ -444,6 +458,7 @@ export default function TaskListPage() {
             }
             onEdit={(task) => setFormModal({ mode: "edit", task })}
             onDelete={handleDelete}
+            readOnly={readOnly}
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3">
@@ -458,6 +473,7 @@ export default function TaskListPage() {
                 }
                 onEdit={(t) => setFormModal({ mode: "edit", task: t })}
                 onDelete={handleDelete}
+                readOnly={readOnly}
               />
             ))}
           </div>
@@ -478,7 +494,7 @@ export default function TaskListPage() {
         )}
       </div>
 
-      {formModal && (
+      {formModal && !readOnly && (
         <TaskFormModal
           mode={formModal.mode}
           task={formModal.mode === "edit" ? formModal.task : undefined}

@@ -18,6 +18,7 @@ interface TaskCardProps {
   onOpen: (task: WorkTask) => void;
   onEdit: (task: WorkTask) => void;
   onDelete: (task: WorkTask) => void;
+  readOnly?: boolean;
 }
 
 export function TaskCard({
@@ -27,6 +28,7 @@ export function TaskCard({
   onOpen,
   onEdit,
   onDelete,
+  readOnly = false,
 }: TaskCardProps) {
   const overdue = isTaskOverdue(task);
 
@@ -38,10 +40,10 @@ export function TaskCard({
             {project.name}
           </Badge>
         ) : <span />}
-        <TaskActionMenu
+        {!readOnly && <TaskActionMenu
           onEdit={() => onEdit(task)}
           onDelete={() => onDelete(task)}
-        />
+        />}
       </div>
 
       <button type="button" onClick={() => onOpen(task)} className="text-left">

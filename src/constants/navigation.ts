@@ -6,24 +6,16 @@ import {
   ChartNoAxesColumnIncreasing,
   UserRoundCog,
   Building2,
-  Network,
-  ShieldCheck,
-  Settings2,
   Layers,
   ListChecks,
   ListTodo,
-  CalendarClock,
-  GanttChartSquare,
-  Archive,
-  BookOpen,
-  Cog,
+  WalletCards,
 } from "lucide-react";
 
 export interface NavChild {
   label: string;
   href: string;
   icon: LucideIcon;
-  disabled?: boolean;
 }
 
 export interface NavItem {
@@ -31,7 +23,6 @@ export interface NavItem {
   href: string;
   icon: LucideIcon;
   children?: NavChild[];
-  disabled?: boolean;
 }
 
 export const NAV_ITEMS: NavItem[] = [
@@ -57,21 +48,8 @@ export const NAV_ITEMS: NavItem[] = [
         href: "/nhan-vien/phong-ban-chuc-vu",
         icon: Building2,
       },
-      {
-        label: "Sơ đồ tổ chức",
-        href: "/nhan-vien/so-do-to-chuc",
-        icon: Network,
-        disabled: true,
-      },
-      {
-        label: "Phân Quyền",
-        href: "/nhan-vien/phan-quyen",
-        icon: ShieldCheck,
-        disabled: true,
-      },
     ],
   },
-  { label: "Quản lý công", href: "/quan-ly-cong", icon: Settings2, disabled: true },
   {
     label: "Quản lý công việc",
     href: "/quan-ly-cong-viec",
@@ -92,22 +70,9 @@ export const NAV_ITEMS: NavItem[] = [
         href: "/quan-ly-cong-viec/danh-sach-task",
         icon: ListTodo,
       },
-      {
-        label: "Lịch hạn chót",
-        href: "/quan-ly-cong-viec/lich-han-chot",
-        icon: CalendarClock,
-      },
-      {
-        label: "Biểu đồ Gantt",
-        href: "/quan-ly-cong-viec/bieu-do-gantt",
-        icon: GanttChartSquare,
-        disabled: true,
-      },
     ],
   },
-  { label: "Quản lý tài sản", href: "/quan-ly-tai-san", icon: Archive, disabled: true },
-  { label: "Tài liệu", href: "/tai-lieu", icon: BookOpen, disabled: true },
-  { label: "Hệ thống", href: "/he-thong", icon: Cog, disabled: true },
+  { label: "Quản lý thu chi", href: "/quan-ly-thu-chi", icon: WalletCards },
 ];
 
 export const BREADCRUMB_LABELS: Record<string, string> = {
@@ -115,22 +80,9 @@ export const BREADCRUMB_LABELS: Record<string, string> = {
   "danh-sach-du-an": "Danh sách dự án",
   "danh-sach-cong-viec": "Danh sách công việc",
   "danh-sach-task": "Danh sách Task",
-  "lich-han-chot": "Lịch hạn chót",
-  "bieu-do-gantt": "Biểu đồ Gantt",
   "ung-dung": "Ứng dụng",
   "nhan-vien": "Nhân viên",
   "phong-ban-chuc-vu": "Phòng Ban & Chức Vụ",
   "thong-ke-nhan-su": "Thống kê nhân sự",
-  "so-do-to-chuc": "Sơ đồ tổ chức",
-  "phan-quyen": "Phân quyền",
-  "cham-cong": "Chấm Công",
-  "thong-ke-cong": "Thống Kê Công",
-  "duyet-cong": "Duyệt Công",
-  "nghi-phep": "Nghỉ Phép",
-  "ban-do-nhan-vien": "Bản Đồ Nhân Viên",
-  "cau-hinh-ngay-le": "Cấu Hình Ngày Lễ",
-  "quan-ly-cong": "Quản lý công",
-  "quan-ly-tai-san": "Quản lý tài sản",
-  "tai-lieu": "Tài liệu",
-  "he-thong": "Hệ thống",
+  "quan-ly-thu-chi": "Quản lý thu chi",
 };

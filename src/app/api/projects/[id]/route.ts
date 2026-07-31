@@ -6,6 +6,7 @@ import {
 } from "@/lib/api/response";
 import { parseProjectInput } from "@/lib/api/validation";
 import { createApiSupabaseClient } from "@/lib/supabase/api";
+import { assertManagerOrAdmin, assertProjectReadable, requireRequestAccount } from "@/lib/supabase/authorization";
 import {
   deleteProject,
   getProject,
@@ -19,7 +20,10 @@ interface RouteParams {
 export async function GET(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
-    const project = await getProject(createApiSupabaseClient(request), id);
+    const supabase = createApiSupabaseClient(request);
+    const access = await requireRequestAccount(supabase);
+    await assertProjectReadable(supabase, access, id);
+    const project = await getProject(supabase, id);
     if (!project) throw new ApiException("Không tìm thấy dự án.", 404);
     return apiSuccess(project);
   } catch (error) {
@@ -30,9 +34,11 @@ export async function GET(request: Request, { params }: RouteParams) {
 export async function PUT(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
+    const supabase = createApiSupabaseClient(request);
+    assertManagerOrAdmin(await requireRequestAccount(supabase));
     const input = parseProjectInput(await readJsonObject(request));
     const project = await updateProject(
-      createApiSupabaseClient(request),
+      supabase,
       id,
       input
     );
@@ -46,7 +52,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
 export async function DELETE(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
-    const deleted = await deleteProject(createApiSupabaseClient(request), id);
+    const supabase = createApiSupabaseClient(request);
+    assertManagerOrAdmin(await requireRequestAccount(supabase));
+    const deleted = await deleteProject(supabase, id);
     if (!deleted) throw new ApiException("Không tìm thấy dự án.", 404);
     return apiSuccess(true, 200, "Xóa dự án thành công.");
   } catch (error) {

@@ -1,6 +1,7 @@
 import { ApiException, apiSuccess, handleApiError, readJsonObject } from "@/lib/api/response";
 import { parseAccountInput } from "@/lib/api/account-validation";
 import { createApiSupabaseClient } from "@/lib/supabase/api";
+import { assertManagerOrAdmin, requireRequestAccount } from "@/lib/supabase/authorization";
 import { deleteAccount, getAccount, updateAccount } from "@/lib/supabase/accounts";
 
 interface RouteParams {
@@ -10,7 +11,9 @@ interface RouteParams {
 export async function GET(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
-    const account = await getAccount(createApiSupabaseClient(request), id);
+    const supabase = createApiSupabaseClient(request);
+    assertManagerOrAdmin(await requireRequestAccount(supabase));
+    const account = await getAccount(supabase, id);
     if (!account) throw new ApiException("Không tìm thấy tài khoản.", 404);
     return apiSuccess(account);
   } catch (error) {
@@ -21,8 +24,10 @@ export async function GET(request: Request, { params }: RouteParams) {
 export async function PUT(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
+    const supabase = createApiSupabaseClient(request);
+    assertManagerOrAdmin(await requireRequestAccount(supabase));
     const account = await updateAccount(
-      createApiSupabaseClient(request),
+      supabase,
       id,
       parseAccountInput(await readJsonObject(request))
     );
@@ -36,7 +41,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
 export async function DELETE(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
-    const deleted = await deleteAccount(createApiSupabaseClient(request), id);
+    const supabase = createApiSupabaseClient(request);
+    assertManagerOrAdmin(await requireRequestAccount(supabase));
+    const deleted = await deleteAccount(supabase, id);
     if (!deleted) throw new ApiException("Không tìm thấy tài khoản.", 404);
     return apiSuccess(true, 200, "Xóa tài khoản thành công.");
   } catch (error) {

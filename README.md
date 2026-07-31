@@ -4,7 +4,7 @@
 
 - Hồ sơ nhân sự, tài khoản, phòng ban và chức vụ.
 - Dự án, công việc, task, người phụ trách và báo cáo tiến độ.
-- Dashboard thống kê và lịch hạn chót.
+- Dashboard thống kê tổng quan.
 
 Một số phân hệ trên menu vẫn đang trong giai đoạn phát triển.
 

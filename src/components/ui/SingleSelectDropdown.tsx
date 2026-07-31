@@ -26,6 +26,8 @@ interface SingleSelectDropdownProps {
   searchPlaceholder?: string;
   /** Hiển thị ô dấu tích ở cuối lựa chọn đang được chọn. */
   showSelectionIndicator?: boolean;
+  /** Kích thước gọn dành cho thanh bộ lọc. */
+  compact?: boolean;
 }
 
 /** Bỏ dấu tiếng Việt để tìm kiếm không phân biệt dấu. */
@@ -49,6 +51,7 @@ export function SingleSelectDropdown({
   searchable = false,
   searchPlaceholder = "Tìm kiếm...",
   showSelectionIndicator = true,
+  compact = false,
 }: SingleSelectDropdownProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -98,7 +101,8 @@ export function SingleSelectDropdown({
         onClick={() => setOpen((prev) => !prev)}
         disabled={locked}
         className={cn(
-          "flex h-10 w-full items-center justify-between gap-2 rounded-lg border bg-white px-3 text-left text-sm transition-shadow disabled:cursor-not-allowed disabled:bg-gray-50",
+          "flex w-full items-center justify-between gap-2 rounded-lg border bg-white text-left transition-shadow disabled:cursor-not-allowed disabled:bg-gray-50",
+          compact ? "h-9 px-2.5 text-xs" : "h-10 px-3 text-sm",
           invalid
             ? "border-rose-400"
             : expanded

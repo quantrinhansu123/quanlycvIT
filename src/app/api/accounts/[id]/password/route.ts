@@ -1,5 +1,7 @@
 import { ApiException, apiSuccess, handleApiError, readJsonObject } from "@/lib/api/response";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
+import { createApiSupabaseClient } from "@/lib/supabase/api";
+import { assertAdminAccount } from "@/lib/supabase/data";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -23,6 +25,10 @@ async function findAuthUserByEmail(
 
 export async function POST(request: Request, { params }: RouteParams) {
   try {
+    // Luôn xác thực quyền bằng phiên đăng nhập của người gọi trước khi dùng service role.
+    // Không dựa vào việc giao diện có ẩn nút hay không vì API có thể bị gọi trực tiếp.
+    await assertAdminAccount(createApiSupabaseClient(request));
+
     const { id } = await params;
     const body = await readJsonObject(request);
     const newPassword =
@@ -43,12 +49,11 @@ export async function POST(request: Request, { params }: RouteParams) {
       .maybeSingle();
     if (accountError) throw accountError;
     if (!account) throw new ApiException("Không tìm thấy tài khoản nhân viên.", 404);
-    if (!account.email) {
-      throw new ApiException("Tài khoản chưa có email đăng nhập.", 400);
-    }
-
     let authUserId = account.auth_user_id as string | null;
     if (!authUserId) {
+      if (!account.email) {
+        throw new ApiException("Tài khoản chưa có email đăng nhập để tạo tài khoản xác thực.", 400);
+      }
       const existingUser = await findAuthUserByEmail(admin, account.email);
       if (existingUser) {
         authUserId = existingUser.id;

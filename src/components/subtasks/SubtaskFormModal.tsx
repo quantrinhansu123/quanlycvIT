@@ -13,12 +13,7 @@ import type {
   TaskFileAttachment,
   TaskLinkAttachment,
 } from "@/types/subtask";
-import {
-  TASK_PRIORITY_OPTIONS,
-  TASK_STATUS_META,
-  TASK_STATUS_OPTIONS,
-  type WorkTask,
-} from "@/types/task";
+import { TASK_PRIORITY_OPTIONS, type WorkTask } from "@/types/task";
 import type { ProjectMember } from "@/types/project";
 import { subtaskService } from "@/services/subtask-service";
 import { toDateInputValue, cn } from "@/lib/utils";
@@ -44,7 +39,6 @@ interface FormState {
   description: string;
   workTaskId: string;
   assigneeIds: string[];
-  status: SubtaskInput["status"];
   priority: SubtaskInput["priority"];
   startDate: string;
   dueDate: string;
@@ -86,12 +80,6 @@ const PRIORITY_DOT_CLASS: Record<SubtaskInput["priority"], string> = {
   urgent: "bg-rose-500",
 };
 
-const STATUS_SELECT_OPTIONS = TASK_STATUS_OPTIONS.map((option) => ({
-  value: option.value,
-  label: option.label,
-  dotClassName: TASK_STATUS_META[option.value].dot,
-}));
-
 const PRIORITY_SELECT_OPTIONS = TASK_PRIORITY_OPTIONS.map((option) => ({
   value: option.value,
   label: option.label,
@@ -127,7 +115,6 @@ function buildInitialState(
       description: subtask.description ?? "",
       workTaskId: subtask.workTaskId,
       assigneeIds: subtask.assignees.map((member) => member.id),
-      status: subtask.status,
       priority: subtask.priority,
       startDate: toDateInputValue(subtask.startDate),
       dueDate: toDateInputValue(subtask.dueDate),
@@ -138,15 +125,16 @@ function buildInitialState(
       images: subtask.images,
     };
   }
+  const workTaskId = defaultWorkTaskId ?? workTasks[0]?.id ?? "";
+  const selectedWorkTask = workTasks.find((item) => item.id === workTaskId);
   return {
     title: "",
     description: "",
-    workTaskId: defaultWorkTaskId ?? workTasks[0]?.id ?? "",
+    workTaskId,
     assigneeIds: [],
-    status: "todo",
     priority: "low",
-    startDate: toDateInputValue(new Date().toISOString()),
-    dueDate: "",
+    startDate: selectedWorkTask ? toDateInputValue(selectedWorkTask.startDate) : "",
+    dueDate: selectedWorkTask ? toDateInputValue(selectedWorkTask.dueDate) : "",
     progress: 0,
     tagsText: "",
     files: [],
@@ -356,24 +344,35 @@ export function SubtaskFormModal({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [onClose, submitting]);
 
-  const workTaskAssignees = useMemo(
-    () => workTasks.find((item) => item.id === form.workTaskId)?.assignees ?? [],
+  const selectedWorkTask = useMemo(
+    () => workTasks.find((item) => item.id === form.workTaskId),
     [workTasks, form.workTaskId]
   );
+  const workTaskAssignees = selectedWorkTask?.assignees ?? [];
+  const workTaskStartDate = selectedWorkTask
+    ? toDateInputValue(selectedWorkTask.startDate)
+    : undefined;
+  const workTaskDueDate = selectedWorkTask
+    ? toDateInputValue(selectedWorkTask.dueDate)
+    : undefined;
 
   /** Đổi công việc thì bỏ những người không phụ trách công việc mới. */
   function handleWorkTaskChange(workTaskId: string) {
-    const allowed = new Set(
-      (workTasks.find((item) => item.id === workTaskId)?.assignees ?? []).map(
-        (member) => member.id
-      )
-    );
+    const workTask = workTasks.find((item) => item.id === workTaskId);
+    const allowed = new Set((workTask?.assignees ?? []).map((member) => member.id));
     setForm((prev) => ({
       ...prev,
       workTaskId,
       assigneeIds: prev.assigneeIds.filter((id) => allowed.has(id)),
+      startDate: workTask ? toDateInputValue(workTask.startDate) : "",
+      dueDate: workTask ? toDateInputValue(workTask.dueDate) : "",
     }));
-    setErrors((prev) => ({ ...prev, workTaskId: undefined }));
+    setErrors((prev) => ({
+      ...prev,
+      workTaskId: undefined,
+      startDate: undefined,
+      dueDate: undefined,
+    }));
   }
 
   function handleImageSelection(files: FileList | null) {
@@ -518,6 +517,22 @@ export function SubtaskFormModal({
     if (form.startDate && form.dueDate && form.dueDate < form.startDate) {
       nextErrors.dueDate = "Ngày hoàn thành phải sau ngày bắt đầu";
     }
+    if (workTaskStartDate && workTaskDueDate) {
+      const dateRangeMessage =
+        "Thời gian task phải nằm trong khoảng thời gian của công việc";
+      if (
+        form.startDate &&
+        (form.startDate < workTaskStartDate || form.startDate > workTaskDueDate)
+      ) {
+        nextErrors.startDate = dateRangeMessage;
+      }
+      if (
+        form.dueDate &&
+        (form.dueDate < workTaskStartDate || form.dueDate > workTaskDueDate)
+      ) {
+        nextErrors.dueDate = dateRangeMessage;
+      }
+    }
     const invalidLink = normalizedLinks().find((link) => !isValidHttpUrl(link.url));
     if (invalidLink) {
       nextErrors.links = `Liên kết “${invalidLink.url}” không hợp lệ.`;
@@ -542,7 +557,6 @@ export function SubtaskFormModal({
         description: form.description || undefined,
         workTaskId: form.workTaskId,
         assigneeIds: form.assigneeIds,
-        status: form.status,
         priority: form.priority,
         startDate: form.startDate,
         dueDate: form.dueDate,
@@ -717,20 +731,6 @@ export function SubtaskFormModal({
 
           <div className="flex gap-4">
             <div className="flex-1">
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Trạng thái</label>
-              <SingleSelectDropdown
-                options={STATUS_SELECT_OPTIONS}
-                value={form.status}
-                onChange={(value) =>
-                  setForm((prev) => ({ ...prev, status: value as FormState["status"] }))
-                }
-                showSelectionIndicator={false}
-              />
-            </div>
-          </div>
-
-          <div className="flex gap-4">
-            <div className="flex-1">
               <label className="mb-1.5 block text-sm font-medium text-gray-700">Mức độ ưu tiên</label>
               <SingleSelectDropdown
                 options={PRIORITY_SELECT_OPTIONS}
@@ -745,12 +745,12 @@ export function SubtaskFormModal({
               <label className="mb-1.5 block text-sm font-medium text-gray-700">Tiến độ thực tế (%)</label>
               <input
                 type="number"
-                min={0}
-                max={100}
                 value={form.progress}
-                onChange={(event) => setForm((prev) => ({ ...prev, progress: Number(event.target.value) }))}
-                className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+                readOnly
+                aria-describedby="subtask-progress-help"
+                className="h-10 w-full cursor-not-allowed rounded-lg border border-gray-200 bg-gray-100 px-3 text-sm text-gray-500 outline-none"
               />
+              <p id="subtask-progress-help" className="mt-1 text-xs text-gray-400">Tiến độ chỉ được cập nhật qua Báo cáo tiến độ.</p>
             </div>
           </div>
 
@@ -762,7 +762,12 @@ export function SubtaskFormModal({
               <input
                 type="date"
                 value={form.startDate}
-                onChange={(event) => setForm((prev) => ({ ...prev, startDate: event.target.value }))}
+                min={workTaskStartDate}
+                max={workTaskDueDate}
+                onChange={(event) => {
+                  setForm((prev) => ({ ...prev, startDate: event.target.value }));
+                  setErrors((prev) => ({ ...prev, startDate: undefined }));
+                }}
                 className={cn(
                   "h-10 w-full rounded-lg border px-3 text-sm outline-none focus:ring-2 focus:ring-brand-100",
                   errors.startDate ? "border-rose-400" : "border-gray-200 focus:border-brand-400"
@@ -777,7 +782,12 @@ export function SubtaskFormModal({
               <input
                 type="date"
                 value={form.dueDate}
-                onChange={(event) => setForm((prev) => ({ ...prev, dueDate: event.target.value }))}
+                min={workTaskStartDate}
+                max={workTaskDueDate}
+                onChange={(event) => {
+                  setForm((prev) => ({ ...prev, dueDate: event.target.value }));
+                  setErrors((prev) => ({ ...prev, dueDate: undefined }));
+                }}
                 className={cn(
                   "h-10 w-full rounded-lg border px-3 text-sm outline-none focus:ring-2 focus:ring-brand-100",
                   errors.dueDate ? "border-rose-400" : "border-gray-200 focus:border-brand-400"

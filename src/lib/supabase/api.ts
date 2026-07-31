@@ -1,4 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 import { ApiException } from "@/lib/api/response";
 
 export type ApiSupabaseClient = SupabaseClient;
@@ -28,13 +30,8 @@ export function createApiSupabaseClient(request: Request): ApiSupabaseClient {
   });
 }
 
-/**
- * Client publishable dùng trong Server Component, không gắn Request/Authorization.
- * Chỉ an toàn trong cửa sổ RLS-anon hiện tại (mọi bảng cho phép role anon đọc tự do).
- * Khi bật RLS thật theo người dùng đăng nhập, cần thay bằng @supabase/ssr
- * (createServerClient + cookie-based session).
- */
-export function createServerSupabaseClient(): ApiSupabaseClient {
+/** Tạo Supabase client cho Server Component từ phiên đăng nhập trong cookie. */
+export async function createServerSupabaseClient(): Promise<ApiSupabaseClient> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
@@ -45,11 +42,22 @@ export function createServerSupabaseClient(): ApiSupabaseClient {
     );
   }
 
-  return createClient(supabaseUrl, publishableKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-      detectSessionInUrl: false,
+  const cookieStore = await cookies();
+
+  return createServerClient(supabaseUrl, publishableKey, {
+    cookies: {
+      getAll() {
+        return cookieStore.getAll();
+      },
+      setAll(cookiesToSet) {
+        try {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            cookieStore.set(name, value, options);
+          });
+        } catch {
+          // Server Component chỉ đọc cookie; Proxy chịu trách nhiệm làm mới phiên.
+        }
+      },
     },
   });
 }

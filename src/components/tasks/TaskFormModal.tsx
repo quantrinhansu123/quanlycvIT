@@ -10,8 +10,6 @@ import type {
 } from "@/types/task";
 import {
   TASK_PRIORITY_OPTIONS,
-  TASK_STATUS_META,
-  TASK_STATUS_OPTIONS,
 } from "@/types/task";
 import type { Project, ProjectMember } from "@/types/project";
 import { taskService } from "@/services/task-service";
@@ -22,6 +20,7 @@ import { SingleSelectDropdown } from "@/components/ui/SingleSelectDropdown";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 import { TaskAttachmentFields } from "@/components/tasks/TaskAttachmentFields";
+import { TaskStatusBadge } from "@/components/tasks/TaskBadges";
 
 interface TaskFormModalProps {
   mode: "create" | "edit";
@@ -137,15 +136,17 @@ function buildInitialState(
       images: task.images,
     };
   }
+  const projectId = defaultProjectId ?? projects[0]?.id ?? "";
+  const selectedProject = projects.find((project) => project.id === projectId);
   return {
     title: "",
     description: "",
-    projectId: defaultProjectId ?? projects[0]?.id ?? "",
+    projectId,
     assigneeIds: [],
     status: defaultStatus ?? "todo",
     priority: "low",
-    startDate: toDateInputValue(new Date().toISOString()),
-    dueDate: "",
+    startDate: selectedProject ? toDateInputValue(selectedProject.startDate) : "",
+    dueDate: selectedProject ? toDateInputValue(selectedProject.endDate) : "",
     tagsText: "",
     dependsOnTaskId: "",
     files: [],
@@ -212,10 +213,17 @@ export function TaskFormModal({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isPending, onClose]);
 
-  const projectParticipants = useMemo(
-    () => participantsOf(projects.find((project) => project.id === form.projectId)),
+  const selectedProject = useMemo(
+    () => projects.find((project) => project.id === form.projectId),
     [projects, form.projectId]
   );
+  const projectParticipants = useMemo(() => participantsOf(selectedProject), [selectedProject]);
+  const projectStartDate = selectedProject
+    ? toDateInputValue(selectedProject.startDate)
+    : undefined;
+  const projectEndDate = selectedProject
+    ? toDateInputValue(selectedProject.endDate)
+    : undefined;
 
   const projectOptions = useMemo(
     () =>
@@ -225,16 +233,6 @@ export function TaskFormModal({
         sublabel: project.code,
       })),
     [projects]
-  );
-
-  const statusOptions = useMemo(
-    () =>
-      TASK_STATUS_OPTIONS.map((option) => ({
-        value: option.value,
-        label: option.label,
-        dotClassName: TASK_STATUS_META[option.value].dot,
-      })),
-    []
   );
 
   const priorityOptions = useMemo(
@@ -262,17 +260,21 @@ export function TaskFormModal({
 
   /** Đổi dự án thì bỏ những người không còn tham gia dự án mới. */
   function handleProjectChange(projectId: string) {
-    const allowed = new Set(
-      participantsOf(projects.find((project) => project.id === projectId)).map(
-        (member) => member.id
-      )
-    );
+    const project = projects.find((item) => item.id === projectId);
+    const allowed = new Set(participantsOf(project).map((member) => member.id));
     setForm((prev) => ({
       ...prev,
       projectId,
       assigneeIds: prev.assigneeIds.filter((id) => allowed.has(id)),
+      startDate: project ? toDateInputValue(project.startDate) : "",
+      dueDate: project ? toDateInputValue(project.endDate) : "",
     }));
-    setErrors((prev) => ({ ...prev, projectId: undefined }));
+    setErrors((prev) => ({
+      ...prev,
+      projectId: undefined,
+      startDate: undefined,
+      dueDate: undefined,
+    }));
   }
 
   function handleImageSelection(files: FileList | null) {
@@ -416,6 +418,22 @@ export function TaskFormModal({
     if (!form.dueDate) nextErrors.dueDate = "Vui lòng chọn ngày hoàn thành";
     if (form.startDate && form.dueDate && form.dueDate < form.startDate) {
       nextErrors.dueDate = "Ngày hoàn thành phải sau ngày bắt đầu";
+    }
+    if (projectStartDate && projectEndDate) {
+      const dateRangeMessage =
+        "Thời gian công việc phải nằm trong khoảng thời gian của dự án";
+      if (
+        form.startDate &&
+        (form.startDate < projectStartDate || form.startDate > projectEndDate)
+      ) {
+        nextErrors.startDate = dateRangeMessage;
+      }
+      if (
+        form.dueDate &&
+        (form.dueDate < projectStartDate || form.dueDate > projectEndDate)
+      ) {
+        nextErrors.dueDate = dateRangeMessage;
+      }
     }
     const invalidLink = normalizedLinks().find((link) => !isValidHttpUrl(link.url));
     if (invalidLink) {
@@ -625,14 +643,12 @@ export function TaskFormModal({
           <div className="flex gap-4">
             <div className="flex-1">
               <label className="mb-1.5 block text-sm font-medium text-gray-700">Trạng thái</label>
-              <SingleSelectDropdown
-                options={statusOptions}
-                value={form.status}
-                onChange={(value) =>
-                  setForm((prev) => ({ ...prev, status: value as FormState["status"] }))
-                }
-                showSelectionIndicator={false}
-              />
+              <div className="flex min-h-11 flex-col items-start justify-center rounded-xl border border-gray-200 bg-gray-50 px-3">
+                <TaskStatusBadge status={form.status} />
+                <span className="mt-1 text-[11px] text-gray-400">
+                  Tự động theo trạng thái các Task
+                </span>
+              </div>
             </div>
             <div className="flex-1">
               <label className="mb-1.5 block text-sm font-medium text-gray-700">Mức độ ưu tiên</label>
@@ -655,7 +671,12 @@ export function TaskFormModal({
               <input
                 type="date"
                 value={form.startDate}
-                onChange={(event) => setForm((prev) => ({ ...prev, startDate: event.target.value }))}
+                min={projectStartDate}
+                max={projectEndDate}
+                onChange={(event) => {
+                  setForm((prev) => ({ ...prev, startDate: event.target.value }));
+                  setErrors((prev) => ({ ...prev, startDate: undefined }));
+                }}
                 className={cn(
                   "h-10 w-full rounded-lg border px-3 text-sm outline-none focus:ring-2 focus:ring-brand-100",
                   errors.startDate ? "border-rose-400" : "border-gray-200 focus:border-brand-400"
@@ -670,7 +691,12 @@ export function TaskFormModal({
               <input
                 type="date"
                 value={form.dueDate}
-                onChange={(event) => setForm((prev) => ({ ...prev, dueDate: event.target.value }))}
+                min={projectStartDate}
+                max={projectEndDate}
+                onChange={(event) => {
+                  setForm((prev) => ({ ...prev, dueDate: event.target.value }));
+                  setErrors((prev) => ({ ...prev, dueDate: undefined }));
+                }}
                 className={cn(
                   "h-10 w-full rounded-lg border px-3 text-sm outline-none focus:ring-2 focus:ring-brand-100",
                   errors.dueDate ? "border-rose-400" : "border-gray-200 focus:border-brand-400"

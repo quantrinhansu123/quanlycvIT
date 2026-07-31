@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, FilePenLine, History, Pencil, Trash2 } from "lucide-react";
+import { CalendarDays, CheckCircle2, FilePenLine, History, Pencil, Trash2 } from "lucide-react";
 import type { Subtask } from "@/types/subtask";
 import { isSubtaskOverdue } from "@/types/subtask";
 import type { WorkTask } from "@/types/task";
@@ -32,6 +32,9 @@ interface SubtaskTableProps {
   hideWorkTaskColumn?: boolean;
   /** Truyền vào để hiện thêm cột "Dự án" ngay sau cột "Thuộc công việc". */
   projectsById?: Map<string, Project>;
+  /** Chỉ quản trị viên mới thấy thao tác Duyệt khi task đang chờ đánh giá. */
+  canApprove?: boolean;
+  onApprove?: (subtask: Subtask) => void;
 }
 
 export function SubtaskTable({
@@ -48,6 +51,8 @@ export function SubtaskTable({
   onDelete,
   hideWorkTaskColumn = false,
   projectsById,
+  canApprove = false,
+  onApprove,
 }: SubtaskTableProps) {
   const allSelected = subtasks.length > 0 && selectedIds.length === subtasks.length;
   const showProjectColumn = !hideWorkTaskColumn && Boolean(projectsById);
@@ -165,6 +170,14 @@ export function SubtaskTable({
                 </td>
                 <td className="px-3 py-3 align-top">
                   <div className="flex min-w-[152px] items-center justify-start gap-1.5">
+                    {canApprove && subtask.status === "review" && subtask.progress === 100 && onApprove && (
+                      <ActionIconButton
+                        icon={CheckCircle2}
+                        label="Duyệt task"
+                        tone="success"
+                        onClick={() => onApprove(subtask)}
+                      />
+                    )}
                     {subtask.status !== "done" && (
                       <ActionIconButton
                         icon={FilePenLine}

@@ -15,6 +15,7 @@ interface ProjectTableProps {
   onToggleSelectAll: () => void;
   onEdit: (project: Project) => void;
   onDelete: (project: Project) => void;
+  readOnly?: boolean;
 }
 
 export function ProjectTable({
@@ -24,6 +25,7 @@ export function ProjectTable({
   onToggleSelectAll,
   onEdit,
   onDelete,
+  readOnly = false,
 }: ProjectTableProps) {
   const router = useRouter();
   const allSelected = projects.length > 0 && selectedIds.length === projects.length;
@@ -33,7 +35,7 @@ export function ProjectTable({
       <table className="w-full min-w-[1080px] border-collapse text-xs">
         <thead className="sticky top-0 z-10 bg-gray-50">
           <tr className="border-b border-gray-100 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-            <th className="w-12 px-6 py-3">
+            {!readOnly && <th className="w-12 px-6 py-3">
               <input
                 type="checkbox"
                 checked={allSelected}
@@ -41,7 +43,7 @@ export function ProjectTable({
                 className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
                 aria-label="Chọn tất cả"
               />
-            </th>
+            </th>}
             <th className="px-3 py-3">Mã dự án</th>
             <th className="w-80 px-3 py-3">Tên dự án</th>
             <th className="w-32 whitespace-nowrap px-3 py-3">Quản lý (PM)</th>
@@ -55,7 +57,7 @@ export function ProjectTable({
         <tbody className="divide-y divide-gray-100">
           {projects.map((project) => (
             <tr key={project.id} className="data-table-row group">
-              <td className="px-6 py-4 align-top">
+              {!readOnly && <td className="px-6 py-4 align-top">
                 <input
                   type="checkbox"
                   checked={selectedIds.includes(project.id)}
@@ -63,7 +65,7 @@ export function ProjectTable({
                   className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
                   aria-label={`Chọn dự án ${project.name}`}
                 />
-              </td>
+              </td>}
               <td className="px-3 py-4 align-top">
                 <Badge color={project.color}>{project.code}</Badge>
               </td>
@@ -111,18 +113,18 @@ export function ProjectTable({
                     label="Xem chi tiết"
                     onClick={() => router.push(`/quan-ly-cong-viec/danh-sach-du-an/${project.id}`)}
                   />
-                  <ActionIconButton
+                  {!readOnly && <ActionIconButton
                     icon={Pencil}
                     label="Chỉnh sửa"
                     tone="warning"
                     onClick={() => onEdit(project)}
-                  />
-                  <ActionIconButton
+                  />}
+                  {!readOnly && <ActionIconButton
                     icon={Trash2}
                     label="Xóa dự án"
                     tone="danger"
                     onClick={() => onDelete(project)}
-                  />
+                  />}
                 </div>
               </td>
             </tr>

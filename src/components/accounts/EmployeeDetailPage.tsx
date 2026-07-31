@@ -14,6 +14,7 @@ import { ModalLoadingFallback } from "@/components/ui/ModalLoadingFallback";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
+import { useCurrentAccount } from "@/hooks/useCurrentAccount";
 import { accountService } from "@/services/account-service";
 import type { AccountInput, Department, EmployeeAccount } from "@/types/account";
 
@@ -37,6 +38,8 @@ function avatarColor(name: string) {
 export function EmployeeDetailPage({ employeeId }: { employeeId: string }) {
   const router = useRouter();
   const { notify } = useFeedback();
+  const { account: currentAccount } = useCurrentAccount();
+  const canChangePassword = currentAccount?.role === "admin";
   const [account, setAccount] = useState<EmployeeAccount | null>(null);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,8 +86,8 @@ export function EmployeeDetailPage({ employeeId }: { employeeId: string }) {
   async function changePassword(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!account?.email) {
-      notify({ type: "error", title: "Tài khoản chưa có email đăng nhập" });
+    if (!account?.authUserId && !account?.email) {
+      notify({ type: "error", title: "Tài khoản chưa có thông tin đăng nhập", description: "Hãy bổ sung email cho nhân viên trước khi tạo mật khẩu." });
       return;
     }
     if (newPassword.length < 6) {
@@ -223,7 +226,7 @@ export function EmployeeDetailPage({ employeeId }: { employeeId: string }) {
               </div>
             )}
           </div>
-        ) : (
+        ) : canChangePassword ? (
           <section className="mx-auto max-w-xl rounded-2xl border border-gray-200 bg-white p-7 shadow-sm">
             <div className="flex items-center gap-3">
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
@@ -254,10 +257,17 @@ export function EmployeeDetailPage({ employeeId }: { employeeId: string }) {
                 autoComplete="new-password"
                 placeholder="Nhập lại mật khẩu mới"
               />
-              <Button type="submit" className="mt-3" disabled={changingPassword || !account.email}>
+              <Button type="submit" className="mt-3" disabled={changingPassword}>
                 {changingPassword ? "Đang đổi..." : "Đổi mật khẩu"}
               </Button>
             </form>
+          </section>
+        ) : (
+          <section className="mx-auto max-w-xl rounded-2xl border border-amber-200 bg-amber-50 p-7 text-center">
+            <ShieldCheck className="mx-auto h-9 w-9 text-amber-500" />
+            <h2 className="mt-3 font-bold text-gray-900">Chỉ quản trị viên được đổi mật khẩu</h2>
+            <p className="mt-1 text-sm text-gray-600">Tài khoản hiện tại không có quyền đặt lại mật khẩu cho nhân viên.</p>
+            <Button type="button" variant="secondary" className="mt-5" onClick={() => setTab("information")}>Quay lại thông tin</Button>
           </section>
         )}
       </main>
@@ -267,9 +277,11 @@ export function EmployeeDetailPage({ employeeId }: { employeeId: string }) {
           <BottomTab active={tab === "information"} onClick={() => setTab("information")} icon={CircleUserRound}>
             Thông tin
           </BottomTab>
-          <BottomTab active={tab === "password"} onClick={() => setTab("password")} icon={KeyRound}>
-            Đổi mật khẩu
-          </BottomTab>
+          {canChangePassword && (
+            <BottomTab active={tab === "password"} onClick={() => setTab("password")} icon={KeyRound}>
+              Đổi mật khẩu
+            </BottomTab>
+          )}
         </div>
       </div>
 

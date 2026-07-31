@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { apiSuccess, handleApiError, readJsonObject } from "@/lib/api/response";
 import { parseWorkTaskInput } from "@/lib/api/validation";
 import { createApiSupabaseClient } from "@/lib/supabase/api";
+import { assertManagerOrAdmin, requireRequestAccount } from "@/lib/supabase/authorization";
 import {
   createWorkTask,
   listWorkTasks,
@@ -27,7 +28,12 @@ function filtersFromRequest(request: NextRequest): WorkTaskFilters {
 export async function GET(request: NextRequest) {
   try {
     const supabase = createApiSupabaseClient(request);
+    const access = await requireRequestAccount(supabase);
     const filters = filtersFromRequest(request);
+    if (access.role === "member") {
+      filters.assigneeId = undefined;
+      filters.assigneeIds = [access.id];
+    }
     const params = request.nextUrl.searchParams;
     const page = params.get("page");
     const pageSize = params.get("pageSize");
@@ -50,8 +56,10 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: Request) {
   try {
+    const supabase = createApiSupabaseClient(request);
+    assertManagerOrAdmin(await requireRequestAccount(supabase));
     const input = parseWorkTaskInput(await readJsonObject(request));
-    const task = await createWorkTask(createApiSupabaseClient(request), input);
+    const task = await createWorkTask(supabase, input);
     return apiSuccess(task, 201, "Tạo công việc thành công.");
   } catch (error) {
     return handleApiError(error);

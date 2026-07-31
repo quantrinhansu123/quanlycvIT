@@ -331,7 +331,6 @@ export function parseSubtaskInput(body: Record<string, unknown>): SubtaskInput {
     description: optionalString(body, "description"),
     workTaskId: requiredString(body, "workTaskId", "Công việc"),
     assigneeIds: assigneeIds(body),
-    status: taskStatus(body),
     priority: taskPriority(body),
     startDate,
     dueDate,

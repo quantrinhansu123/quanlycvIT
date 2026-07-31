@@ -16,7 +16,9 @@ import { ModalLoadingFallback } from "@/components/ui/ModalLoadingFallback";
 import { formatDateVN } from "@/lib/utils";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
+import { exportTablePdf } from "@/lib/pdf-export";
 import { ListPaginationFooter } from "@/components/ui/ListPaginationFooter";
+import { useCurrentAccount } from "@/hooks/useCurrentAccount";
 
 const ProjectFormModal = dynamic(
   () => import("@/components/projects/ProjectFormModal").then((mod) => mod.ProjectFormModal),
@@ -77,6 +79,8 @@ function buildOptimisticProject(
 export default function ProjectListPage() {
   const router = useRouter();
   const { confirm, notify } = useFeedback();
+  const { account, loading: accountLoading } = useCurrentAccount();
+  const readOnly = accountLoading || account?.role === "member";
   const [projects, setProjects] = useState<Project[]>([]);
   const [total, setTotal] = useState(0);
   const [members, setMembers] = useState<ProjectMember[]>([]);
@@ -123,6 +127,7 @@ export default function ProjectListPage() {
   }, [notify]);
 
   useEffect(() => {
+    if (accountLoading || account?.role === "member") return;
     projectService.getDirectory().then(setMembers).catch((directoryError) => {
       setError(true);
       notify({
@@ -131,7 +136,7 @@ export default function ProjectListPage() {
         description: getErrorMessage(directoryError, "Vui lòng kiểm tra kết nối và thử lại."),
       });
     });
-  }, [notify]);
+  }, [account?.role, accountLoading, notify]);
 
   useEffect(() => {
     // Tìm kiếm thay đổi thì quay về trang đầu để không rơi vào trang trống.
@@ -223,10 +228,9 @@ export default function ProjectListPage() {
     });
   }
 
-  async function handleExportCsv() {
+  async function handleExportPdf() {
     try {
       const exportProjects = await projectService.getProjects(search);
-      const header = ["Mã dự án", "Tên dự án", "Quản lý (PM)", "Ngày bắt đầu", "Ngày kết thúc"];
       const rows = exportProjects.map((project) => [
         project.code,
         project.name,
@@ -234,20 +238,22 @@ export default function ProjectListPage() {
         formatDateVN(project.startDate),
         formatDateVN(project.endDate),
       ]);
-      const csvContent = [header, ...rows].map((row) => row.map((cell) => `"${cell}"`).join(",")).join("\n");
-      const blob = new Blob([`﻿${csvContent}`], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "danh-sach-du-an.csv";
-      link.click();
-      URL.revokeObjectURL(url);
-      notify({ type: "success", title: "Đã xuất danh sách dự án", description: `${exportProjects.length} bản ghi đã được xuất.` });
+      await exportTablePdf({
+        title: "Danh sách dự án",
+        filename: "danh-sach-du-an.pdf",
+        columns: [
+          { label: "Mã dự án", width: 62 }, { label: "Tên dự án", width: "*" },
+          { label: "Quản lý (PM)", width: 100 }, { label: "Bắt đầu", width: 58, alignment: "center" },
+          { label: "Kết thúc", width: 58, alignment: "center" },
+        ],
+        rows,
+      });
+      notify({ type: "success", title: "Đã xuất danh sách dự án PDF", description: `${exportProjects.length} bản ghi đã được xuất.` });
     } catch (exportError) {
       notify({
         type: "error",
-        title: "Xuất file thất bại",
-        description: getErrorMessage(exportError, "Không thể tạo file danh sách dự án."),
+        title: "Xuất PDF thất bại",
+        description: getErrorMessage(exportError, "Không thể tạo PDF danh sách dự án."),
       });
     }
   }
@@ -276,10 +282,10 @@ export default function ProjectListPage() {
         </div>
 
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          <Button size="sm" onClick={() => setModalState({ mode: "create" })}>
+          {!readOnly && <Button size="sm" onClick={() => setModalState({ mode: "create" })}>
             <Plus className="h-4 w-4" />
             Thêm mới
-          </Button>
+          </Button>}
           <div className="flex overflow-hidden rounded-lg border border-gray-200 bg-white">
             <button
               type="button"
@@ -302,15 +308,16 @@ export default function ProjectListPage() {
               <LayoutGrid className="h-4 w-4" />
             </button>
           </div>
-          <button
+          {!readOnly && <button
             type="button"
-            onClick={() => void handleExportCsv()}
+            onClick={() => void handleExportPdf()}
+            title="Xuất PDF"
             disabled={total === 0}
             className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label="Xuất file"
+            aria-label="Xuất PDF"
           >
             <Download className="h-4 w-4" />
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -325,12 +332,12 @@ export default function ProjectListPage() {
             icon={FolderOpen}
             title="Không tìm thấy dự án nào"
             description="Thử thay đổi từ khóa tìm kiếm hoặc tạo dự án mới."
-            action={
+            action={!readOnly ? (
               <Button size="sm" onClick={() => setModalState({ mode: "create" })}>
                 <Plus className="h-4 w-4" />
                 Thêm dự án
               </Button>
-            }
+            ) : undefined}
           />
         ) : viewMode === "table" ? (
           <ProjectTable
@@ -340,6 +347,7 @@ export default function ProjectListPage() {
             onToggleSelectAll={toggleSelectAll}
             onEdit={(project) => setModalState({ mode: "edit", project })}
             onDelete={handleDelete}
+            readOnly={readOnly}
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3">
@@ -349,6 +357,7 @@ export default function ProjectListPage() {
                 project={project}
                 onEdit={(p) => setModalState({ mode: "edit", project: p })}
                 onDelete={handleDelete}
+                readOnly={readOnly}
               />
             ))}
           </div>
@@ -369,7 +378,7 @@ export default function ProjectListPage() {
         )}
       </div>
 
-      {modalState && (
+      {modalState && !readOnly && (
         <ProjectFormModal
           mode={modalState.mode}
           project={modalState.mode === "edit" ? modalState.project : undefined}

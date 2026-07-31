@@ -24,6 +24,7 @@ import type {
   WorkTask,
   WorkTaskInput,
 } from "@/types/task";
+import { deriveWorkTaskStatus } from "@/types/task";
 import type { ProjectTask } from "@/services/mock-data";
 import { getAppDateKey } from "@/lib/utils";
 
@@ -104,8 +105,8 @@ interface WorkTaskRow {
   legacy_assignee: AccountRow | null;
   /** Danh sách người phụ trách đầy đủ, lấy kèm qua embed thay vì round-trip riêng. */
   cong_viec_phu_trach: AssignmentEmbedRow[];
-  /** Tiến độ các task con, lấy kèm qua embed để tính tiến độ trung bình. */
-  task: { tien_do_thuc_te: number }[];
+  /** Trạng thái/tiến độ Task con, lấy kèm để tính trạng thái và tiến độ Công việc. */
+  task: { tien_do_thuc_te: number; trang_thai: string }[];
 }
 
 interface SubtaskRow {
@@ -164,6 +165,7 @@ export interface SubtaskFilters {
   search?: string;
   workTaskId?: string;
   assigneeId?: string;
+  assigneeIds?: string[];
   priority?: TaskPriority;
   status?: TaskStatus;
   overdueOnly?: boolean;
@@ -202,7 +204,7 @@ const WORK_TASK_SELECT =
   "id,ten_cv,mo_ta,created_at,updated_at,du_an_id,nguoi_phu_trach_id,trang_thai,uu_tien,ngay_bat_dau,ngay_hoan_thanh,tien_do_thuc_te,nhan_tag,cong_viec_tien_de_id,hinh_anh,tep_dinh_kem,lien_ket_dinh_kem," +
   `legacy_assignee:tai_khoan!nguoi_phu_trach_id(${ACCOUNT_SELECT}),` +
   `cong_viec_phu_trach(tai_khoan_id,la_chinh,tai_khoan(${ACCOUNT_SELECT})),` +
-  "task(tien_do_thuc_te)";
+  "task(tien_do_thuc_te,trang_thai)";
 const SUBTASK_SELECT =
   "id,ten_task,mo_ta,created_at,updated_at,ngay_bat_dau,ngay_ket_thuc,nguoi_phu_trach_id,trang_thai,uu_tien,tien_do_thuc_te,nhan_tag,hinh_anh,tep_dinh_kem,lien_ket_dinh_kem,task_tien_de_id,cong_viec_id," +
   `legacy_assignee:tai_khoan!nguoi_phu_trach_id(${ACCOUNT_SELECT}),` +
@@ -242,6 +244,22 @@ function toApiStatus(status: string): TaskStatus {
 
 function toDatabaseStatus(status: TaskStatus): string {
   return status === "inProgress" ? "in_progress" : status;
+}
+
+/**
+ * Trạng thái Task con luôn được suy ra từ tiến độ, không nhận từ form.
+ * "done" chỉ đạt được qua hành động Duyệt của quản trị viên (xem approveSubtask).
+ */
+function deriveSubtaskStatus(progress: number): TaskStatus {
+  if (progress >= 100) return "review";
+  if (progress > 0) return "inProgress";
+  return "todo";
+}
+
+function normalizeSubtaskStatus(status: string, progress: number): TaskStatus {
+  return toApiStatus(status) === "done" && progress === 100
+    ? "done"
+    : deriveSubtaskStatus(progress);
 }
 
 function toPriority(priority: string): TaskPriority {
@@ -537,10 +555,36 @@ async function syncProjectPeople(
   if (failure !== undefined) throw failure;
 }
 
+/** Danh sách dự án mà một tài khoản là thành viên hoặc người quản lý. */
+async function listProjectIdsForParticipant(
+  supabase: ApiSupabaseClient,
+  accountId: string
+): Promise<string[]> {
+  const [memberResult, managerResult, legacyResult] = await Promise.all([
+    supabase.from("du_an_thanh_vien").select("du_an_id").eq("tai_khoan_id", accountId),
+    supabase.from("du_an_quan_ly").select("du_an_id").eq("tai_khoan_id", accountId),
+    supabase.from("du_an").select("id").eq("nguoi_ql_id", accountId),
+  ]);
+  throwDatabaseError(memberResult.error);
+  throwDatabaseError(managerResult.error);
+  throwDatabaseError(legacyResult.error);
+  return uniqueValues([
+    ...(memberResult.data ?? []).map((row) => row.du_an_id as string),
+    ...(managerResult.data ?? []).map((row) => row.du_an_id as string),
+    ...(legacyResult.data ?? []).map((row) => row.id as string),
+  ]);
+}
+
 export async function listProjects(
   supabase: ApiSupabaseClient,
-  search?: string
+  search?: string,
+  participantAccountId?: string
 ): Promise<Project[]> {
+  const visibleProjectIds = participantAccountId
+    ? await listProjectIdsForParticipant(supabase, participantAccountId)
+    : undefined;
+  if (visibleProjectIds?.length === 0) return [];
+
   let query = supabase
     .from("du_an")
     .select(PROJECT_SELECT)
@@ -553,6 +597,7 @@ export async function listProjects(
       query = query.or(`ten_da.ilike.%${safeTerm}%,ma_da.ilike.%${safeTerm}%`);
     }
   }
+  if (visibleProjectIds) query = query.in("id", visibleProjectIds);
 
   const { data, error } = await query;
   throwDatabaseError(error);
@@ -562,7 +607,7 @@ export async function listProjects(
 /** Giống `listProjects` nhưng chỉ tải một trang kết quả. */
 export async function listProjectsPage(
   supabase: ApiSupabaseClient,
-  filters: { search?: string; managerIds?: string[]; page: number; pageSize: number }
+  filters: { search?: string; managerIds?: string[]; participantAccountId?: string; page: number; pageSize: number }
 ): Promise<PagedResult<Project>> {
   let projectIdsFromManagers: string[] | undefined;
   if (filters.managerIds && filters.managerIds.length > 0) {
@@ -575,6 +620,14 @@ export async function listProjectsPage(
       .in("tai_khoan_id", accountIds);
     throwDatabaseError(error);
     projectIdsFromManagers = uniqueValues((data ?? []).map((row) => row.du_an_id as string));
+    if (projectIdsFromManagers.length === 0) return { items: [], total: 0 };
+  }
+
+  if (filters.participantAccountId) {
+    const participantProjectIds = await listProjectIdsForParticipant(supabase, filters.participantAccountId);
+    projectIdsFromManagers = projectIdsFromManagers
+      ? projectIdsFromManagers.filter((id) => participantProjectIds.includes(id))
+      : participantProjectIds;
     if (projectIdsFromManagers.length === 0) return { items: [], total: 0 };
   }
 
@@ -768,6 +821,12 @@ function hydrateWorkTasks(rows: WorkTaskRow[]): WorkTask[] {
               progressRows.length
           )
         : 0;
+    const status = deriveWorkTaskStatus(
+      progressRows.map((item) => ({
+        progress: item.tien_do_thuc_te,
+        status: toApiStatus(item.trang_thai),
+      }))
+    );
 
     return {
       id: row.id,
@@ -778,7 +837,7 @@ function hydrateWorkTasks(rows: WorkTaskRow[]): WorkTask[] {
       projectId: row.du_an_id,
       assigneeId: primary?.id ?? "",
       assignees: assignees.length > 0 ? assignees : primary ? [primary] : [],
-      status: toApiStatus(row.trang_thai),
+      status,
       priority: toPriority(row.uu_tien),
       startDate: row.ngay_bat_dau ?? "",
       dueDate: row.ngay_hoan_thanh ?? "",
@@ -999,6 +1058,43 @@ async function assertProjectParticipants(
   }
 }
 
+/** Ngày công việc phải nằm hoàn toàn trong thời gian dự án. */
+async function assertWorkTaskScheduleWithinProject(
+  supabase: ApiSupabaseClient,
+  projectId: string,
+  startDate: string,
+  dueDate: string
+): Promise<void> {
+  const { data, error } = await supabase
+    .from("du_an")
+    .select("ngay_bd, ngay_kt")
+    .eq("id", projectId)
+    .maybeSingle();
+  throwDatabaseError(error);
+
+  if (!data) {
+    throw new ApiException("Không tìm thấy dự án cho công việc.", 400);
+  }
+
+  const projectStartDate = data.ngay_bd as string | null;
+  const projectEndDate = data.ngay_kt as string | null;
+  if (!projectStartDate || !projectEndDate) {
+    throw new ApiException("Dự án chưa có thời gian làm việc hợp lệ.", 400);
+  }
+
+  if (
+    startDate < projectStartDate ||
+    startDate > projectEndDate ||
+    dueDate < projectStartDate ||
+    dueDate > projectEndDate
+  ) {
+    throw new ApiException(
+      "Thời gian công việc phải nằm trong khoảng thời gian của dự án.",
+      400
+    );
+  }
+}
+
 /** Người phụ trách task bắt buộc nằm trong nhóm phụ trách công việc cha. */
 async function assertWorkTaskAssignees(
   supabase: ApiSupabaseClient,
@@ -1021,13 +1117,49 @@ async function assertWorkTaskAssignees(
   }
 }
 
+/** Ngày task phải nằm hoàn toàn trong thời gian công việc cha. */
+async function assertSubtaskScheduleWithinWorkTask(
+  supabase: ApiSupabaseClient,
+  workTaskId: string,
+  startDate: string,
+  dueDate: string
+): Promise<void> {
+  const { data, error } = await supabase
+    .from("cong_viec")
+    .select("ngay_bat_dau, ngay_hoan_thanh")
+    .eq("id", workTaskId)
+    .maybeSingle();
+  throwDatabaseError(error);
+
+  if (!data) {
+    throw new ApiException("Không tìm thấy công việc cho task.", 400);
+  }
+
+  const workTaskStartDate = data.ngay_bat_dau as string | null;
+  const workTaskDueDate = data.ngay_hoan_thanh as string | null;
+  if (!workTaskStartDate || !workTaskDueDate) {
+    throw new ApiException("Công việc chưa có thời gian làm việc hợp lệ.", 400);
+  }
+
+  if (
+    startDate < workTaskStartDate ||
+    startDate > workTaskDueDate ||
+    dueDate < workTaskStartDate ||
+    dueDate > workTaskDueDate
+  ) {
+    throw new ApiException(
+      "Thời gian task phải nằm trong khoảng thời gian của công việc.",
+      400
+    );
+  }
+}
+
 async function workTaskPayload(input: WorkTaskInput, primaryAccountId: string) {
   return {
     ten_cv: input.title,
     mo_ta: input.description ?? null,
     du_an_id: input.projectId,
     nguoi_phu_trach_id: primaryAccountId,
-    trang_thai: toDatabaseStatus(input.status),
     uu_tien: input.priority,
     ngay_bat_dau: input.startDate,
     ngay_hoan_thanh: input.dueDate,
@@ -1043,14 +1175,22 @@ export async function createWorkTask(
   supabase: ApiSupabaseClient,
   input: WorkTaskInput
 ): Promise<WorkTask> {
-  const { ids: assigneeIds, accountsById } = await resolveAccounts(
-    supabase,
-    input.assigneeIds,
-    "Người phụ trách"
-  );
+  const [{ ids: assigneeIds, accountsById }] = await Promise.all([
+    resolveAccounts(supabase, input.assigneeIds, "Người phụ trách"),
+    assertWorkTaskScheduleWithinProject(
+      supabase,
+      input.projectId,
+      input.startDate,
+      input.dueDate
+    ),
+  ]);
   await assertProjectParticipants(supabase, input.projectId, assigneeIds);
 
-  const payload = await workTaskPayload(input, assigneeIds[0]);
+  const payload = {
+    ...(await workTaskPayload(input, assigneeIds[0])),
+    // Công việc mới chưa có Task con nên luôn bắt đầu ở trạng thái Cần làm.
+    trang_thai: "todo",
+  };
   const { data, error } = await supabase
     .from("cong_viec")
     .insert(payload)
@@ -1083,11 +1223,15 @@ export async function updateWorkTask(
   const current = await getWorkTask(supabase, id);
   if (!current) return null;
 
-  const { ids: assigneeIds, accountsById } = await resolveAccounts(
-    supabase,
-    input.assigneeIds,
-    "Người phụ trách"
-  );
+  const [{ ids: assigneeIds, accountsById }] = await Promise.all([
+    resolveAccounts(supabase, input.assigneeIds, "Người phụ trách"),
+    assertWorkTaskScheduleWithinProject(
+      supabase,
+      input.projectId,
+      input.startDate,
+      input.dueDate
+    ),
+  ]);
   await assertProjectParticipants(supabase, input.projectId, assigneeIds);
   // Task con chỉ được giao cho người còn phụ trách công việc này.
   await assertSubtaskAssigneesStillValid(supabase, id, assigneeIds);
@@ -1170,9 +1314,10 @@ export async function deleteWorkTask(
 
 export async function listProjectTasks(
   supabase: ApiSupabaseClient,
-  projectId: string
+  projectId: string,
+  assigneeIds?: string[]
 ): Promise<ProjectTask[]> {
-  const tasks = await listWorkTasks(supabase, { projectId });
+  const tasks = await listWorkTasks(supabase, { projectId, assigneeIds });
 
   return tasks.map((task) => ({
     id: task.id,
@@ -1214,7 +1359,7 @@ function hydrateSubtasks(rows: SubtaskRow[]): Subtask[] {
       workTaskId: row.cong_viec_id,
       assigneeId: primary?.id ?? "",
       assignees: assignees.length > 0 ? assignees : primary ? [primary] : [],
-      status: toApiStatus(row.trang_thai),
+      status: normalizeSubtaskStatus(row.trang_thai, row.tien_do_thuc_te),
       priority: toPriority(row.uu_tien),
       startDate: row.ngay_bat_dau ?? "",
       dueDate: row.ngay_ket_thuc ?? "",
@@ -1231,6 +1376,18 @@ export async function listSubtasks(
   supabase: ApiSupabaseClient,
   filters: SubtaskFilters = {}
 ): Promise<Subtask[]> {
+  let subtaskIdsFromAssignees: string[] | undefined;
+  if (filters.assigneeIds && filters.assigneeIds.length > 0) {
+    const accountIds = await resolveAccountIds(supabase, filters.assigneeIds, "Người thực hiện");
+    const { data, error } = await supabase
+      .from("task_phu_trach")
+      .select("task_id")
+      .in("tai_khoan_id", accountIds);
+    throwDatabaseError(error);
+    subtaskIdsFromAssignees = uniqueValues((data ?? []).map((row) => row.task_id as string));
+    if (subtaskIdsFromAssignees.length === 0) return [];
+  }
+
   let query = supabase
     .from("task")
     .select(SUBTASK_SELECT)
@@ -1240,6 +1397,7 @@ export async function listSubtasks(
     query = query.ilike("ten_task", `%${filters.search.trim()}%`);
   }
   if (filters.workTaskId) query = query.eq("cong_viec_id", filters.workTaskId);
+  if (subtaskIdsFromAssignees) query = query.in("id", subtaskIdsFromAssignees);
   if (filters.assigneeId) {
     const accountId = await resolveAccountId(
       supabase,
@@ -1350,16 +1508,21 @@ export async function getSubtask(
   return subtask;
 }
 
-function subtaskPayload(input: SubtaskInput, primaryAccountId: string) {
+function subtaskPayload(
+  input: SubtaskInput,
+  primaryAccountId: string,
+  progress: number,
+  status: TaskStatus
+) {
   return {
     ten_task: input.title,
     mo_ta: input.description ?? null,
     ngay_bat_dau: input.startDate,
     ngay_ket_thuc: input.dueDate,
     nguoi_phu_trach_id: primaryAccountId,
-    trang_thai: toDatabaseStatus(input.status),
+    trang_thai: toDatabaseStatus(status),
     uu_tien: input.priority,
-    tien_do_thuc_te: input.progress,
+    tien_do_thuc_te: progress,
     nhan_tag: input.tags,
     hinh_anh: input.images,
     tep_dinh_kem: input.files,
@@ -1372,16 +1535,20 @@ export async function createSubtask(
   supabase: ApiSupabaseClient,
   input: SubtaskInput
 ): Promise<Subtask> {
-  const { ids: assigneeIds, accountsById } = await resolveAccounts(
-    supabase,
-    input.assigneeIds,
-    "Người phụ trách"
-  );
+  const [{ ids: assigneeIds, accountsById }] = await Promise.all([
+    resolveAccounts(supabase, input.assigneeIds, "Người phụ trách"),
+    assertSubtaskScheduleWithinWorkTask(
+      supabase,
+      input.workTaskId,
+      input.startDate,
+      input.dueDate
+    ),
+  ]);
   await assertWorkTaskAssignees(supabase, input.workTaskId, assigneeIds);
 
   const { data, error } = await supabase
     .from("task")
-    .insert(subtaskPayload(input, assigneeIds[0]))
+    .insert(subtaskPayload(input, assigneeIds[0], 0, "todo"))
     .select(SUBTASK_SELECT)
     .single();
   throwDatabaseError(error);
@@ -1408,16 +1575,35 @@ export async function updateSubtask(
   id: string,
   input: SubtaskInput
 ): Promise<Subtask | null> {
-  const { ids: assigneeIds, accountsById } = await resolveAccounts(
-    supabase,
-    input.assigneeIds,
-    "Người phụ trách"
-  );
+  const { data: currentRow, error: currentError } = await supabase
+    .from("task")
+    .select("tien_do_thuc_te,trang_thai")
+    .eq("id", id)
+    .maybeSingle();
+  throwDatabaseError(currentError);
+  if (!currentRow) return null;
+
+  const [{ ids: assigneeIds, accountsById }] = await Promise.all([
+    resolveAccounts(supabase, input.assigneeIds, "Người phụ trách"),
+    assertSubtaskScheduleWithinWorkTask(
+      supabase,
+      input.workTaskId,
+      input.startDate,
+      input.dueDate
+    ),
+  ]);
   await assertWorkTaskAssignees(supabase, input.workTaskId, assigneeIds);
 
   const { data, error } = await supabase
     .from("task")
-    .update(subtaskPayload(input, assigneeIds[0]))
+    .update(
+      subtaskPayload(
+        input,
+        assigneeIds[0],
+        Number(currentRow.tien_do_thuc_te),
+        normalizeSubtaskStatus(String(currentRow.trang_thai), Number(currentRow.tien_do_thuc_te))
+      )
+    )
     .eq("id", id)
     .select(SUBTASK_SELECT)
     .maybeSingle();
@@ -1876,9 +2062,13 @@ export async function createSubtaskReport(
   }
 
   if (input.progress !== subtask.progress) {
+    // Báo cáo đạt 100% chuyển sang "Chờ duyệt"; chỉ approveSubtask mới đưa về "Hoàn thành".
     const { error: progressError } = await supabase
       .from("task")
-      .update({ tien_do_thuc_te: input.progress })
+      .update({
+        tien_do_thuc_te: input.progress,
+        trang_thai: toDatabaseStatus(deriveSubtaskStatus(input.progress)),
+      })
       .eq("id", subtaskId);
     throwDatabaseError(progressError);
   }
@@ -1886,4 +2076,53 @@ export async function createSubtaskReport(
   const report = await getSubtaskReport(supabase, reportId);
   if (!report) throw new ApiException("Không thể đọc lại báo cáo vừa tạo.", 500);
   return report;
+}
+
+/** Xác thực người gọi API hiện tại có role admin trong bảng tài khoản. */
+export async function assertAdminAccount(supabase: ApiSupabaseClient): Promise<void> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new ApiException("Bạn cần đăng nhập để thực hiện thao tác này.", 401);
+
+  const { data, error } = await supabase
+    .from("tai_khoan")
+    .select("role")
+    .eq("auth_user_id", user.id)
+    .maybeSingle();
+  throwDatabaseError(error);
+
+  if (!data || data.role !== "admin") {
+    throw new ApiException("Chỉ quản trị viên mới được thực hiện thao tác này.", 403);
+  }
+}
+
+/**
+ * Duyệt Task con đã báo cáo tiến độ 100% ("Chờ duyệt") sang "Hoàn thành".
+ * Đây là con đường duy nhất để một task đạt trạng thái "done".
+ */
+export async function approveSubtask(
+  supabase: ApiSupabaseClient,
+  id: string
+): Promise<Subtask | null> {
+  const subtask = await getSubtask(supabase, id);
+  if (!subtask) return null;
+  if (subtask.status !== "review" || subtask.progress !== 100) {
+    throw new ApiException(
+      "Chỉ có thể duyệt task đã báo cáo tiến độ 100% và đang chờ đánh giá.",
+      400
+    );
+  }
+
+  const { data, error } = await supabase
+    .from("task")
+    .update({ trang_thai: toDatabaseStatus("done") })
+    .eq("id", id)
+    .select(SUBTASK_SELECT)
+    .maybeSingle();
+  throwDatabaseError(error);
+  if (!data) return null;
+
+  const [approved] = hydrateSubtasks([data as unknown as SubtaskRow]);
+  return approved;
 }

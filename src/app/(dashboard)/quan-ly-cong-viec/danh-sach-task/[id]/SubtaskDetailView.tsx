@@ -27,13 +27,11 @@ import { taskService } from "@/services/task-service";
 import { subtaskService } from "@/services/subtask-service";
 import type { ProjectMember } from "@/types/project";
 import type { WorkTask } from "@/types/task";
-import {
-  TASK_PRIORITY_OPTIONS,
-  TASK_STATUS_OPTIONS,
-} from "@/types/task";
+import { TASK_PRIORITY_OPTIONS } from "@/types/task";
 import type { Subtask, SubtaskReport } from "@/types/subtask";
 import { isSubtaskOverdue } from "@/types/subtask";
 import { AvatarStack } from "@/components/ui/Avatar";
+import { TaskStatusBadge } from "@/components/tasks/TaskBadges";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -120,7 +118,7 @@ export function SubtaskDetailView({
   }, [subtaskId, notify]);
 
   async function handleQuickUpdate(
-    patch: Partial<Pick<Subtask, "status" | "priority">> & {
+    patch: Partial<Pick<Subtask, "priority">> & {
       assigneeIds?: string[];
     }
   ) {
@@ -132,7 +130,6 @@ export function SubtaskDetailView({
         description: subtask.description,
         workTaskId: subtask.workTaskId,
         assigneeIds: subtask.assignees.map((member) => member.id),
-        status: subtask.status,
         priority: subtask.priority,
         startDate: subtask.startDate,
         dueDate: subtask.dueDate,
@@ -297,14 +294,10 @@ export function SubtaskDetailView({
                 icon={CircleAlert}
                 iconClassName="bg-teal-50 text-teal-600"
               >
-                <QuickSelect
-                  value={subtask.status}
-                  disabled={quickUpdating}
-                  options={TASK_STATUS_OPTIONS}
-                  onChange={(value) =>
-                    handleQuickUpdate({ status: value as Subtask["status"] })
-                  }
-                />
+                <TaskStatusBadge status={subtask.status} />
+                <p className="mt-2 text-[11px] text-gray-400">
+                  Tự động theo tiến độ; Hoàn thành cần quản trị viên duyệt.
+                </p>
               </OverviewCard>
             </section>
 

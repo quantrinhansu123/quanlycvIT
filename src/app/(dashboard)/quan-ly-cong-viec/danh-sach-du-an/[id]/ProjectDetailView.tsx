@@ -63,6 +63,7 @@ interface ProjectDetailViewProps {
   initialProject: Project | null;
   initialTasks: ProjectTask[];
   initialMembers: ProjectMember[];
+  readOnly: boolean;
 }
 
 export function ProjectDetailView({
@@ -70,6 +71,7 @@ export function ProjectDetailView({
   initialProject,
   initialTasks,
   initialMembers,
+  readOnly,
 }: ProjectDetailViewProps) {
   const router = useRouter();
   const { notify } = useFeedback();
@@ -85,7 +87,7 @@ export function ProjectDetailView({
       const [projectData, taskData, memberData] = await Promise.all([
         projectService.getProjectById(projectId),
         projectService.getProjectTasks(projectId),
-        projectService.getDirectory(),
+        readOnly ? Promise.resolve([]) : projectService.getDirectory(),
       ]);
       setProject(projectData);
       setTasks(taskData);
@@ -102,7 +104,7 @@ export function ProjectDetailView({
         ),
       });
     }
-  }, [projectId, notify]);
+  }, [projectId, notify, readOnly]);
 
   if (error) {
     return (
@@ -166,13 +168,13 @@ export function ProjectDetailView({
             </nav>
           </div>
 
-          <Button
+          {!readOnly && <Button
             onClick={() => setEditing(true)}
             className="shrink-0 rounded-full bg-brand-600 hover:bg-brand-700"
           >
             <Pencil className="h-4 w-4" />
             <span className="hidden sm:inline">Chỉnh sửa dự án</span>
-          </Button>
+          </Button>}
         </div>
       </div>
 
@@ -417,6 +419,7 @@ export function ProjectDetailView({
               project={project}
               members={members}
               onTasksChanged={load}
+              readOnly={readOnly}
             />
           </section>
         ) : (
@@ -464,7 +467,7 @@ export function ProjectDetailView({
         </div>
       </div>
 
-      {editing && (
+      {editing && !readOnly && (
         <ProjectFormModal
           mode="edit"
           project={project}

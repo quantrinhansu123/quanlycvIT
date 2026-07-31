@@ -7,16 +7,37 @@ export type TaskPriority = "low" | "medium" | "high" | "urgent";
 export const TASK_STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
   { value: "todo", label: "Cần làm" },
   { value: "inProgress", label: "Đang làm" },
-  { value: "review", label: "Chờ đánh giá" },
-  { value: "done", label: "Hoàn thành" },
+  { value: "review", label: "Chờ duyệt" },
+  { value: "done", label: "Đã hoàn thành" },
 ];
 
 export const TASK_STATUS_META: Record<TaskStatus, { label: string; badge: string; dot: string }> = {
   todo: { label: "Cần làm", badge: "bg-gray-100 text-gray-600", dot: "bg-gray-400" },
   inProgress: { label: "Đang làm", badge: "bg-sky-100 text-sky-600", dot: "bg-sky-500" },
-  review: { label: "Chờ đánh giá", badge: "bg-amber-100 text-amber-600", dot: "bg-amber-500" },
-  done: { label: "Hoàn thành", badge: "bg-emerald-100 text-emerald-600", dot: "bg-emerald-500" },
+  review: { label: "Chờ duyệt", badge: "bg-amber-100 text-amber-600", dot: "bg-amber-500" },
+  done: { label: "Đã hoàn thành", badge: "bg-emerald-100 text-emerald-600", dot: "bg-emerald-500" },
 };
+
+/**
+ * Trạng thái Công việc được suy ra hoàn toàn từ các Task con:
+ * - Chưa có Task hoặc tất cả Task chưa bắt đầu: Cần làm.
+ * - Có ít nhất một Task đã bắt đầu/chờ duyệt/hoàn thành: Đang làm.
+ * - Chỉ hoàn thành khi có Task và tất cả Task đều đã được duyệt hoàn thành.
+ */
+export function deriveWorkTaskStatus(
+  subtasks: ReadonlyArray<{ status: TaskStatus; progress: number }>
+): TaskStatus {
+  if (subtasks.length === 0) return "todo";
+  if (subtasks.every((subtask) => subtask.status === "done")) return "done";
+  if (
+    subtasks.some(
+      (subtask) => subtask.progress > 0 || subtask.status !== "todo"
+    )
+  ) {
+    return "inProgress";
+  }
+  return "todo";
+}
 
 export const TASK_PRIORITY_OPTIONS: { value: TaskPriority; label: string }[] = [
   { value: "low", label: "Thấp" },

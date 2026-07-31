@@ -1,0 +1,3 @@
+import { apiSuccess,handleApiError,readJsonObject } from "@/lib/api/response";import { parseFinanceCategoryInput } from "@/lib/api/finance-validation";import { createApiSupabaseClient } from "@/lib/supabase/api";import { createFinanceCategory,listFinanceCategories } from "@/lib/supabase/finance";
+export async function GET(r:Request){try{return apiSuccess(await listFinanceCategories(createApiSupabaseClient(r)))}catch(e){return handleApiError(e)}}
+export async function POST(r:Request){try{return apiSuccess(await createFinanceCategory(createApiSupabaseClient(r),parseFinanceCategoryInput(await readJsonObject(r))),201)}catch(e){return handleApiError(e)}}

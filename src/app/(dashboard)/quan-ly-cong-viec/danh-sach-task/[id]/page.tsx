@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from "@/lib/supabase/api";
+import { assertSubtaskReadable, requireRequestAccount } from "@/lib/supabase/authorization";
 import {
   getSubtask,
   listDirectory,
@@ -13,13 +14,18 @@ interface SubtaskDetailPageProps {
 
 export default async function SubtaskDetailPage({ params }: SubtaskDetailPageProps) {
   const { id } = await params;
-  const supabase = createServerSupabaseClient();
+  const supabase = await createServerSupabaseClient();
+  const access = await requireRequestAccount(supabase);
+  await assertSubtaskReadable(supabase, access, id);
+  const memberAssigneeIds = access.role === "member" ? [access.id] : undefined;
 
   const [subtask, workTasks, reports, members] = await Promise.all([
     getSubtask(supabase, id),
-    listWorkTasks(supabase),
+    listWorkTasks(supabase, { assigneeIds: memberAssigneeIds }),
     listSubtaskReports(supabase, id),
-    listDirectory(supabase),
+    listDirectory(supabase).then((items) => access.role === "member"
+      ? items.filter((item) => item.id === access.employeeCode)
+      : items),
   ]);
 
   return (

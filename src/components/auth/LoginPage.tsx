@@ -31,7 +31,7 @@ const MODULES = [
   },
   {
     title: "Quản lý công việc",
-    description: "Dự án, danh sách công việc, danh sách Task và lịch hạn chót",
+    description: "Dự án, danh sách công việc và danh sách Task",
     icon: PanelsTopLeft,
   },
   {

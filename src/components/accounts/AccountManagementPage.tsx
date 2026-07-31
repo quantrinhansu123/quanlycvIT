@@ -15,6 +15,7 @@ import { ModalLoadingFallback } from "@/components/ui/ModalLoadingFallback";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { accountService } from "@/services/account-service";
 import { getErrorMessage } from "@/lib/errors";
+import { exportTablePdf } from "@/lib/pdf-export";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { AccountInput, Department, EmployeeAccount } from "@/types/account";
@@ -44,10 +45,6 @@ function formatDate(value?: string) {
 function avatarColor(name: string) {
   const colors = ["#2563eb", "#7c3aed", "#e11d48", "#ea580c", "#059669", "#0891b2"];
   return colors[[...name].reduce((sum, char) => sum + char.charCodeAt(0), 0) % colors.length];
-}
-
-function csvCell(value?: string) {
-  return `"${(value ?? "").replaceAll('"', '""')}"`;
 }
 
 export function AccountManagementPage() {
@@ -192,15 +189,29 @@ export function AccountManagementPage() {
     }
   }
 
-  function exportCsv() {
-    const headers = ["Mã NV","Họ tên","Email","Tên đăng nhập","Phòng ban","Chức vụ","Vai trò","Trạng thái","SĐT","STK","Ngân hàng","Địa chỉ","Ngày sinh","Ngày vào làm","Ngày tạo"];
-    const rows = filtered.map((a) => [a.employeeCode,a.name,a.email,a.username,a.department?.name,a.position,ROLE_LABEL[a.role],a.status === "active" ? "Hoạt động" : "Đã khóa",a.phone,a.bankAccount,a.bankName,a.address,a.birthDate,a.startDate,a.createdAt.slice(0,10)].map(csvCell).join(","));
-    const blob = new Blob(["\uFEFF" + [headers.map(csvCell).join(","), ...rows].join("\n")], { type: "text/csv;charset=utf-8" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `tai-khoan-${new Date().toISOString().slice(0,10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(link.href);
+  async function exportPdf() {
+    try {
+      await exportTablePdf({
+        title: "Danh sách tài khoản nhân viên",
+        filename: `tai-khoan-${new Date().toISOString().slice(0,10)}.pdf`,
+        orientation: "landscape",
+        columns: [
+          { label: "Mã NV", width: 42 }, { label: "Họ tên", width: "*" },
+          { label: "Email", width: "*" }, { label: "Phòng ban", width: 70 },
+          { label: "Chức vụ", width: 65 }, { label: "Vai trò", width: 48 },
+          { label: "Trạng thái", width: 52 }, { label: "SĐT", width: 58 },
+          { label: "Ngày vào", width: 50, alignment: "center" },
+        ],
+        rows: filtered.map((account) => [
+          account.employeeCode, account.name, account.email, account.department?.name,
+          account.position, ROLE_LABEL[account.role], account.status === "active" ? "Hoạt động" : "Đã khóa",
+          account.phone, formatDate(account.startDate),
+        ]),
+      });
+      notify({ type: "success", title: `Đã xuất ${filtered.length} tài khoản ra PDF` });
+    } catch (error) {
+      notify({ type: "error", title: "Không thể xuất PDF", description: getErrorMessage(error, "Vui lòng thử lại.") });
+    }
   }
 
   async function importCsv(event: React.ChangeEvent<HTMLInputElement>) {
@@ -336,7 +347,7 @@ export function AccountManagementPage() {
           <Button size="sm" onClick={() => setEditing("new")} className="h-9 whitespace-nowrap"><Plus className="h-4 w-4" /> Thêm mới</Button>
           <button title="Tải lại" onClick={() => void load()} className="icon-button"><RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} /></button>
           <button title="Nhập CSV" onClick={() => fileRef.current?.click()} className="icon-button"><FileUp className="h-4 w-4" /></button>
-          <button title="Xuất CSV" onClick={exportCsv} className="icon-button"><Download className="h-4 w-4" /></button>
+          <button title="Xuất PDF" onClick={() => void exportPdf()} className="icon-button"><Download className="h-4 w-4" /></button>
           <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => void importCsv(e)} />
         </div>
       </div>

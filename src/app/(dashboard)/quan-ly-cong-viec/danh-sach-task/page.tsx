@@ -13,6 +13,7 @@ import {
   Table as TableIcon,
   ListTodo,
 } from "lucide-react";
+import { useCurrentAccount } from "@/hooks/useCurrentAccount";
 import { taskService } from "@/services/task-service";
 import { subtaskService, type SubtaskListFilters } from "@/services/subtask-service";
 import { projectService } from "@/services/project-service";
@@ -35,6 +36,7 @@ import { ListPaginationFooter } from "@/components/ui/ListPaginationFooter";
 import { cn, formatDateVN } from "@/lib/utils";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
+import { exportTablePdf } from "@/lib/pdf-export";
 
 const SubtaskFormModal = dynamic(
   () => import("@/components/subtasks/SubtaskFormModal").then((mod) => mod.SubtaskFormModal),
@@ -56,6 +58,9 @@ type QuickViewState = { subtask: Subtask; tab: "info" | "reports" | "timeline" }
 export default function SubtaskListPage() {
   const router = useRouter();
   const { confirm, notify } = useFeedback();
+  const { account } = useCurrentAccount();
+  const isAdmin = account?.role === "admin";
+  const isMember = account?.role === "member";
   const [projects, setProjects] = useState<Project[]>([]);
   const [workTasks, setWorkTasks] = useState<WorkTask[]>([]);
   const [members, setMembers] = useState<ProjectMember[]>([]);
@@ -208,7 +213,25 @@ export default function SubtaskListPage() {
     }
   }
 
-  async function handleExportCsv() {
+  async function handleApprove(subtask: Subtask) {
+    try {
+      await subtaskService.approveSubtask(subtask.id);
+      notify({
+        type: "success",
+        title: "Đã duyệt task",
+        description: `Task “${subtask.title}” đã chuyển sang Đã hoàn thành.`,
+      });
+      await loadSubtasks(currentFilters(), page, pageSize);
+    } catch (approveError) {
+      notify({
+        type: "error",
+        title: "Duyệt task thất bại",
+        description: getErrorMessage(approveError, "Không thể duyệt task. Vui lòng thử lại."),
+      });
+    }
+  }
+
+  async function handleExportPdf() {
     try {
       const result = await subtaskService.getSubtasksPage({
         ...currentFilters(),
@@ -216,7 +239,6 @@ export default function SubtaskListPage() {
         pageSize: Math.max(total, 1),
       });
       const exportSubtasks = result.items;
-      const header = ["Tên task", "Thuộc công việc", "Dự án", "Người thực hiện", "Hạn hoàn thành", "Tiến độ", "Ưu tiên", "Trạng thái"];
       const rows = exportSubtasks.map((subtask) => {
         const workTask = workTasksById.get(subtask.workTaskId);
         return [
@@ -230,20 +252,24 @@ export default function SubtaskListPage() {
           TASK_STATUS_OPTIONS.find((o) => o.value === subtask.status)?.label ?? "",
         ];
       });
-      const csvContent = [header, ...rows].map((row) => row.map((cell) => `"${cell}"`).join(",")).join("\n");
-      const blob = new Blob([`﻿${csvContent}`], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "danh-sach-task.csv";
-      link.click();
-      URL.revokeObjectURL(url);
-      notify({ type: "success", title: "Đã xuất danh sách task", description: `${exportSubtasks.length} bản ghi đã được xuất.` });
+      await exportTablePdf({
+        title: "Danh sách task",
+        filename: "danh-sach-task.pdf",
+        orientation: "landscape",
+        columns: [
+          { label: "Tên task", width: "*" }, { label: "Công việc", width: 100 },
+          { label: "Dự án", width: 80 }, { label: "Người thực hiện", width: 72 },
+          { label: "Hạn", width: 50, alignment: "center" }, { label: "Tiến độ", width: 42, alignment: "right" },
+          { label: "Ưu tiên", width: 46 }, { label: "Trạng thái", width: 56 },
+        ],
+        rows,
+      });
+      notify({ type: "success", title: "Đã xuất danh sách task PDF", description: `${exportSubtasks.length} bản ghi đã được xuất.` });
     } catch (exportError) {
       notify({
         type: "error",
-        title: "Xuất file thất bại",
-        description: getErrorMessage(exportError, "Không thể tạo file danh sách task."),
+        title: "Xuất PDF thất bại",
+        description: getErrorMessage(exportError, "Không thể tạo PDF danh sách task."),
       });
     }
   }
@@ -287,13 +313,15 @@ export default function SubtaskListPage() {
           onChange={setWorkTaskIds}
           options={workTaskOptions.map((t) => ({ value: t.id, label: t.title }))}
         />
-        <MemberFilterMultiSelect
-          className="w-[130px] shrink-0 2xl:w-[150px]"
-          label="Người thực hiện"
-          value={assigneeIds}
-          onChange={setAssigneeIds}
-          options={members}
-        />
+        {!isMember && (
+          <MemberFilterMultiSelect
+            className="w-[130px] shrink-0 2xl:w-[150px]"
+            label="Người thực hiện"
+            value={assigneeIds}
+            onChange={setAssigneeIds}
+            options={members}
+          />
+        )}
         <FilterSelect
           compact
           className="w-[112px] shrink-0 2xl:w-[124px]"
@@ -347,10 +375,11 @@ export default function SubtaskListPage() {
           </div>
           <button
             type="button"
-            onClick={handleExportCsv}
+            onClick={() => void handleExportPdf()}
+            title="Xuất PDF"
             disabled={subtasks.length === 0}
             className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label="Xuất file"
+            aria-label="Xuất PDF"
           >
             <Download className="h-4 w-4" />
           </button>
@@ -391,6 +420,8 @@ export default function SubtaskListPage() {
             onViewReports={(subtask) => setQuickView({ subtask, tab: "reports" })}
             onEdit={(subtask) => setFormModal({ mode: "edit", subtask })}
             onDelete={handleDelete}
+            canApprove={isAdmin}
+            onApprove={handleApprove}
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3">
@@ -407,6 +438,8 @@ export default function SubtaskListPage() {
                 onViewReports={(t) => setQuickView({ subtask: t, tab: "reports" })}
                 onEdit={(t) => setFormModal({ mode: "edit", subtask: t })}
                 onDelete={handleDelete}
+                canApprove={isAdmin}
+                onApprove={handleApprove}
               />
             ))}
           </div>

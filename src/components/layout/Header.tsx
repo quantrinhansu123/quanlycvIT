@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import type { AuthChangeEvent, Session, User } from "@supabase/supabase-js";
+import { useCurrentAccount } from "@/hooks/useCurrentAccount";
 import {
   Bell,
   ChevronDown,
@@ -39,16 +39,6 @@ const WEEKDAYS = [
 interface HeaderProps {
   onToggleSidebar: () => void;
   onOpenMobileMenu: () => void;
-}
-
-interface HeaderAccount {
-  id: string;
-  name: string;
-  username: string;
-  email: string;
-  role: "admin" | "manager" | "member";
-  position?: string;
-  avatarUrl?: string;
 }
 
 type ThemeMode = "light" | "dark" | "system";
@@ -198,7 +188,7 @@ function Breadcrumb() {
 export function Header({ onToggleSidebar, onOpenMobileMenu }: HeaderProps) {
   const router = useRouter();
   const now = useNow();
-  const [account, setAccount] = useState<HeaderAccount | null>(null);
+  const { account } = useCurrentAccount();
   const [themePanelOpen, setThemePanelOpen] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
     if (typeof window === "undefined") return "system";
@@ -231,46 +221,6 @@ export function Header({ onToggleSidebar, onOpenMobileMenu }: HeaderProps) {
     window.localStorage.setItem("goal-app:theme", mode);
   };
 
-  useEffect(() => {
-    let active = true;
-    const supabase = createClient();
-
-    const loadAccount = async (userId?: string) => {
-      if (!userId) {
-        if (active) setAccount(null);
-        return;
-      }
-      const { data } = await supabase
-        .from("tai_khoan")
-        .select("id,ten_nv,username,email,role,chuc_vu,avatar_url")
-        .eq("auth_user_id", userId)
-        .maybeSingle();
-      if (!active || !data) return;
-      setAccount({
-        id: String(data.id),
-        name: String(data.ten_nv),
-        username: String(data.username ?? ""),
-        email: String(data.email ?? ""),
-        role: data.role as HeaderAccount["role"],
-        position: data.chuc_vu ?? undefined,
-        avatarUrl: data.avatar_url ?? undefined,
-      });
-    };
-
-    void supabase.auth
-      .getUser()
-      .then((result: { data: { user: User | null } }) => loadAccount(result.data.user?.id));
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
-      void loadAccount(session?.user.id);
-    });
-
-    return () => {
-      active = false;
-      subscription.unsubscribe();
-    };
-  }, []);
 
   const handleLogout = async () => {
     const supabase = createClient();
@@ -381,7 +331,7 @@ export function Header({ onToggleSidebar, onOpenMobileMenu }: HeaderProps) {
                 <p className="mt-0.5 truncate text-[10px] text-gray-400">{account.email}</p>
               )}
             </div>
-            <button
+            {account?.role !== "member" && <button
               type="button"
               onClick={() => {
                 router.push(account ? `/nhan-vien/${account.id}` : "/nhan-vien");
@@ -391,7 +341,7 @@ export function Header({ onToggleSidebar, onOpenMobileMenu }: HeaderProps) {
             >
               <UserCircle className="h-4 w-4" />
               Hồ sơ
-            </button>
+            </button>}
             <button
               type="button"
               onClick={handleLogout}

@@ -109,6 +109,11 @@ export const subtaskService = {
     return apiClient.delete<boolean>(`/subtasks/${id}`);
   },
 
+  /** Duyệt task đã báo cáo tiến độ 100% ("Chờ duyệt") sang "Hoàn thành". Chỉ admin được gọi. */
+  async approveSubtask(id: string): Promise<Subtask | null> {
+    return apiClient.post<Subtask>(`/subtasks/${id}/approve`);
+  },
+
   async getSubtaskReports(subtaskId: string): Promise<SubtaskReport[]> {
     return apiClient.get<SubtaskReport[]>(`/subtasks/${subtaskId}/reports`);
   },
