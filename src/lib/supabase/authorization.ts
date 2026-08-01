@@ -14,19 +14,74 @@ export function assertManagerOrAdmin(access: RequestAccountAccess): void {
   }
 }
 
+interface CachedJwk {
+  kty: string;
+  key_ops: string[];
+  kid?: string;
+  [key: string]: unknown;
+}
+
+const JWKS_TTL_MS = 10 * 60 * 1000;
+let jwksCache: { keys: CachedJwk[]; fetchedAt: number } | null = null;
+
+/**
+ * Bộ khoá công khai (JWKS) của Supabase Auth, cache trong bộ nhớ tiến trình.
+ * `createApiSupabaseClient` tạo 1 client Supabase mới mỗi request nên tự
+ * `getClaims()` không có gì để cache giữa các request — hàm này bù lại phần đó
+ * để việc xác thực JWT không phải gọi mạng lại mỗi lần (xem
+ * `agents/PERF-LOGIN-PAGELOAD-OPTIMIZATION-README.md`, giai đoạn 1).
+ */
+async function loadJwks(): Promise<CachedJwk[]> {
+  if (jwksCache && Date.now() - jwksCache.fetchedAt < JWKS_TTL_MS) {
+    return jwksCache.keys;
+  }
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!supabaseUrl) return jwksCache?.keys ?? [];
+
+  try {
+    const response = await fetch(`${supabaseUrl}/auth/v1/.well-known/jwks.json`);
+    if (!response.ok) return jwksCache?.keys ?? [];
+    const json = (await response.json()) as { keys?: CachedJwk[] };
+    jwksCache = { keys: json.keys ?? [], fetchedAt: Date.now() };
+    return jwksCache.keys;
+  } catch {
+    return jwksCache?.keys ?? [];
+  }
+}
+
+/**
+ * Xác thực JWT của request hiện tại cục bộ (`getClaims`, có cache JWKS) và trả về
+ * `auth_user_id` (`claims.sub`). Dùng chung cho `requireRequestAccount` và
+ * `assertAdminAccount` (`data.ts`) để tránh mỗi nơi tự gọi `getUser()` (network).
+ *
+ * `supabase.bearerToken` chỉ tồn tại trên client tạo bởi `createApiSupabaseClient`
+ * (route handler, xác thực qua header `Authorization`). Với client tạo bởi
+ * `createServerSupabaseClient` (Server Component, xác thực qua cookie), truyền
+ * `undefined` cho `getClaims` để nó tự lấy access token từ phiên trong cookie.
+ */
+export async function resolveAuthUserId(supabase: ApiSupabaseClient): Promise<string | undefined> {
+  const keys = await loadJwks();
+  const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(
+    supabase.bearerToken,
+    keys.length > 0 ? { jwks: { keys } } : undefined
+  );
+  if (claimsError) return undefined;
+  return typeof claimsData?.claims.sub === "string" ? claimsData.claims.sub : undefined;
+}
+
 /** Tài khoản nội bộ đang gắn với phiên Supabase gửi lên API. */
 export async function requireRequestAccount(
   supabase: ApiSupabaseClient
 ): Promise<RequestAccountAccess> {
-  const { data: authData, error: authError } = await supabase.auth.getUser();
-  if (authError || !authData.user) {
+  const authUserId = await resolveAuthUserId(supabase);
+  if (!authUserId) {
     throw new ApiException("Bạn cần đăng nhập để xem dữ liệu công việc.", 401);
   }
 
   const { data, error } = await supabase
     .from("tai_khoan")
     .select("id,ma_nv,role,status")
-    .eq("auth_user_id", authData.user.id)
+    .eq("auth_user_id", authUserId)
     .maybeSingle();
   throwDatabaseError(error);
   if (!data) throw new ApiException("Không tìm thấy tài khoản nhân viên tương ứng.", 403);

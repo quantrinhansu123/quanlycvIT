@@ -54,7 +54,7 @@ function mapDepartment(row: DepartmentRow): DepartmentRecord {
     name: row.ten_pb,
     parentId: row.phong_ban_cha_id ?? undefined,
     level: row.cap_do,
-    positions: row.chuc_vu ?? [],
+    positions: Array.from(new Set(row.chuc_vu ?? [])),
     positionStructure: normalizedStructure,
     description: row.mo_ta ?? undefined,
     status: row.trang_thai_cv,

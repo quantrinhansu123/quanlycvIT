@@ -3,7 +3,14 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { ApiException } from "@/lib/api/response";
 
-export type ApiSupabaseClient = SupabaseClient;
+/**
+ * `bearerToken` giữ lại JWT gốc từ header `Authorization` để `requireRequestAccount`/
+ * `assertAdminAccount` xác thực cục bộ bằng `getClaims()` thay vì gọi `getUser()`
+ * (luôn tốn 1 network round-trip tới Supabase Auth server) — xem
+ * `agents/PERF-LOGIN-PAGELOAD-OPTIMIZATION-README.md`. Tên khác `accessToken` vì
+ * `SupabaseClient` đã có thuộc tính nội bộ `protected accessToken`.
+ */
+export type ApiSupabaseClient = SupabaseClient & { bearerToken?: string };
 
 export function createApiSupabaseClient(request: Request): ApiSupabaseClient {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -17,16 +24,19 @@ export function createApiSupabaseClient(request: Request): ApiSupabaseClient {
   }
 
   const authorization = request.headers.get("authorization");
+  const isBearer = authorization?.startsWith("Bearer ") ?? false;
 
-  return createClient(supabaseUrl, publishableKey, {
+  const client = createClient(supabaseUrl, publishableKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
       detectSessionInUrl: false,
     },
-    ...(authorization?.startsWith("Bearer ")
-      ? { global: { headers: { Authorization: authorization } } }
-      : {}),
+    ...(isBearer ? { global: { headers: { Authorization: authorization! } } } : {}),
+  });
+
+  return Object.assign(client, {
+    bearerToken: isBearer ? authorization!.slice("Bearer ".length) : undefined,
   });
 }
 

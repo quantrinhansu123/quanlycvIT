@@ -1,5 +1,6 @@
 import type { ApiSupabaseClient } from "@/lib/supabase/api";
 import { ApiException, throwDatabaseError } from "@/lib/api/response";
+import { resolveAuthUserId } from "@/lib/supabase/authorization";
 import {
   DEFAULT_PROJECT_STEPS,
   type Project,
@@ -2125,15 +2126,13 @@ export async function createSubtaskReport(
 
 /** Xác thực người gọi API hiện tại có role admin trong bảng tài khoản. */
 export async function assertAdminAccount(supabase: ApiSupabaseClient): Promise<void> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new ApiException("Bạn cần đăng nhập để thực hiện thao tác này.", 401);
+  const authUserId = await resolveAuthUserId(supabase);
+  if (!authUserId) throw new ApiException("Bạn cần đăng nhập để thực hiện thao tác này.", 401);
 
   const { data, error } = await supabase
     .from("tai_khoan")
     .select("role")
-    .eq("auth_user_id", user.id)
+    .eq("auth_user_id", authUserId)
     .maybeSingle();
   throwDatabaseError(error);
 

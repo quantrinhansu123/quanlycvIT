@@ -70,13 +70,14 @@ export function AccountManagementPage() {
     setLoading(true);
     try {
       const supabase = createClient();
-      const [result, { data: authData }] = await Promise.all([
+      const [result, { data: sessionData }] = await Promise.all([
         accountService.getAll(),
-        supabase.auth.getUser(),
+        supabase.auth.getSession(),
       ]);
+      const currentUserId = sessionData.session?.user.id;
       setAccounts(
         result.accounts.filter(
-          (account) => !authData.user || account.authUserId !== authData.user.id
+          (account) => !currentUserId || account.authUserId !== currentUserId
         )
       );
       setDepartments(result.departments);
