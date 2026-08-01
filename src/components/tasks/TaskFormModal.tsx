@@ -34,7 +34,7 @@ interface TaskFormModalProps {
   /** Trang danh sách truyền callback này để optimistic-update từ response API. */
   onSave?: (input: WorkTaskInput) => Promise<WorkTask | null>;
   /** Tương thích với các màn hình chi tiết chưa dùng optimistic update. */
-  onSaved?: () => void;
+  onSaved?: (task: WorkTask) => void;
 }
 
 interface FormState {
@@ -485,7 +485,7 @@ export function TaskFormModal({
           title: mode === "edit" ? "Đã cập nhật công việc" : "Đã tạo công việc",
           description: `Công việc “${input.title}” đã được lưu thành công.`,
         });
-        onSaved?.();
+        onSaved?.(saved);
         onClose();
       } catch (error) {
         const message = getErrorMessage(error, "Không thể lưu công việc. Vui lòng thử lại.");

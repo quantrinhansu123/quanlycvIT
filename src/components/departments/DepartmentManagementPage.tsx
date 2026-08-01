@@ -107,14 +107,21 @@ export function DepartmentManagementPage() {
   }
 
   async function save(input: DepartmentInput) {
-    if (editing && editing !== "new") await departmentService.update(editing.id, input);
-    else await departmentService.create(input);
+    const saved = editing && editing !== "new"
+      ? await departmentService.update(editing.id, input)
+      : await departmentService.create(input);
+    if (!saved) throw new Error("Không thể lưu phòng ban.");
+    setDepartments((current) => {
+      const exists = current.some((department) => department.id === saved.id);
+      return exists
+        ? current.map((department) => department.id === saved.id ? saved : department)
+        : [saved, ...current];
+    });
     notify({
       type: "success",
       title: editing === "new" ? "Đã thêm phòng ban" : "Đã cập nhật phòng ban",
     });
     setEditing(null);
-    await load();
   }
 
   async function remove(department: DepartmentRecord) {
@@ -130,9 +137,9 @@ export function DepartmentManagementPage() {
 
     try {
       await departmentService.delete(department.id);
+      setDepartments((current) => current.filter((item) => item.id !== department.id));
       setSelected((current) => current.filter((id) => id !== department.id));
       notify({ type: "success", title: "Đã xóa phòng ban" });
-      await load();
     } catch (error) {
       notify({
         type: "error",
@@ -144,15 +151,16 @@ export function DepartmentManagementPage() {
 
   async function toggleStatus(department: DepartmentRecord) {
     try {
-      await departmentService.update(department.id, {
+      const saved = await departmentService.update(department.id, {
         ...asInput(department),
         status: department.status === "active" ? "inactive" : "active",
       });
+      if (!saved) throw new Error("Không tìm thấy phòng ban.");
+      setDepartments((current) => current.map((item) => item.id === saved.id ? saved : item));
       notify({
         type: "success",
         title: department.status === "active" ? "Đã ngừng hoạt động phòng ban" : "Đã kích hoạt phòng ban",
       });
-      await load();
     } catch (error) {
       notify({
         type: "error",
@@ -203,7 +211,7 @@ export function DepartmentManagementPage() {
         return index >= 0 ? row[index] : "";
       };
 
-      let imported = 0;
+      const created: DepartmentRecord[] = [];
       for (const line of lines.slice(1)) {
         const row = parse(line);
         const code = value(row, ["mã pb", "ma pb", "code"]);
@@ -213,7 +221,7 @@ export function DepartmentManagementPage() {
           .split(/[;|]+/)
           .map((item) => item.trim())
           .filter(Boolean);
-        await departmentService.create({
+        const department = await departmentService.create({
           code,
           name,
           level: Number(value(row, ["cấp độ", "cap do", "level"])) || 1,
@@ -226,10 +234,10 @@ export function DepartmentManagementPage() {
           description: value(row, ["mô tả", "mo ta", "description"]) || undefined,
           status: "active",
         });
-        imported++;
+        created.push(department);
       }
-      notify({ type: "success", title: `Đã nhập ${imported} phòng ban` });
-      await load();
+      setDepartments((current) => [...created, ...current]);
+      notify({ type: "success", title: `Đã nhập ${created.length} phòng ban` });
     } catch (error) {
       notify({
         type: "error",

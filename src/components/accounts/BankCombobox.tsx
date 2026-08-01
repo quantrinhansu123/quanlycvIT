@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { Check, ChevronDown, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -92,9 +93,13 @@ export function BankCombobox({ value, onChange, className }: Props) {
               className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-brand-50"
             >
               {bank.logo ? (
-                // Logo từ VietQR là URL động bên ngoài, không áp dụng next/image hostname.
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={bank.logo} alt="" className="h-6 w-6 rounded object-contain" />
+                <Image
+                  src={bank.logo}
+                  alt=""
+                  width={24}
+                  height={24}
+                  className="h-6 w-6 rounded object-contain"
+                />
               ) : <span className="h-6 w-6 rounded bg-gray-100" />}
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium text-gray-800">{bank.shortName}</span>

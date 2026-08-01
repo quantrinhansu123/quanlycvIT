@@ -142,8 +142,9 @@ export function ProjectTasksPanel({
     try {
       const deleted = await taskService.deleteTask(task.id);
       if (!deleted) throw new Error("Công việc không tồn tại hoặc đã được xóa trước đó.");
+      setTasks((current) => current.filter((item) => item.id !== task.id));
+      setSelectedIds((current) => current.filter((id) => id !== task.id));
       notify({ type: "success", title: "Đã xóa công việc", description: `Công việc “${task.title}” đã được xóa.` });
-      await loadTasks(filters);
       onTasksChanged();
     } catch (deleteError) {
       notify({
@@ -334,9 +335,14 @@ export function ProjectTasksPanel({
           otherTasks={tasks}
           defaultProjectId={project.id}
           onClose={() => setFormModal(null)}
-          onSaved={() => {
+          onSaved={(saved) => {
+            setTasks((current) => {
+              const exists = current.some((task) => task.id === saved.id);
+              return exists
+                ? current.map((task) => task.id === saved.id ? saved : task)
+                : [saved, ...current];
+            });
             setFormModal(null);
-            loadTasks(filters);
             onTasksChanged();
           }}
         />

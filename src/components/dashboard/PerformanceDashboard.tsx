@@ -15,13 +15,13 @@ import {
   Users2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Avatar } from "@/components/ui/Avatar";
-import { Skeleton } from "@/components/ui/Skeleton";
 import { projectService } from "@/services/project-service";
 import { taskService } from "@/services/task-service";
-import type { Project, ProjectMember } from "@/types/project";
+import type { ProjectMember } from "@/types/project";
+import type { DashboardData } from "@/lib/dashboard-data";
 import {
   TASK_PRIORITY_OPTIONS,
   TASK_STATUS_META,
@@ -33,18 +33,14 @@ import {
 import { cn, formatDateVN, shortName } from "@/lib/utils";
 
 const DAY_MS = 86_400_000;
+const DASHBOARD_PROJECT_LIMIT = 100;
+const DASHBOARD_TASK_LIMIT = 200;
 const STATUS_ORDER: TaskStatus[] = ["todo", "inProgress", "review", "done"];
 const STATUS_COLORS: Record<TaskStatus, string> = {
   todo: "#94A3B8",
   inProgress: "#3B82F6",
   review: "#F59E0B",
   done: "#10B981",
-};
-
-type DashboardData = {
-  projects: Project[];
-  tasks: WorkTask[];
-  members: ProjectMember[];
 };
 
 type WorkloadItem = {
@@ -61,11 +57,17 @@ type TimelinePoint = {
 
 async function fetchDashboardData(): Promise<DashboardData> {
   const [projects, tasks, members] = await Promise.all([
-    projectService.getProjects(),
-    taskService.getTasks(),
+    projectService.getProjectsPage(undefined, 1, DASHBOARD_PROJECT_LIMIT),
+    taskService.getTasksPage({ page: 1, pageSize: DASHBOARD_TASK_LIMIT }),
     projectService.getDirectory(),
   ]);
-  return { projects, tasks, members };
+  return {
+    projects: projects.items,
+    tasks: tasks.items,
+    members,
+    totalProjects: projects.total,
+    totalTasks: tasks.total,
+  };
 }
 
 function parseDate(value: string): Date {
@@ -113,7 +115,7 @@ function createTimeline(tasks: WorkTask[], count = 12): TimelinePoint[] {
   });
 }
 
-function DashboardFilter({
+const DashboardFilter = memo(function DashboardFilter({
   value,
   onChange,
   label,
@@ -142,9 +144,9 @@ function DashboardFilter({
       <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 transition group-hover:text-brand-500" />
     </label>
   );
-}
+});
 
-function KpiCard({
+const KpiCard = memo(function KpiCard({
   title,
   value,
   description,
@@ -193,7 +195,7 @@ function KpiCard({
       </p>
     </button>
   );
-}
+});
 
 function DashboardPanel({
   title,
@@ -237,7 +239,7 @@ function EmptyChart({ message }: { message: string }) {
   );
 }
 
-function CumulativeFlowChart({ tasks, timeline }: { tasks: WorkTask[]; timeline: TimelinePoint[] }) {
+const CumulativeFlowChart = memo(function CumulativeFlowChart({ tasks, timeline }: { tasks: WorkTask[]; timeline: TimelinePoint[] }) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const width = 960;
   const height = 300;
@@ -245,7 +247,7 @@ function CumulativeFlowChart({ tasks, timeline }: { tasks: WorkTask[]; timeline:
   const innerWidth = width - margin.left - margin.right;
   const innerHeight = height - margin.top - margin.bottom;
 
-  const series = STATUS_ORDER.map((status) => ({
+  const series = useMemo(() => STATUS_ORDER.map((status) => ({
     status,
     label: TASK_STATUS_META[status].label,
     color: STATUS_COLORS[status],
@@ -256,17 +258,21 @@ function CumulativeFlowChart({ tasks, timeline }: { tasks: WorkTask[]; timeline:
           parseDate(task.startDate).getTime() <= point.date.getTime()
       ).length
     ),
-  }));
+  })), [tasks, timeline]);
 
-  const totals = timeline.map((_, index) =>
+  const totals = useMemo(() => timeline.map((_, index) =>
     series.reduce((sum, current) => sum + current.values[index], 0)
-  );
+  ), [series, timeline]);
   const maxValue = Math.max(1, ...totals);
-  const x = (index: number) =>
-    margin.left + (timeline.length === 1 ? 0 : (index / (timeline.length - 1)) * innerWidth);
-  const y = (value: number) => margin.top + innerHeight - (value / maxValue) * innerHeight;
+  const x = useCallback((index: number) =>
+    44 + (timeline.length === 1 ? 0 : (index / (timeline.length - 1)) * innerWidth),
+  [innerWidth, timeline.length]);
+  const y = useCallback(
+    (value: number) => 18 + innerHeight - (value / maxValue) * innerHeight,
+    [innerHeight, maxValue]
+  );
 
-  const layers = series.map((current, seriesIndex) => {
+  const layers = useMemo(() => series.map((current, seriesIndex) => {
     const lower = timeline.map((_, pointIndex) =>
       series
         .slice(0, seriesIndex)
@@ -280,7 +286,7 @@ function CumulativeFlowChart({ tasks, timeline }: { tasks: WorkTask[]; timeline:
       .map(({ value, index }) => `L ${x(index)} ${y(value)}`)
       .join(" ");
     return { ...current, path: `${upperPath} ${lowerPath} Z` };
-  });
+  }), [series, timeline, x, y]);
 
   function handleMove(event: React.MouseEvent<SVGSVGElement>) {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -386,9 +392,9 @@ function CumulativeFlowChart({ tasks, timeline }: { tasks: WorkTask[]; timeline:
       </div>
     </div>
   );
-}
+});
 
-function WorkloadChart({
+const WorkloadChart = memo(function WorkloadChart({
   workloads,
   onSelect,
 }: {
@@ -513,9 +519,9 @@ function WorkloadChart({
       </div>
     </div>
   );
-}
+});
 
-function BurndownChart({ tasks, timeline }: { tasks: WorkTask[]; timeline: TimelinePoint[] }) {
+const BurndownChart = memo(function BurndownChart({ tasks, timeline }: { tasks: WorkTask[]; timeline: TimelinePoint[] }) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const width = 960;
   const height = 300;
@@ -523,21 +529,31 @@ function BurndownChart({ tasks, timeline }: { tasks: WorkTask[]; timeline: Timel
   const innerWidth = width - margin.left - margin.right;
   const innerHeight = height - margin.top - margin.bottom;
   const total = tasks.length;
-  const ideal = timeline.map((_, index) =>
+  const ideal = useMemo(() => timeline.map((_, index) =>
     Math.max(0, total * (1 - index / Math.max(1, timeline.length - 1)))
-  );
-  const actual = timeline.map((point) => {
+  ), [timeline, total]);
+  const actual = useMemo(() => timeline.map((point) => {
     const completed = tasks.filter(
       (task) => task.status === "done" && parseDate(task.dueDate).getTime() <= point.date.getTime()
     ).length;
     return total - completed;
-  });
+  }), [tasks, timeline, total]);
   const maxValue = Math.max(1, total);
-  const x = (index: number) =>
-    margin.left + (timeline.length === 1 ? 0 : (index / (timeline.length - 1)) * innerWidth);
-  const y = (value: number) => margin.top + innerHeight - (value / maxValue) * innerHeight;
-  const idealPath = ideal.map((value, index) => `${index === 0 ? "M" : "L"} ${x(index)} ${y(value)}`).join(" ");
-  const actualPath = actual.map((value, index) => `${index === 0 ? "M" : "L"} ${x(index)} ${y(value)}`).join(" ");
+  const x = useCallback((index: number) =>
+    44 + (timeline.length === 1 ? 0 : (index / (timeline.length - 1)) * innerWidth),
+  [innerWidth, timeline.length]);
+  const y = useCallback(
+    (value: number) => 18 + innerHeight - (value / maxValue) * innerHeight,
+    [innerHeight, maxValue]
+  );
+  const idealPath = useMemo(
+    () => ideal.map((value, index) => `${index === 0 ? "M" : "L"} ${x(index)} ${y(value)}`).join(" "),
+    [ideal, x, y]
+  );
+  const actualPath = useMemo(
+    () => actual.map((value, index) => `${index === 0 ? "M" : "L"} ${x(index)} ${y(value)}`).join(" "),
+    [actual, x, y]
+  );
 
   function handleMove(event: React.MouseEvent<SVGSVGElement>) {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -634,33 +650,41 @@ function BurndownChart({ tasks, timeline }: { tasks: WorkTask[]; timeline: Timel
       </div>
     </div>
   );
-}
+});
 
-function DashboardLoading() {
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        {Array.from({ length: 5 }, (_, index) => (
-          <Skeleton key={index} className="h-[138px] rounded-2xl" />
-        ))}
-      </div>
-      <div className="grid gap-4 xl:grid-cols-3">
-        <Skeleton className="h-[430px] rounded-2xl xl:col-span-2" />
-        <Skeleton className="h-[430px] rounded-2xl" />
-        <Skeleton className="h-[430px] rounded-2xl xl:col-span-2" />
-        <Skeleton className="h-[430px] rounded-2xl" />
-      </div>
-    </div>
-  );
-}
-
-export function PerformanceDashboard() {
+export function PerformanceDashboard({ initialData }: { initialData: DashboardData }) {
   const router = useRouter();
-  const [data, setData] = useState<DashboardData | null>(null);
+  const [data, setData] = useState<DashboardData>(initialData);
   const [error, setError] = useState("");
   const [projectId, setProjectId] = useState("");
   const [memberId, setMemberId] = useState("");
   const [priority, setPriority] = useState<TaskPriority | "">("");
+
+  const projectOptions = useMemo(() => data.projects.map((project) => ({
+    value: project.id,
+    label: `${project.code} · ${project.name}`,
+  })), [data.projects]);
+  const memberOptions = useMemo(() => data.members.map((member) => ({
+    value: member.id,
+    label: member.name,
+  })), [data.members]);
+  const handlePriorityChange = useCallback(
+    (value: string) => setPriority(value as TaskPriority | ""),
+    []
+  );
+  const openTaskList = useCallback(
+    () => router.push("/quan-ly-cong-viec/danh-sach-cong-viec"),
+    [router]
+  );
+  const openEmployeeList = useCallback(() => router.push("/nhan-vien"), [router]);
+  const openGantt = useCallback(
+    () => router.push("/quan-ly-cong-viec/bieu-do-gantt"),
+    [router]
+  );
+  const openEmployee = useCallback(
+    (selectedMemberId: string) => router.push(`/nhan-vien/${selectedMemberId}`),
+    [router]
+  );
 
   const loadData = useCallback(async () => {
     setError("");
@@ -672,23 +696,7 @@ export function PerformanceDashboard() {
     }
   }, []);
 
-  useEffect(() => {
-    let active = true;
-    void fetchDashboardData()
-      .then((dashboardData) => {
-        if (active) setData(dashboardData);
-      })
-      .catch((loadError) => {
-        console.error(loadError);
-        if (active) setError("Không thể tải dữ liệu dashboard. Vui lòng thử lại.");
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
   const filteredTasks = useMemo(() => {
-    if (!data) return [];
     return data.tasks.filter((task) => {
       if (projectId && task.projectId !== projectId) return false;
       if (memberId && !taskHasMember(task, memberId)) return false;
@@ -698,7 +706,6 @@ export function PerformanceDashboard() {
   }, [data, memberId, priority, projectId]);
 
   const visibleProjects = useMemo(() => {
-    if (!data) return [];
     if (projectId) return data.projects.filter((project) => project.id === projectId);
     if (memberId || priority) {
       const projectIds = new Set(filteredTasks.map((task) => task.projectId));
@@ -737,7 +744,6 @@ export function PerformanceDashboard() {
   }, [filteredTasks]);
 
   const workloads = useMemo<WorkloadItem[]>(() => {
-    if (!data) return [];
     const totals = new Map<string, number>();
     const importantCounts = new Map<string, number>();
     for (const task of filteredTasks) {
@@ -852,33 +858,29 @@ export function PerformanceDashboard() {
             value={projectId}
             onChange={setProjectId}
             label="Tất cả dự án"
-            options={(data?.projects ?? []).map((project) => ({
-              value: project.id,
-              label: `${project.code} · ${project.name}`,
-            }))}
+            options={projectOptions}
           />
           <DashboardFilter
             value={memberId}
             onChange={setMemberId}
             label="Tất cả nhân sự"
-            options={(data?.members ?? []).map((member) => ({
-              value: member.id,
-              label: member.name,
-            }))}
+            options={memberOptions}
           />
           <DashboardFilter
             value={priority}
-            onChange={(value) => setPriority(value as TaskPriority | "")}
+            onChange={handlePriorityChange}
             label="Tất cả độ ưu tiên"
             options={TASK_PRIORITY_OPTIONS}
           />
         </div>
       </div>
 
-      {!data ? (
-        <DashboardLoading />
-      ) : (
-        <div className="space-y-4 animate-in fade-in duration-500">
+      <div className="space-y-4 animate-in fade-in duration-500">
+          {(data.totalProjects > data.projects.length || data.totalTasks > data.tasks.length) && (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Dashboard đang phân tích tối đa {DASHBOARD_PROJECT_LIMIT} dự án và {DASHBOARD_TASK_LIMIT} công việc mới nhất để tải nhanh hơn. Xem danh sách đầy đủ ở các màn hình quản lý.
+            </p>
+          )}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <KpiCard
               title="Tổng công việc"
@@ -886,7 +888,7 @@ export function PerformanceDashboard() {
               description={`${metrics.done} hoàn thành, ${metrics.open} đang mở`}
               icon={Layers3}
               tone="slate"
-              onClick={() => router.push("/quan-ly-cong-viec/danh-sach-cong-viec")}
+              onClick={openTaskList}
             />
             <KpiCard
               title="Tỉ lệ xong"
@@ -894,7 +896,7 @@ export function PerformanceDashboard() {
               description={`${metrics.done}/${metrics.total || 0} công việc đã hoàn thành`}
               icon={CheckCircle2}
               tone="emerald"
-              onClick={() => router.push("/quan-ly-cong-viec/danh-sach-cong-viec")}
+              onClick={openTaskList}
             />
             <KpiCard
               title="Nút thắt"
@@ -902,7 +904,7 @@ export function PerformanceDashboard() {
               description={TASK_STATUS_META[metrics.bottleneck.status].label}
               icon={Network}
               tone="amber"
-              onClick={() => router.push("/quan-ly-cong-viec/danh-sach-cong-viec")}
+              onClick={openTaskList}
             />
             <KpiCard
               title="Quá tải"
@@ -910,7 +912,7 @@ export function PerformanceDashboard() {
               description={`${metrics.importantOpen} việc quan trọng đang mở`}
               icon={Users2}
               tone="blue"
-              onClick={() => router.push("/nhan-vien")}
+              onClick={openEmployeeList}
             />
             <KpiCard
               title="Burn-down"
@@ -918,7 +920,7 @@ export function PerformanceDashboard() {
               description="Công việc còn lại so với đích hoàn thành"
               icon={TrendingDown}
               tone="rose"
-              onClick={() => router.push("/quan-ly-cong-viec/bieu-do-gantt")}
+              onClick={openGantt}
             />
           </div>
 
@@ -939,7 +941,7 @@ export function PerformanceDashboard() {
             >
               <WorkloadChart
                 workloads={workloads}
-                onSelect={(selectedMemberId) => router.push(`/nhan-vien/${selectedMemberId}`)}
+                onSelect={openEmployee}
               />
             </DashboardPanel>
 
@@ -1089,8 +1091,7 @@ export function PerformanceDashboard() {
               </div>
             </DashboardPanel>
           </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 }

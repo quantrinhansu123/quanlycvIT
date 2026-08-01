@@ -58,7 +58,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 export const apiClient = {
   get: <T>(path: string, options?: RequestInit) =>
-    request<T>(path, { ...options, method: "GET" }),
+    // Các endpoint ứng dụng phụ thuộc phiên đăng nhập và dữ liệu thay đổi thường xuyên.
+    // Không dùng HTTP cache để tránh trả dữ liệu/quyền truy cập cũ cho người dùng.
+    request<T>(path, { ...options, method: "GET", cache: "no-store" }),
   post: <T>(path: string, body?: unknown, options?: RequestInit) =>
     request<T>(path, { ...options, method: "POST", body: JSON.stringify(body) }),
   postFormData: <T>(path: string, body: FormData, options?: RequestInit) =>

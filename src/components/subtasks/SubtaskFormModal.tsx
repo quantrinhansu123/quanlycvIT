@@ -31,7 +31,7 @@ interface SubtaskFormModalProps {
   members: ProjectMember[];
   defaultWorkTaskId?: string;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (subtask: Subtask) => void;
 }
 
 interface FormState {
@@ -569,17 +569,16 @@ export function SubtaskFormModal({
         links: normalizedLinks(),
         images: [...form.images, ...uploadedImages],
       };
-      if (mode === "edit" && subtask) {
-        await subtaskService.updateSubtask(subtask.id, input);
-      } else {
-        await subtaskService.createSubtask(input);
-      }
+      const saved = mode === "edit" && subtask
+        ? await subtaskService.updateSubtask(subtask.id, input)
+        : await subtaskService.createSubtask(input);
+      if (!saved) throw new Error("Không tìm thấy task để cập nhật.");
       notify({
         type: "success",
         title: mode === "edit" ? "Đã cập nhật task" : "Đã tạo task",
         description: `Task “${input.title}” đã được lưu thành công.`,
       });
-      onSaved();
+      onSaved(saved);
     } catch (error) {
       const message = getErrorMessage(error, "Không thể lưu task. Vui lòng thử lại.");
       setSubmitError(message);

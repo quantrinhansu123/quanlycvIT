@@ -11,6 +11,7 @@ export async function POST(request: Request) {
   try {
     const body = await readJsonObject(request);
     const identifier = typeof body.identifier === "string" ? body.identifier.trim() : "";
+    const normalizedIdentifier = identifier.toLowerCase();
     const password = typeof body.password === "string" ? body.password : "";
 
     if (!identifier) {
@@ -25,8 +26,8 @@ export async function POST(request: Request) {
       .from("tai_khoan")
       .select("id,username,email,role,status,auth_user_id");
     const { data: account, error: accountError } = identifier.includes("@")
-      ? await accountQuery.ilike("email", identifier).maybeSingle()
-      : await accountQuery.ilike("username", identifier).maybeSingle();
+      ? await accountQuery.eq("email", normalizedIdentifier).maybeSingle()
+      : await accountQuery.eq("username", normalizedIdentifier).maybeSingle();
 
     if (accountError) throw accountError;
     if (!account) {

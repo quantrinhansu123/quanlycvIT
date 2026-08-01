@@ -70,6 +70,30 @@ function useNow() {
   return now;
 }
 
+function HeaderClock() {
+  const now = useNow();
+  const timeLabel = now
+    ? now.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })
+    : "--:--";
+  const dateLabel = now
+    ? `${WEEKDAYS[now.getDay()]}, ${String(now.getDate()).padStart(2, "0")}/${String(
+        now.getMonth() + 1
+      ).padStart(2, "0")}/${now.getFullYear()}`
+    : "";
+
+  return (
+    <>
+      <div className="hidden items-center gap-1.5 px-2 py-1 text-xs text-gray-600 md:flex">
+        <Clock className="h-3.5 w-3.5 text-gray-400" />
+        <span className="font-medium">{timeLabel}</span>
+      </div>
+      <div className="hidden items-center gap-1.5 px-2 py-1 text-xs text-gray-600 lg:flex">
+        <span className="font-medium">{dateLabel}</span>
+      </div>
+    </>
+  );
+}
+
 function formatNotificationTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
@@ -204,7 +228,6 @@ function Breadcrumb() {
 
 export function Header({ onToggleSidebar, onOpenMobileMenu }: HeaderProps) {
   const router = useRouter();
-  const now = useNow();
   const { account } = useCurrentAccount();
   const notificationRef = useRef<HTMLDivElement>(null);
   const [themePanelOpen, setThemePanelOpen] = useState(false);
@@ -253,13 +276,32 @@ export function Header({ onToggleSidebar, onOpenMobileMenu }: HeaderProps) {
   }, [account?.id]);
 
   useEffect(() => {
-    const initialTimer = window.setTimeout(() => void loadNotifications(), 0);
-    const timer = window.setInterval(() => void loadNotifications(), 30_000);
-    const refresh = () => void loadNotifications();
+    let timer: number | undefined;
+
+    const stopPolling = () => {
+      if (timer === undefined) return;
+      window.clearInterval(timer);
+      timer = undefined;
+    };
+    const startPolling = () => {
+      if (timer !== undefined || document.visibilityState !== "visible") return;
+      void loadNotifications();
+      timer = window.setInterval(() => void loadNotifications(), 30_000);
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") startPolling();
+      else stopPolling();
+    };
+    const refresh = () => {
+      if (document.visibilityState === "visible") void loadNotifications();
+    };
+
+    startPolling();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("app:notifications-changed", refresh);
     return () => {
-      window.clearTimeout(initialTimer);
-      window.clearInterval(timer);
+      stopPolling();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("app:notifications-changed", refresh);
     };
   }, [loadNotifications]);
@@ -319,14 +361,6 @@ export function Header({ onToggleSidebar, onOpenMobileMenu }: HeaderProps) {
         ? "Quản lý"
         : "Nhân viên";
 
-  const timeLabel = now
-    ? now.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })
-    : "--:--";
-  const dateLabel = now
-    ? `${WEEKDAYS[now.getDay()]}, ${String(now.getDate()).padStart(2, "0")}/${String(
-        now.getMonth() + 1
-      ).padStart(2, "0")}/${now.getFullYear()}`
-    : "";
   const unreadCount = notifications.filter((notification) => !notification.read).length;
 
   return (
@@ -353,13 +387,7 @@ export function Header({ onToggleSidebar, onOpenMobileMenu }: HeaderProps) {
         <Breadcrumb />
       </div>
 
-      <div className="hidden items-center gap-1.5 px-2 py-1 text-xs text-gray-600 md:flex">
-        <Clock className="h-3.5 w-3.5 text-gray-400" />
-        <span className="font-medium">{timeLabel}</span>
-      </div>
-      <div className="hidden items-center gap-1.5 px-2 py-1 text-xs text-gray-600 lg:flex">
-        <span className="font-medium">{dateLabel}</span>
-      </div>
+      <HeaderClock />
 
       <div ref={notificationRef} className="relative">
         <button

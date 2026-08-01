@@ -77,7 +77,7 @@ function toRow(input: AccountInput) {
     so_tai_khoan: nullable(input.bankAccount),
     ten_ngan_hang: nullable(input.bankName),
     ghi_chu: nullable(input.note),
-    username: nullable(input.username),
+    username: nullable(input.username)?.toLowerCase() ?? null,
     email: nullable(input.email)?.toLowerCase() ?? null,
     phong_ban_id: nullable(input.departmentId),
     chuc_vu: nullable(input.position),

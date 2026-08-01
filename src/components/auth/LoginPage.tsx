@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   Archive,
@@ -143,9 +144,12 @@ export function LoginPage() {
           <div className="relative z-10 mx-auto flex w-full max-w-[900px] flex-col">
             <div className="flex items-center gap-3">
               <span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl bg-white shadow-lg shadow-brand-500/25 ring-1 ring-brand-100">
-                <img
-                  src="/logo-viet-nhat-ipt.png"
+                <Image
+                  src="/logo-viet-nhat-ipt.webp"
                   alt="Việt Nhật IPT"
+                  width={192}
+                  height={87}
+                  preload
                   className="h-full w-full object-contain p-1"
                 />
               </span>
@@ -205,9 +209,11 @@ export function LoginPage() {
           <div className="w-full max-w-[390px]">
             <div className="mb-8 flex items-center gap-3 lg:hidden">
               <span className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-white ring-1 ring-brand-100">
-                <img
-                  src="/logo-viet-nhat-ipt.png"
+                <Image
+                  src="/logo-viet-nhat-ipt.webp"
                   alt="Việt Nhật IPT"
+                  width={192}
+                  height={87}
                   className="h-full w-full object-contain p-1"
                 />
               </span>

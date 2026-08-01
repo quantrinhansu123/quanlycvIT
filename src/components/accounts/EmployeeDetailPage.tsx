@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
@@ -165,8 +166,13 @@ export function EmployeeDetailPage({ employeeId }: { employeeId: string }) {
             <div className="flex flex-col items-start gap-5 sm:flex-row sm:items-center">
               <div className="rounded-full bg-white p-1 shadow-sm ring-2 ring-brand-200">
                 {account.avatarUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={account.avatarUrl} alt={account.name} className="h-20 w-20 rounded-full object-cover" />
+                  <Image
+                    src={account.avatarUrl}
+                    alt={account.name}
+                    width={80}
+                    height={80}
+                    className="h-20 w-20 rounded-full object-cover"
+                  />
                 ) : (
                   <Avatar name={account.name} color={avatarColor(account.name)} size="lg" className="h-20 w-20 text-2xl ring-0" />
                 )}

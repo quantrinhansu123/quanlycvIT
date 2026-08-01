@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import dynamic from "next/dynamic";
 import {
   ArrowDownUp, ArrowLeft, Building2, ChevronDown, ChevronLeft, ChevronRight,
@@ -144,11 +145,18 @@ export function AccountManagementPage() {
   }
 
   async function save(input: AccountInput) {
-    if (editing && editing !== "new") await accountService.update(editing.id, input);
-    else await accountService.create(input);
+    const saved = editing && editing !== "new"
+      ? await accountService.update(editing.id, input)
+      : await accountService.create(input);
+    if (!saved) throw new Error("Không thể lưu tài khoản.");
+    setAccounts((current) => {
+      const exists = current.some((account) => account.id === saved.id);
+      return exists
+        ? current.map((account) => account.id === saved.id ? saved : account)
+        : [saved, ...current];
+    });
     notify({ type: "success", title: editing === "new" ? "Đã thêm tài khoản" : "Đã cập nhật tài khoản" });
     setEditing(null);
-    await load();
   }
 
   async function remove(account: EmployeeAccount) {
@@ -160,9 +168,9 @@ export function AccountManagementPage() {
     if (!ok) return;
     try {
       await accountService.delete(account.id);
+      setAccounts((current) => current.filter((item) => item.id !== account.id));
       setSelected((current) => current.filter((id) => id !== account.id));
       notify({ type: "success", title: "Đã xóa tài khoản" });
-      await load();
     } catch (error) {
       notify({ type: "error", title: "Không thể xóa", description: getErrorMessage(error, "Vui lòng thử lại.") });
     }
@@ -170,9 +178,10 @@ export function AccountManagementPage() {
 
   async function toggleStatus(account: EmployeeAccount) {
     try {
-      await accountService.update(account.id, { ...asInput(account), status: account.status === "active" ? "inactive" : "active" });
+      const saved = await accountService.update(account.id, { ...asInput(account), status: account.status === "active" ? "inactive" : "active" });
+      if (!saved) throw new Error("Không tìm thấy tài khoản.");
+      setAccounts((current) => current.map((item) => item.id === saved.id ? saved : item));
       notify({ type: "success", title: account.status === "active" ? "Đã khóa tài khoản" : "Đã mở khóa tài khoản" });
-      await load();
     } catch (error) {
       notify({ type: "error", title: "Không thể cập nhật trạng thái", description: getErrorMessage(error, "Vui lòng thử lại.") });
     }
@@ -181,10 +190,12 @@ export function AccountManagementPage() {
   async function bulkStatus(nextStatus: "active" | "inactive") {
     const targets = accounts.filter((item) => selected.includes(item.id));
     try {
-      await Promise.all(targets.map((item) => accountService.update(item.id, { ...asInput(item), status: nextStatus })));
+      const savedAccounts = await Promise.all(targets.map((item) => accountService.update(item.id, { ...asInput(item), status: nextStatus })));
+      const savedById = new Map(savedAccounts.filter(Boolean).map((account) => [account.id, account]));
+      if (savedById.size !== targets.length) throw new Error("Không thể cập nhật toàn bộ tài khoản đã chọn.");
+      setAccounts((current) => current.map((item) => savedById.get(item.id) ?? item));
       setSelected([]);
       notify({ type: "success", title: nextStatus === "active" ? "Đã mở khóa các tài khoản" : "Đã khóa các tài khoản" });
-      await load();
     } catch (error) {
       notify({ type: "error", title: "Thao tác hàng loạt chưa hoàn tất", description: getErrorMessage(error, "Vui lòng thử lại.") });
     }
@@ -228,23 +239,23 @@ export function AccountManagementPage() {
         const index = headers.findIndex((header) => names.includes(header));
         return index >= 0 ? row[index] : "";
       };
-      let imported = 0;
+      const created: EmployeeAccount[] = [];
       for (const line of lines.slice(1)) {
         const row = parse(line);
         const employeeCode = value(row, ["mã nv", "ma nv", "employee code"]);
         const name = value(row, ["họ tên", "ho ten", "nhân viên", "name"]);
         if (!employeeCode || !name) continue;
-        await accountService.create({
+        const account = await accountService.create({
           employeeCode, name,
           email: value(row, ["email"]) || undefined,
           username: value(row, ["tên đăng nhập", "ten dang nhap", "username"]) || undefined,
           phone: value(row, ["sđt", "sdt", "phone"]) || undefined,
           role: "member", status: "active",
         });
-        imported++;
+        created.push(account);
       }
-      notify({ type: "success", title: `Đã nhập ${imported} tài khoản` });
-      await load();
+      setAccounts((current) => [...created, ...current]);
+      notify({ type: "success", title: `Đã nhập ${created.length} tài khoản` });
     } catch (error) {
       notify({ type: "error", title: "Không thể nhập CSV", description: getErrorMessage(error, "Tệp CSV không hợp lệ.") });
     }
@@ -378,9 +389,13 @@ export function AccountManagementPage() {
                 <td className="px-4 py-3 font-medium text-gray-600">{account.employeeCode}</td>
                 <td className="px-4 py-2.5"><button onClick={() => router.push(`/nhan-vien/${account.id}`)} className="flex items-center gap-3 text-left hover:text-brand-600">
                   {account.avatarUrl ? (
-                    // URL ảnh nhân sự là dữ liệu động bên ngoài, không giới hạn hostname trong next/image.
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={account.avatarUrl} alt="" className="h-9 w-9 rounded-full object-cover ring-2 ring-gray-100" />
+                    <Image
+                      src={account.avatarUrl}
+                      alt=""
+                      width={36}
+                      height={36}
+                      className="h-9 w-9 rounded-full object-cover ring-2 ring-gray-100"
+                    />
                   ) : <Avatar name={account.name} color={avatarColor(account.name)} size="md" />}
                   <span><b className="block max-w-[190px] truncate text-gray-900">{account.name}</b><span className="block max-w-[190px] truncate text-xs text-gray-500">{account.email ?? "—"}</span></span>
                 </button></td>

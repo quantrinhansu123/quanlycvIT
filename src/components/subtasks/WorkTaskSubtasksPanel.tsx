@@ -170,12 +170,13 @@ export function WorkTaskSubtasksPanel({
     try {
       const deleted = await subtaskService.deleteSubtask(subtask.id);
       if (!deleted) throw new Error("Task không tồn tại hoặc đã được xóa trước đó.");
+      setSubtasks((current) => current.filter((item) => item.id !== subtask.id));
+      setSelectedIds((current) => current.filter((id) => id !== subtask.id));
       notify({
         type: "success",
         title: "Đã xóa task",
         description: `Task “${subtask.title}” đã được xóa.`,
       });
-      await loadSubtasks(filters);
       onSubtasksChanged();
     } catch (deleteError) {
       notify({
@@ -190,13 +191,14 @@ export function WorkTaskSubtasksPanel({
 
   async function handleApprove(subtask: Subtask) {
     try {
-      await subtaskService.approveSubtask(subtask.id);
+      const approved = await subtaskService.approveSubtask(subtask.id);
+      if (!approved) throw new Error("Không tìm thấy task.");
+      setSubtasks((current) => current.map((item) => item.id === approved.id ? approved : item));
       notify({
         type: "success",
         title: "Đã duyệt task",
         description: `Task “${subtask.title}” đã chuyển sang Đã hoàn thành.`,
       });
-      await loadSubtasks(filters);
       onSubtasksChanged();
     } catch (approveError) {
       notify({
@@ -441,9 +443,14 @@ export function WorkTaskSubtasksPanel({
           members={members}
           defaultWorkTaskId={workTask.id}
           onClose={() => setFormModal(null)}
-          onSaved={() => {
+          onSaved={(saved) => {
+            setSubtasks((current) => {
+              const exists = current.some((subtask) => subtask.id === saved.id);
+              return exists
+                ? current.map((subtask) => subtask.id === saved.id ? saved : subtask)
+                : [saved, ...current];
+            });
             setFormModal(null);
-            loadSubtasks(filters);
             onSubtasksChanged();
           }}
         />

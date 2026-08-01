@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { Ban, ChevronDown, ChevronRight } from "lucide-react";
@@ -50,9 +51,11 @@ export function Sidebar({ collapsed }: SidebarProps) {
             collapsed ? "w-9" : "w-12"
           )}
         >
-          <img
-            src="/logo-viet-nhat-ipt.png"
+          <Image
+            src="/logo-viet-nhat-ipt.webp"
             alt="Việt Nhật IPT"
+            width={192}
+            height={87}
             className="h-full w-full object-contain px-1 py-1.5"
           />
         </div>
