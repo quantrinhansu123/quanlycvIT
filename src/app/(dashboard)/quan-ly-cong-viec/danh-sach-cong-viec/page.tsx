@@ -228,9 +228,11 @@ export default function TaskListPage() {
     try {
       const deleted = await taskService.deleteTask(task.id);
       if (!deleted) throw new Error("Công việc không tồn tại hoặc đã được xóa trước đó.");
+      setTasks((current) => current.filter((item) => item.id !== task.id));
+      setTotal((current) => Math.max(0, current - 1));
+      setSelectedIds((current) => current.filter((id) => id !== task.id));
+      setDependencyTasks((current) => current.filter((item) => item.id !== task.id));
       notify({ type: "success", title: "Đã xóa công việc", description: `Công việc “${task.title}” đã được xóa.` });
-      await loadTasks(currentFilters(), page, pageSize);
-      refreshDependencyTasks();
     } catch (deleteError) {
       notify({
         type: "error",

@@ -201,8 +201,12 @@ export default function SubtaskListPage() {
     try {
       const deleted = await subtaskService.deleteSubtask(subtask.id);
       if (!deleted) throw new Error("Task không tồn tại hoặc đã được xóa trước đó.");
+      setSubtasks((current) => current.filter((item) => item.id !== subtask.id));
+      setTotal((current) => Math.max(0, current - 1));
+      setSelectedIds((current) => current.filter((id) => id !== subtask.id));
+      setQuickView((current) => current?.subtask.id === subtask.id ? null : current);
+      setReportDrawer((current) => current?.id === subtask.id ? null : current);
       notify({ type: "success", title: "Đã xóa task", description: `Task “${subtask.title}” đã được xóa.` });
-      await loadSubtasks(currentFilters(), page, pageSize);
     } catch (deleteError) {
       notify({
         type: "error",

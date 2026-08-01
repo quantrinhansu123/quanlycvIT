@@ -178,8 +178,10 @@ export default function ProjectListPage() {
     try {
       const deleted = await projectService.deleteProject(project.id);
       if (!deleted) throw new Error("Dự án không tồn tại hoặc đã được xóa trước đó.");
+      setProjects((current) => current.filter((item) => item.id !== project.id));
+      setTotal((current) => Math.max(0, current - 1));
+      setSelectedIds((current) => current.filter((id) => id !== project.id));
       notify({ type: "success", title: "Đã xóa dự án", description: `Dự án “${project.name}” đã được xóa.` });
-      await loadProjects(search, page, pageSize);
     } catch (deleteError) {
       notify({
         type: "error",
