@@ -123,8 +123,11 @@ export function LoginPage() {
         window.localStorage.removeItem("goal-app:remember-login");
       }
 
+      // Next.js 15+: staleTimes.dynamic mặc định = 0 (không cache), nên
+      // router.replace("/") tới route động (phụ thuộc cookie phiên) đã tự
+      // fetch dữ liệu mới — router.refresh() ở đây chỉ nhân đôi round-trip
+      // và cộng thêm độ trễ cảm nhận sau khi đăng nhập.
       router.replace("/");
-      router.refresh();
     } catch (signInError) {
       setError(
         signInError instanceof TypeError

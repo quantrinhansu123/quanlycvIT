@@ -1,7 +1,7 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import type { AuthChangeEvent } from "@supabase/supabase-js";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { SessionDataCache } from "@/lib/client-cache/session-data-cache";
 import { clearAllFormDrafts } from "@/hooks/useVersionedFormDraft";
@@ -19,18 +19,38 @@ export function SessionDataCacheProvider({ children }: { children: ReactNode }) 
     },
   }));
 
+  // Supabase có thể phát lại SIGNED_IN cho cùng tài khoản khi tab được kích hoạt
+  // trở lại (xác nhận/refresh phiên hiện tại), không chỉ khi thực sự đăng nhập
+  // mới. Phải theo dõi user ID để phân biệt "cùng tài khoản" với "đổi tài khoản",
+  // nếu không cache bị xóa oan mỗi lần quay lại tab -> danh sách kẹt skeleton.
+  const currentUserIdRef = useRef<string | null | undefined>(undefined);
+
   useEffect(() => {
     const supabase = createClient();
-    // SIGNED_OUT: đăng xuất. SIGNED_IN: có thể là đổi tài khoản trên cùng tab
-    // (đăng nhập lại sau khi hết phiên). Cả hai đều phải xóa sạch cache phiên
-    // để không rò dữ liệu/quyền của tài khoản trước sang tài khoản sau.
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event: AuthChangeEvent) => {
-      if (event === "SIGNED_OUT" || event === "SIGNED_IN") {
+    } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
+      const userId = session?.user?.id ?? null;
+
+      if (event === "INITIAL_SESSION") {
+        currentUserIdRef.current = userId;
+        return;
+      }
+
+      if (event === "SIGNED_OUT") {
+        currentUserIdRef.current = null;
         cache.clear();
-        // Bản nháp form (GĐ7) khóa theo accountId nên tài khoản sau không đọc được
-        // draft của tài khoản trước, nhưng vẫn dọn hẳn để không tồn đọng trên máy dùng chung.
+        clearAllFormDrafts();
+        return;
+      }
+
+      if (event === "SIGNED_IN") {
+        const isSameAccount = currentUserIdRef.current !== undefined && currentUserIdRef.current === userId;
+        currentUserIdRef.current = userId;
+        if (isSameAccount) return;
+        // Đổi tài khoản trên cùng tab: xóa sạch cache + bản nháp form để không
+        // rò dữ liệu/quyền của tài khoản trước sang tài khoản sau.
+        cache.clear();
         clearAllFormDrafts();
       }
     });

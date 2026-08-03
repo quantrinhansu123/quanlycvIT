@@ -356,8 +356,9 @@ export function Header({ onToggleSidebar, onOpenMobileMenu }: HeaderProps) {
   const handleLogout = async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
+    // Cùng lý do như LoginPage.tsx: route động không cache theo mặc định
+    // (staleTimes.dynamic = 0) nên router.refresh() sau replace() là thừa.
     router.replace("/dang-nhap");
-    router.refresh();
   };
 
   const roleLabel =

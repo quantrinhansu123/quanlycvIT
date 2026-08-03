@@ -59,7 +59,7 @@ export function useSessionQuery<T>({
     }
     return null;
   });
-  const [, forceRender] = useReducer((tick: number) => tick + 1, 0);
+  const [renderTick, forceRender] = useReducer((tick: number) => tick + 1, 0);
   const [error, setError] = useState<unknown>(null);
   const [isRevalidating, setIsRevalidating] = useState(false);
   const [revalidateTick, setRevalidateTick] = useState(0);
@@ -97,8 +97,11 @@ export function useSessionQuery<T>({
     return () => {
       cancelled = true;
     };
+    // `renderTick` đổi mỗi khi cache notify key này (kể cả do clear()/invalidate()
+    // xóa hẳn entry) — bắt buộc phải nằm trong deps để effect fetch lại sau khi
+    // cache bị xóa, nếu không hook sẽ kẹt ở status "loading" vô thời hạn.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cache, key, ttl.freshMs, ttl.staleMs, revalidateTick]);
+  }, [cache, key, ttl.freshMs, ttl.staleMs, revalidateTick, renderTick]);
 
   const refresh = useCallback(() => {
     if (!key) return;
