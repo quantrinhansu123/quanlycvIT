@@ -21,7 +21,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { projectService } from "@/services/project-service";
 import { taskService } from "@/services/task-service";
 import type { ProjectMember } from "@/types/project";
-import type { DashboardData } from "@/lib/dashboard-data";
+import type { DashboardData, InitialDashboardData } from "@/lib/dashboard-data";
 import {
   TASK_PRIORITY_OPTIONS,
   TASK_STATUS_META,
@@ -31,6 +31,10 @@ import {
   type WorkTask,
 } from "@/types/task";
 import { cn, formatDateVN, shortName } from "@/lib/utils";
+import { useSessionQuery } from "@/hooks/useSessionQuery";
+import { buildCacheKey } from "@/lib/client-cache/session-data-cache";
+import { CACHE_RESOURCE } from "@/lib/client-cache/resources";
+import { CACHE_TTL } from "@/lib/client-cache/ttl";
 
 const DAY_MS = 86_400_000;
 const DASHBOARD_PROJECT_LIMIT = 100;
@@ -55,11 +59,11 @@ type TimelinePoint = {
   label: string;
 };
 
-async function fetchDashboardData(): Promise<DashboardData> {
+async function fetchDashboardData(signal: AbortSignal): Promise<DashboardData> {
   const [projects, tasks, members] = await Promise.all([
-    projectService.getProjectsPage(undefined, 1, DASHBOARD_PROJECT_LIMIT),
-    taskService.getTasksPage({ page: 1, pageSize: DASHBOARD_TASK_LIMIT }),
-    projectService.getDirectory(),
+    projectService.getProjectsPage(undefined, 1, DASHBOARD_PROJECT_LIMIT, undefined, { signal }),
+    taskService.getTasksPage({ page: 1, pageSize: DASHBOARD_TASK_LIMIT }, { signal }),
+    projectService.getDirectory({ signal }),
   ]);
   return {
     projects: projects.items,
@@ -652,10 +656,21 @@ const BurndownChart = memo(function BurndownChart({ tasks, timeline }: { tasks: 
   );
 });
 
-export function PerformanceDashboard({ initialData }: { initialData: DashboardData }) {
+export function PerformanceDashboard({ initialData }: { initialData: InitialDashboardData }) {
   const router = useRouter();
-  const [data, setData] = useState<DashboardData>(initialData);
-  const [error, setError] = useState("");
+  const { accountId, accountRole, ...dashboardInitialData } = initialData;
+  const dashboardKey = buildCacheKey({
+    accountId,
+    role: accountRole,
+    resource: CACHE_RESOURCE.dashboard,
+  });
+  const dashboardQuery = useSessionQuery({
+    key: dashboardKey,
+    fetcher: fetchDashboardData,
+    ttl: CACHE_TTL.dashboard,
+    initialData: dashboardInitialData,
+  });
+  const data = dashboardQuery.data ?? dashboardInitialData;
   const [projectId, setProjectId] = useState("");
   const [memberId, setMemberId] = useState("");
   const [priority, setPriority] = useState<TaskPriority | "">("");
@@ -685,16 +700,6 @@ export function PerformanceDashboard({ initialData }: { initialData: DashboardDa
     (selectedMemberId: string) => router.push(`/nhan-vien/${selectedMemberId}`),
     [router]
   );
-
-  const loadData = useCallback(async () => {
-    setError("");
-    try {
-      setData(await fetchDashboardData());
-    } catch (loadError) {
-      console.error(loadError);
-      setError("Không thể tải dữ liệu dashboard. Vui lòng thử lại.");
-    }
-  }, []);
 
   const filteredTasks = useMemo(() => {
     return data.tasks.filter((task) => {
@@ -824,16 +829,16 @@ export function PerformanceDashboard({ initialData }: { initialData: DashboardDa
       .slice(0, 5);
   }, [filteredTasks, visibleProjects]);
 
-  if (error) {
+  if (dashboardQuery.status === "error") {
     return (
       <div className="flex min-h-[calc(100vh-64px)] items-center justify-center p-6">
         <div className="max-w-md rounded-2xl border border-rose-100 bg-white p-8 text-center shadow-lg">
           <AlertTriangle className="mx-auto h-10 w-10 text-rose-500" />
           <h1 className="mt-4 text-lg font-bold text-slate-900">Dashboard chưa thể hiển thị</h1>
-          <p className="mt-2 text-sm text-slate-500">{error}</p>
+          <p className="mt-2 text-sm text-slate-500">Không thể tải dữ liệu dashboard. Vui lòng thử lại.</p>
           <button
             type="button"
-            onClick={() => void loadData()}
+            onClick={dashboardQuery.refresh}
             className="mt-5 inline-flex h-10 items-center gap-2 rounded-xl bg-brand-600 px-4 text-sm font-semibold text-white transition hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-100"
           >
             <RefreshCw className="h-4 w-4" />

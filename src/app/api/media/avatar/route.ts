@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { ApiException, apiSuccess, handleApiError } from "@/lib/api/response";
+import { beginApiObservation } from "@/lib/api/observability";
 
 export const runtime = "nodejs";
 
@@ -25,6 +26,7 @@ function configuration() {
 }
 
 export async function POST(request: Request) {
+  beginApiObservation(request);
   try {
     const formData = await request.formData();
     const file = formData.get("file");

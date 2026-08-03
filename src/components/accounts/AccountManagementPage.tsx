@@ -17,9 +17,10 @@ import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { accountService } from "@/services/account-service";
 import { getErrorMessage } from "@/lib/errors";
 import { exportTablePdf } from "@/lib/pdf-export";
-import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import type { AccountInput, Department, EmployeeAccount } from "@/types/account";
+import type { AccountInput, AccountListSummary, Department, EmployeeAccount } from "@/types/account";
+import { useSessionDataCache } from "@/components/providers/SessionDataCacheProvider";
+import { CACHE_RESOURCE } from "@/lib/client-cache/resources";
 
 const AccountFormModal = dynamic(
   () => import("@/components/accounts/AccountFormModal").then((mod) => mod.AccountFormModal),
@@ -29,14 +30,10 @@ const AccountFormModal = dynamic(
 const ROLE_LABEL = { admin: "Quản trị", manager: "Quản lý", member: "Nhân viên" };
 const PAGE_SIZES = [20, 50, 100];
 const DEPARTMENT_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4", "#ef4444"];
-type SortKey = "employeeCode" | "name" | "username" | "birthDate" | "startDate" | "createdAt";
-
-function asInput(account: EmployeeAccount): AccountInput {
-  const { employeeCode, name, phone, address, avatarUrl, birthDate, startDate, endDate,
-    bankAccount, bankName, note, username, email, departmentId, position, role, status } = account;
-  return { employeeCode, name, phone, address, avatarUrl, birthDate, startDate, endDate,
-    bankAccount, bankName, note, username, email, departmentId, position, role, status };
-}
+type SortKey = "employeeCode" | "name" | "username" | "startDate" | "createdAt";
+const EMPTY_SUMMARY: AccountListSummary = {
+  total: 0, active: 0, admins: 0, positions: [], departments: [],
+};
 
 function formatDate(value?: string) {
   if (!value) return "—";
@@ -51,9 +48,13 @@ function avatarColor(name: string) {
 export function AccountManagementPage() {
   const { notify, confirm } = useFeedback();
   const router = useRouter();
+  const cache = useSessionDataCache();
   const [accounts, setAccounts] = useState<EmployeeAccount[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [total, setTotal] = useState(0);
+  const [summary, setSummary] = useState<AccountListSummary>(EMPTY_SUMMARY);
   const [loading, setLoading] = useState(true);
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [department, setDepartment] = useState("");
   const [position, setPosition] = useState("");
@@ -67,77 +68,68 @@ export function AccountManagementPage() {
   const [showDetails, setShowDetails] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  async function load() {
+  async function load(signal?: AbortSignal) {
     setLoading(true);
     try {
-      const supabase = createClient();
-      const [result, { data: sessionData }] = await Promise.all([
-        accountService.getAll(),
-        supabase.auth.getSession(),
-      ]);
-      const currentUserId = sessionData.session?.user.id;
-      setAccounts(
-        result.accounts.filter(
-          (account) => !currentUserId || account.authUserId !== currentUserId
-        )
-      );
+      const result = await accountService.getPage({
+        search, departmentId: department, position,
+        role: role as EmployeeAccount["role"] || undefined,
+        status: status as EmployeeAccount["status"] || undefined,
+        sort: sort.key,
+        direction: sort.direction, page, pageSize,
+      }, { signal });
+      if (signal?.aborted) return;
+      setAccounts(result.items);
       setDepartments(result.departments);
+      setTotal(result.total);
+      setSummary(result.summary);
+      setSelected([]);
     } catch (error) {
+      if (signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) return;
       notify({ type: "error", title: "Không thể tải tài khoản", description: getErrorMessage(error, "Vui lòng thử lại.") });
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   }
 
   useEffect(() => {
-    // Lần tải đầu tiên đồng bộ dữ liệu từ Supabase vào màn hình.
+    const timer = window.setTimeout(() => setSearch(searchInput), 300);
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
+  useEffect(() => {
+    const controller = new AbortController();
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    void load(controller.signal);
+    return () => controller.abort();
+  }, [search, department, position, role, status, sort, page, pageSize]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     // Bộ lọc thay đổi thì quay về trang đầu để không rơi vào trang trống.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(1);
   }, [search, department, position, role, status, pageSize]);
 
-  const positions = useMemo(() => [...new Set(accounts.map((item) => item.position).filter(Boolean) as string[])].sort(), [accounts]);
+  const positions = summary.positions;
   const statistics = useMemo(() => {
-    const activeCount = accounts.filter((account) => account.status === "active").length;
-    const adminCount = accounts.filter((account) => account.role === "admin").length;
+    const countByDepartment = new Map(summary.departments.map((item) => [item.id, item.count]));
     const departmentStats = departments
       .map((item, index) => ({
         id: item.id,
         name: item.name,
-        count: accounts.filter((account) => account.departmentId === item.id).length,
+        count: countByDepartment.get(item.id) ?? 0,
         color: DEPARTMENT_COLORS[index % DEPARTMENT_COLORS.length],
       }))
       .filter((item) => item.count > 0)
       .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name, "vi"));
 
     return {
-      activeCount,
-      adminCount,
+      activeCount: summary.active,
+      adminCount: summary.admins,
       departmentStats,
       assignedCount: departmentStats.reduce((total, item) => total + item.count, 0),
     };
-  }, [accounts, departments]);
-  const filtered = useMemo(() => {
-    const keyword = search.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-    return accounts.filter((account) => {
-      const haystack = [account.employeeCode, account.name, account.email, account.username, account.phone].join(" ").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-      return (!keyword || haystack.includes(keyword))
-        && (!department || account.departmentId === department)
-        && (!position || account.position === position)
-        && (!role || account.role === role)
-        && (!status || account.status === status);
-    }).sort((a, b) => {
-      const left = a[sort.key] ?? "";
-      const right = b[sort.key] ?? "";
-      return String(left).localeCompare(String(right), "vi", { numeric: true }) * (sort.direction === "asc" ? 1 : -1);
-    });
-  }, [accounts, department, position, role, search, sort, status]);
-  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const visible = filtered.slice((Math.min(page, pageCount) - 1) * pageSize, Math.min(page, pageCount) * pageSize);
+  }, [departments, summary]);
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const visible = accounts;
   const activeFilters = [department, position, role, status].filter(Boolean).length;
 
   function toggleSort(key: SortKey) {
@@ -157,6 +149,21 @@ export function AccountManagementPage() {
     });
     notify({ type: "success", title: editing === "new" ? "Đã thêm tài khoản" : "Đã cập nhật tài khoản" });
     setEditing(null);
+    // Tên/chức vụ/trạng thái tài khoản nằm trong ACCOUNT_SELECT của listDirectory()
+    // (chỉ lấy tài khoản status=active) — xóa cache để dropdown ở 3 trang danh sách
+    // công việc/dự án/task không hiển thị tên/chức vụ cũ hoặc tài khoản vừa khóa.
+    cache.invalidate(CACHE_RESOURCE.directoryMembers);
+    if (editing === "new" && page !== 1) setPage(1);
+    else await load();
+  }
+
+  async function openEdit(accountId: string) {
+    try {
+      const account = await accountService.getById(accountId);
+      setEditing(account);
+    } catch (error) {
+      notify({ type: "error", title: "Không thể tải hồ sơ", description: getErrorMessage(error, "Vui lòng thử lại.") });
+    }
   }
 
   async function remove(account: EmployeeAccount) {
@@ -168,9 +175,9 @@ export function AccountManagementPage() {
     if (!ok) return;
     try {
       await accountService.delete(account.id);
-      setAccounts((current) => current.filter((item) => item.id !== account.id));
-      setSelected((current) => current.filter((id) => id !== account.id));
       notify({ type: "success", title: "Đã xóa tài khoản" });
+      cache.invalidate(CACHE_RESOURCE.directoryMembers);
+      await load();
     } catch (error) {
       notify({ type: "error", title: "Không thể xóa", description: getErrorMessage(error, "Vui lòng thử lại.") });
     }
@@ -178,10 +185,12 @@ export function AccountManagementPage() {
 
   async function toggleStatus(account: EmployeeAccount) {
     try {
-      const saved = await accountService.update(account.id, { ...asInput(account), status: account.status === "active" ? "inactive" : "active" });
+      const saved = await accountService.updateStatus(account.id, account.status === "active" ? "inactive" : "active");
       if (!saved) throw new Error("Không tìm thấy tài khoản.");
       setAccounts((current) => current.map((item) => item.id === saved.id ? saved : item));
       notify({ type: "success", title: account.status === "active" ? "Đã khóa tài khoản" : "Đã mở khóa tài khoản" });
+      cache.invalidate(CACHE_RESOURCE.directoryMembers);
+      await load();
     } catch (error) {
       notify({ type: "error", title: "Không thể cập nhật trạng thái", description: getErrorMessage(error, "Vui lòng thử lại.") });
     }
@@ -190,12 +199,14 @@ export function AccountManagementPage() {
   async function bulkStatus(nextStatus: "active" | "inactive") {
     const targets = accounts.filter((item) => selected.includes(item.id));
     try {
-      const savedAccounts = await Promise.all(targets.map((item) => accountService.update(item.id, { ...asInput(item), status: nextStatus })));
-      const savedById = new Map(savedAccounts.filter(Boolean).map((account) => [account.id, account]));
+      const savedAccounts = await accountService.updateStatusBatch(targets.map((item) => item.id), nextStatus);
+      const savedById = new Map(savedAccounts.map((account) => [account.id, account]));
       if (savedById.size !== targets.length) throw new Error("Không thể cập nhật toàn bộ tài khoản đã chọn.");
       setAccounts((current) => current.map((item) => savedById.get(item.id) ?? item));
       setSelected([]);
       notify({ type: "success", title: nextStatus === "active" ? "Đã mở khóa các tài khoản" : "Đã khóa các tài khoản" });
+      cache.invalidate(CACHE_RESOURCE.directoryMembers);
+      await load();
     } catch (error) {
       notify({ type: "error", title: "Thao tác hàng loạt chưa hoàn tất", description: getErrorMessage(error, "Vui lòng thử lại.") });
     }
@@ -203,6 +214,24 @@ export function AccountManagementPage() {
 
   async function exportPdf() {
     try {
+      const first = await accountService.getPage({
+        search, departmentId: department, position,
+        role: role as EmployeeAccount["role"] || undefined,
+        status: status as EmployeeAccount["status"] || undefined,
+        sort: sort.key,
+        direction: sort.direction, page: 1, pageSize: 100,
+      });
+      const pages = Math.ceil(first.total / 100);
+      const rest = pages > 1
+        ? await Promise.all(Array.from({ length: pages - 1 }, (_, index) => accountService.getPage({
+            search, departmentId: department, position,
+            role: role as EmployeeAccount["role"] || undefined,
+            status: status as EmployeeAccount["status"] || undefined,
+            sort: sort.key,
+            direction: sort.direction, page: index + 2, pageSize: 100,
+          })))
+        : [];
+      const exportAccounts = [first, ...rest].flatMap((result) => result.items);
       await exportTablePdf({
         title: "Danh sách tài khoản nhân viên",
         filename: `tai-khoan-${new Date().toISOString().slice(0,10)}.pdf`,
@@ -214,13 +243,13 @@ export function AccountManagementPage() {
           { label: "Trạng thái", width: 52 }, { label: "SĐT", width: 58 },
           { label: "Ngày vào", width: 50, alignment: "center" },
         ],
-        rows: filtered.map((account) => [
+        rows: exportAccounts.map((account) => [
           account.employeeCode, account.name, account.email, account.department?.name,
           account.position, ROLE_LABEL[account.role], account.status === "active" ? "Hoạt động" : "Đã khóa",
           account.phone, formatDate(account.startDate),
         ]),
       });
-      notify({ type: "success", title: `Đã xuất ${filtered.length} tài khoản ra PDF` });
+      notify({ type: "success", title: `Đã xuất ${exportAccounts.length} tài khoản ra PDF` });
     } catch (error) {
       notify({ type: "error", title: "Không thể xuất PDF", description: getErrorMessage(error, "Vui lòng thử lại.") });
     }
@@ -239,23 +268,26 @@ export function AccountManagementPage() {
         const index = headers.findIndex((header) => names.includes(header));
         return index >= 0 ? row[index] : "";
       };
-      const created: EmployeeAccount[] = [];
+      const inputs: AccountInput[] = [];
       for (const line of lines.slice(1)) {
         const row = parse(line);
         const employeeCode = value(row, ["mã nv", "ma nv", "employee code"]);
         const name = value(row, ["họ tên", "ho ten", "nhân viên", "name"]);
         if (!employeeCode || !name) continue;
-        const account = await accountService.create({
+        inputs.push({
           employeeCode, name,
           email: value(row, ["email"]) || undefined,
           username: value(row, ["tên đăng nhập", "ten dang nhap", "username"]) || undefined,
           phone: value(row, ["sđt", "sdt", "phone"]) || undefined,
           role: "member", status: "active",
         });
-        created.push(account);
       }
+      if (inputs.length === 0) throw new Error("Tệp CSV không có dòng tài khoản hợp lệ.");
+      if (inputs.length > 100) throw new Error("Mỗi lần chỉ có thể nhập tối đa 100 tài khoản.");
+      const created = await accountService.createBatch(inputs);
       setAccounts((current) => [...created, ...current]);
       notify({ type: "success", title: `Đã nhập ${created.length} tài khoản` });
+      if (created.length > 0) cache.invalidate(CACHE_RESOURCE.directoryMembers);
     } catch (error) {
       notify({ type: "error", title: "Không thể nhập CSV", description: getErrorMessage(error, "Tệp CSV không hợp lệ.") });
     }
@@ -267,9 +299,9 @@ export function AccountManagementPage() {
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white">
       <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 text-sm">
         <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
-          <span className="flex items-center gap-2 font-bold text-gray-900"><UsersRound className="h-4 w-4 text-brand-600" /> {accounts.length} nhân viên</span>
-          <span className="text-gray-500"><b>{statistics.activeCount}</b> hoạt động · <b>{accounts.length - statistics.activeCount}</b> khóa</span>
-          <span className="text-gray-500"><b>{statistics.adminCount}</b> quản trị · <b>{accounts.length - statistics.adminCount}</b> nhân viên</span>
+          <span className="flex items-center gap-2 font-bold text-gray-900"><UsersRound className="h-4 w-4 text-brand-600" /> {summary.total} nhân viên</span>
+          <span className="text-gray-500"><b>{statistics.activeCount}</b> hoạt động · <b>{summary.total - statistics.activeCount}</b> khóa</span>
+          <span className="text-gray-500"><b>{statistics.adminCount}</b> quản trị · <b>{summary.total - statistics.adminCount}</b> nhân viên</span>
         </div>
         <button
           type="button"
@@ -287,7 +319,7 @@ export function AccountManagementPage() {
             <StatisticsCard
               icon={UsersRound}
               iconClassName="bg-brand-600 text-white"
-              value={accounts.length}
+              value={summary.total}
               label="Tổng nhân viên"
               description={`${statistics.activeCount} hoạt động`}
             />
@@ -342,8 +374,8 @@ export function AccountManagementPage() {
         <button type="button" onClick={() => history.back()} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50"><ArrowLeft className="h-4 w-4" /></button>
         <div className="relative min-w-[180px] flex-1 xl:max-w-[470px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm theo tên, mã NV, email..." className="h-9 w-full rounded-xl border border-gray-200 pl-9 pr-9 text-xs outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100" />
-          {search && <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"><X className="h-4 w-4" /></button>}
+          <input value={searchInput} onChange={(e) => setSearchInput(e.target.value)} placeholder="Tìm theo tên, mã NV, email..." className="h-9 w-full rounded-xl border border-gray-200 pl-9 pr-9 text-xs outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100" />
+          {searchInput && <button onClick={() => setSearchInput("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"><X className="h-4 w-4" /></button>}
         </div>
         <Filter value={department} onChange={setDepartment} label="Phòng ban" options={departments.map((item) => ({ value: item.id, label: item.name }))} />
         <Filter value={position} onChange={setPosition} label="Chức vụ" options={positions.map((item) => ({ value: item, label: item }))} />
@@ -365,7 +397,7 @@ export function AccountManagementPage() {
       </div>
 
       <div className="account-table-scroll min-h-0 flex-1 overflow-auto">
-        <table className="w-full min-w-[2280px] border-collapse text-left text-xs">
+        <table className="w-full min-w-[1680px] border-collapse text-left text-xs">
           <thead className="sticky top-0 z-10 bg-gray-50 text-xs font-semibold text-gray-700">
             <tr className="border-b border-gray-200">
               <th className="sticky left-0 z-20 w-12 bg-gray-50 px-4 py-3"><input type="checkbox" checked={allVisibleSelected} onChange={() => setSelected((current) => allVisibleSelected ? current.filter((id) => !visible.some((a) => a.id === id)) : [...new Set([...current, ...visible.map((a) => a.id)])])} /></th>
@@ -373,8 +405,7 @@ export function AccountManagementPage() {
               <SortTh label="Nhân viên" column="name" sort={sort} onSort={toggleSort} width="285px" />
               <SortTh label="Tên đăng nhập" column="username" sort={sort} onSort={toggleSort} width="190px" />
               <th className="min-w-[180px] px-4 py-3">Phòng ban</th><th className="min-w-[185px] px-4 py-3">Chức vụ</th><th className="min-w-[115px] px-4 py-3">Vai trò</th><th className="min-w-[125px] px-4 py-3">Trạng thái</th>
-              <th className="min-w-[135px] px-4 py-3">SĐT</th><th className="min-w-[145px] px-4 py-3">STK</th><th className="min-w-[170px] px-4 py-3">Ngân hàng</th><th className="min-w-[230px] px-4 py-3">Địa chỉ</th>
-              <SortTh label="Ngày sinh" column="birthDate" sort={sort} onSort={toggleSort} />
+              <th className="min-w-[135px] px-4 py-3">SĐT</th>
               <SortTh label="Ngày vào làm" column="startDate" sort={sort} onSort={toggleSort} />
               <SortTh label="Ngày tạo" column="createdAt" sort={sort} onSort={toggleSort} />
               <th className="sticky right-0 z-20 min-w-[180px] border-l border-gray-200 bg-gray-50 px-4 py-3">Thao tác</th>
@@ -382,7 +413,7 @@ export function AccountManagementPage() {
           </thead>
           <tbody>
             {loading ? <LoadingRows /> : visible.length === 0 ? (
-              <tr><td colSpan={16} className="py-24 text-center text-gray-400">Không tìm thấy tài khoản phù hợp.</td></tr>
+              <tr><td colSpan={12} className="py-24 text-center text-gray-400">Không tìm thấy tài khoản phù hợp.</td></tr>
             ) : visible.map((account) => (
               <tr key={account.id} className="data-table-row group border-b border-gray-200">
                 <td className="sticky left-0 z-[2] px-4 py-3"><input type="checkbox" checked={selected.includes(account.id)} onChange={() => setSelected((current) => current.includes(account.id) ? current.filter((id) => id !== account.id) : [...current, account.id])} /></td>
@@ -404,14 +435,14 @@ export function AccountManagementPage() {
                 <td className="px-4 py-3 font-medium text-gray-800">{account.position ?? "—"}</td>
                 <td className="px-4 py-3"><span className={cn("rounded-full border px-2.5 py-1 text-xs font-medium", account.role === "admin" ? "border-brand-600 bg-brand-600 text-white" : account.role === "manager" ? "border-violet-200 bg-violet-50 text-violet-700" : "border-gray-200 bg-white text-gray-700")}>{ROLE_LABEL[account.role]}</span></td>
                 <td className="px-4 py-3"><span className={cn("rounded-full px-2.5 py-1 text-xs font-medium", account.status === "active" ? "bg-brand-600 text-white" : "bg-gray-200 text-gray-600")}>{account.status === "active" ? "Hoạt động" : "Đã khóa"}</span></td>
-                <td className="px-4 py-3">{account.phone ?? "—"}</td><td className="px-4 py-3">{account.bankAccount ?? "—"}</td><td className="px-4 py-3">{account.bankName ?? "—"}</td><td className="max-w-[230px] truncate px-4 py-3">{account.address ?? "—"}</td>
-                <td className="px-4 py-3">{formatDate(account.birthDate)}</td><td className="px-4 py-3">{formatDate(account.startDate)}</td><td className="px-4 py-3">{formatDate(account.createdAt)}</td>
+                <td className="px-4 py-3">{account.phone ?? "—"}</td>
+                <td className="px-4 py-3">{formatDate(account.startDate)}</td><td className="px-4 py-3">{formatDate(account.createdAt)}</td>
                 <td
                   className="sticky right-0 z-[2] border-l border-gray-100 px-4 py-3"
                 >
                   <div className="flex items-center justify-center gap-1.5">
                     <ActionIconButton icon={Eye} label="Xem chi tiết" onClick={() => router.push(`/nhan-vien/${account.id}`)} />
-                    <ActionIconButton icon={Pencil} label="Chỉnh sửa" tone="warning" onClick={() => setEditing(account)} />
+                    <ActionIconButton icon={Pencil} label="Chỉnh sửa" tone="warning" onClick={() => void openEdit(account.id)} />
                     <ActionIconButton
                       icon={account.status === "active" ? LockKeyhole : UnlockKeyhole}
                       label={account.status === "active" ? "Khóa tài khoản" : "Mở khóa tài khoản"}
@@ -427,7 +458,7 @@ export function AccountManagementPage() {
       </div>
 
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-gray-200 bg-white px-4 py-2.5 text-sm">
-        <div className="flex items-center gap-3 text-gray-600"><span>Tổng: <b>{filtered.length}</b> bản ghi</span><span>Hiển thị</span>
+        <div className="flex items-center gap-3 text-gray-600"><span>Tổng: <b>{total}</b> bản ghi</span><span>Hiển thị</span>
           <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} className="h-9 rounded-lg border border-gray-200 px-2 outline-none">{PAGE_SIZES.map((size) => <option key={size}>{size}</option>)}</select><span>/ trang</span>
         </div>
         <div className="flex items-center gap-1">

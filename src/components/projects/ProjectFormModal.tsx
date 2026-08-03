@@ -18,14 +18,21 @@ import { Avatar } from "@/components/ui/Avatar";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 import { TaskAttachmentFields } from "@/components/tasks/TaskAttachmentFields";
+import { useCurrentAccount } from "@/hooks/useCurrentAccount";
+import { buildFormDraftKey, useVersionedFormDraft } from "@/hooks/useVersionedFormDraft";
+import { FormDraftBanner, RememberDraftToggle } from "@/components/ui/FormDraftBanner";
+import { runUploadBatch } from "@/lib/upload-concurrency";
 
 interface ProjectFormModalProps {
   mode: "create" | "edit";
   project?: Project;
   members: ProjectMember[];
   onClose: () => void;
-  /** Trang danh sách truyền callback này để optimistic-update từ response API. */
-  onSave?: (input: ProjectInput) => Promise<Project | null>;
+  /**
+   * Trang danh sách truyền callback này để optimistic-update từ response API.
+   * `idempotencyKey` chỉ có giá trị ở `mode === "create"` — GĐ9 (idempotency).
+   */
+  onSave?: (input: ProjectInput, idempotencyKey?: string) => Promise<Project | null>;
   /** Tương thích với các màn hình chi tiết chưa dùng optimistic update. */
   onSaved?: () => void;
 }
@@ -44,6 +51,16 @@ interface FormState {
   links: TaskLinkAttachment[];
   images: string[];
 }
+
+/**
+ * Phần của FormState được phép lưu vào bản nháp (GĐ7). Cố tình loại `files`/`links`/
+ * `images` — theo nguyên tắc kế hoạch "không lưu file/ảnh base64, URL upload tạm
+ * chưa xác nhận"; đính kèm không nằm trong phạm vi bản nháp văn bản đơn giản này.
+ */
+type ProjectDraftData = Pick<
+  FormState,
+  "name" | "code" | "color" | "steps" | "description" | "startDate" | "endDate" | "managerIds" | "memberIds"
+>;
 
 interface PendingProjectImage {
   id: string;
@@ -129,6 +146,19 @@ function buildInitialState(project: Project | undefined, members: ProjectMember[
 
 export function ProjectFormModal({ mode, project, members, onClose, onSave, onSaved }: ProjectFormModalProps) {
   const { notify } = useFeedback();
+  const { account } = useCurrentAccount();
+  const draftStorageKey = account
+    ? buildFormDraftKey({ accountId: account.id, formType: "project", mode, entityId: project?.id })
+    : null;
+  const { draft, scheduleSave, clearDraft, persistent, setPersistent } =
+    useVersionedFormDraft<ProjectDraftData>({ storageKey: draftStorageKey });
+  const [draftBannerDismissed, setDraftBannerDismissed] = useState(false);
+  // Ổn định trong suốt phiên mở form (kể cả khi submit lại sau lỗi) — GĐ9: cùng
+  // key cho mọi lần thử của MỘT thao tác tạo, để server dedupe đúng nếu request
+  // trước đã tới nhưng client tưởng nhầm là lỗi mạng (mất response).
+  const [createIdempotencyKey] = useState<string | undefined>(() =>
+    mode === "create" ? crypto.randomUUID() : undefined
+  );
   const [form, setForm] = useState<FormState>(() => buildInitialState(project, members));
   const [codeTouched, setCodeTouched] = useState(mode === "edit");
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
@@ -157,6 +187,31 @@ export function ProjectFormModal({ mode, project, members, onClose, onSave, onSa
   useEffect(() => {
     resizeDescriptionTextarea(descriptionRef.current);
   }, []);
+
+  useEffect(() => {
+    scheduleSave({
+      name: form.name,
+      code: form.code,
+      color: form.color,
+      steps: form.steps,
+      description: form.description,
+      startDate: form.startDate,
+      endDate: form.endDate,
+      managerIds: form.managerIds,
+      memberIds: form.memberIds,
+    });
+  }, [
+    form.name,
+    form.code,
+    form.color,
+    form.steps,
+    form.description,
+    form.startDate,
+    form.endDate,
+    form.managerIds,
+    form.memberIds,
+    scheduleSave,
+  ]);
 
   useEffect(() => {
     pendingImagesRef.current = pendingImages;
@@ -458,10 +513,35 @@ export function ProjectFormModal({ mode, project, members, onClose, onSave, onSa
     startTransition(async () => {
       setSubmitError(null);
       try {
-        const [uploadedImages, uploadedFiles] = await Promise.all([
-          Promise.all(pendingImages.map((image) => projectService.uploadImage(image.file))),
-          Promise.all(pendingFiles.map((pending) => projectService.uploadFile(pending.file))),
+        const uploadedImages: string[] = [];
+        const uploadedFiles: TaskFileAttachment[] = [];
+        const uploadResult = await runUploadBatch([
+          ...pendingImages.map((image) => ({
+            id: image.id,
+            upload: async () => { uploadedImages.push(await projectService.uploadImage(image.file)); },
+          })),
+          ...pendingFiles.map((pending) => ({
+            id: pending.id,
+            upload: async () => { uploadedFiles.push(await projectService.uploadFile(pending.file)); },
+          })),
         ]);
+        const uploadedIds = new Set(uploadResult.succeededIds);
+        if (uploadedImages.length || uploadedFiles.length) {
+          setForm((current) => ({
+            ...current,
+            images: [...current.images, ...uploadedImages],
+            files: [...current.files, ...uploadedFiles],
+          }));
+          setPendingImages((current) => current.filter((item) => {
+            if (!uploadedIds.has(item.id)) return true;
+            URL.revokeObjectURL(item.previewUrl);
+            return false;
+          }));
+          setPendingFiles((current) => current.filter((item) => !uploadedIds.has(item.id)));
+        }
+        if (uploadResult.failures.length) {
+          throw new Error(`Không thể tải ${uploadResult.failures.length} tệp. Các tệp đã tải xong được giữ lại; bấm Lưu để thử lại tệp lỗi.`);
+        }
         const input: ProjectInput = {
           name: form.name.trim(),
           code: form.code.trim(),
@@ -480,16 +560,17 @@ export function ProjectFormModal({ mode, project, members, onClose, onSave, onSa
         };
 
         const saved = onSave
-          ? await onSave(input)
+          ? await onSave(input, createIdempotencyKey)
           : mode === "edit" && project
             ? await projectService.updateProject(project.id, input)
-            : await projectService.createProject(input);
+            : await projectService.createProject(input, { idempotencyKey: createIdempotencyKey });
         if (!saved) throw new Error("Không tìm thấy dự án để cập nhật.");
         notify({
           type: "success",
           title: mode === "edit" ? "Đã cập nhật dự án" : "Đã tạo dự án",
           description: `Dự án “${input.name}” đã được lưu thành công.`,
         });
+        clearDraft();
         onSaved?.();
         onClose();
       } catch (error) {
@@ -530,6 +611,21 @@ export function ProjectFormModal({ mode, project, members, onClose, onSave, onSa
         </div>
 
         <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
+          {draft && !draftBannerDismissed && (
+            <FormDraftBanner
+              savedAt={draft.savedAt}
+              conflict={draft.conflict}
+              onRestore={() => {
+                setForm((prev) => ({ ...prev, ...draft.data }));
+                setDraftBannerDismissed(true);
+              }}
+              onDiscard={() => {
+                clearDraft();
+                setDraftBannerDismissed(true);
+              }}
+            />
+          )}
+
           {members.length === 0 && (
             <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
               Chưa có nhân sự đang hoạt động trong Supabase. Hãy thêm dữ liệu vào bảng{" "}
@@ -935,13 +1031,16 @@ export function ProjectFormModal({ mode, project, members, onClose, onSave, onSa
           {submitError && <p className="text-sm text-rose-500">{submitError}</p>}
         </div>
 
-        <div className="flex shrink-0 items-center justify-end gap-3 border-t border-gray-100 px-6 py-4">
-          <Button type="button" variant="secondary" onClick={onClose} disabled={isPending}>
-            Hủy
-          </Button>
-          <Button type="submit" disabled={isPending || members.length === 0}>
-            {isPending ? "Đang lưu..." : members.length === 0 ? "Chưa có nhân sự" : mode === "edit" ? "Cập nhật" : "Tạo mới"}
-          </Button>
+        <div className="flex shrink-0 items-center justify-between gap-3 border-t border-gray-100 px-6 py-4">
+          {setPersistent && <RememberDraftToggle checked={persistent} onChange={setPersistent} />}
+          <div className="flex items-center gap-3">
+            <Button type="button" variant="secondary" onClick={onClose} disabled={isPending}>
+              Hủy
+            </Button>
+            <Button type="submit" disabled={isPending || members.length === 0}>
+              {isPending ? "Đang lưu..." : members.length === 0 ? "Chưa có nhân sự" : mode === "edit" ? "Cập nhật" : "Tạo mới"}
+            </Button>
+          </div>
         </div>
       </form>
     </div>

@@ -3,19 +3,19 @@
 import { CalendarDays } from "lucide-react";
 import type { WorkTask } from "@/types/task";
 import { isTaskOverdue } from "@/types/task";
-import type { Project, ProjectMember } from "@/types/project";
+import type { ProjectDirectoryItem, ProjectMember } from "@/types/project";
 import { Avatar, AvatarStack } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { TaskPriorityBadge, TaskStatusBadge, OverdueTag } from "@/components/tasks/TaskBadges";
 import { TaskActionMenu } from "@/components/tasks/TaskActionMenu";
 import { formatDateVN } from "@/lib/utils";
+import { IntentPrefetchLink } from "@/components/navigation/IntentPrefetchLink";
 
 interface TaskCardProps {
   task: WorkTask;
-  project?: Project;
+  project?: ProjectDirectoryItem;
   assignee?: ProjectMember;
-  onOpen: (task: WorkTask) => void;
   onEdit: (task: WorkTask) => void;
   onDelete: (task: WorkTask) => void;
   readOnly?: boolean;
@@ -25,7 +25,6 @@ export function TaskCard({
   task,
   project,
   assignee,
-  onOpen,
   onEdit,
   onDelete,
   readOnly = false,
@@ -46,10 +45,13 @@ export function TaskCard({
         />}
       </div>
 
-      <button type="button" onClick={() => onOpen(task)} className="text-left">
+      <IntentPrefetchLink
+        href={`/quan-ly-cong-viec/danh-sach-cong-viec/${task.id}`}
+        className="text-left"
+      >
         <p className="line-clamp-1 text-sm font-semibold text-gray-800 hover:text-brand-600">{task.title}</p>
         {task.description && <p className="mt-1 line-clamp-2 text-xs text-gray-400">{task.description}</p>}
-      </button>
+      </IntentPrefetchLink>
 
       <div className="flex flex-wrap items-center gap-2">
         <TaskStatusBadge status={task.status} />

@@ -38,6 +38,8 @@ import { ProjectTasksPanel } from "@/components/projects/ProjectTasksPanel";
 import { ActivityTimeline } from "@/components/timeline/ActivityTimeline";
 import { cn, formatDateVN } from "@/lib/utils";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
+import { useSessionDataCache } from "@/components/providers/SessionDataCacheProvider";
+import { CACHE_RESOURCE } from "@/lib/client-cache/resources";
 
 const ProjectFormModal = dynamic(
   () => import("@/components/projects/ProjectFormModal").then((mod) => mod.ProjectFormModal),
@@ -75,6 +77,7 @@ export function ProjectDetailView({
 }: ProjectDetailViewProps) {
   const router = useRouter();
   const { notify } = useFeedback();
+  const cache = useSessionDataCache();
   const [project, setProject] = useState<Project | null>(initialProject);
   const [tasks, setTasks] = useState<ProjectTask[]>(initialTasks);
   const [members, setMembers] = useState<ProjectMember[]>(initialMembers);
@@ -476,6 +479,11 @@ export function ProjectDetailView({
           onSaved={() => {
             setEditing(false);
             load();
+            // Trang chi tiết đã tự refetch (load()) — ở đây chỉ cần xóa cache của
+            // danh sách dự án chính + directory dự án để không hiển thị dữ liệu cũ
+            // khi người dùng quay lại 2 nơi đó (theo ma trận invalidation GĐ6).
+            cache.invalidate(CACHE_RESOURCE.projectsList);
+            cache.invalidate(CACHE_RESOURCE.directoryProjects);
           }}
         />
       )}

@@ -8,6 +8,10 @@ import { TaskAttachmentFields } from "@/components/tasks/TaskAttachmentFields";
 import { apiClient } from "@/services/api-client";
 import { cn, getAppDateKey } from "@/lib/utils";
 import type { FinanceCategory, FinanceFileAttachment, FinanceInput, FinanceLinkAttachment, FinanceTransaction, FinanceType } from "@/types/finance";
+import { useCurrentAccount } from "@/hooks/useCurrentAccount";
+import { buildFormDraftKey, useVersionedFormDraft } from "@/hooks/useVersionedFormDraft";
+import { FormDraftBanner } from "@/components/ui/FormDraftBanner";
+import { runUploadBatch } from "@/lib/upload-concurrency";
 
 interface Props {
   transaction?: FinanceTransaction;
@@ -25,6 +29,9 @@ const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "i
 
 interface PendingImage { id: string; file: File; previewUrl: string; }
 interface PendingFile { id: string; file: File; }
+
+/** Phần của FinanceInput lưu được vào bản nháp (GĐ7) — loại `receiptImages`/`receiptFiles`/`receiptLinks`. */
+type FinanceDraftData = Pick<FinanceInput, "type" | "amount" | "date" | "categoryId" | "description">;
 
 function formatMoneyInput(value: number | undefined) {
   return value ? integerFormatter.format(value) : "";
@@ -59,6 +66,22 @@ function initialForm(transaction?: FinanceTransaction, defaultType: FinanceType 
 }
 
 export function FinanceTransactionModal({ transaction, categories, defaultType = "chi", onClose, onSave }: Props) {
+  const { account } = useCurrentAccount();
+  // Chỉ sessionStorage (allowPersistent: false) — theo đúng kế hoạch GĐ7: giao dịch
+  // tài chính không được cho tùy chọn "ghi nhớ trên thiết bị" như 3 form còn lại.
+  const draftStorageKey = account
+    ? buildFormDraftKey({
+        accountId: account.id,
+        formType: "finance-transaction",
+        mode: transaction ? "edit" : "create",
+        entityId: transaction?.id,
+      })
+    : null;
+  const { draft, scheduleSave, clearDraft } = useVersionedFormDraft<FinanceDraftData>({
+    storageKey: draftStorageKey,
+    allowPersistent: false,
+  });
+  const [draftBannerDismissed, setDraftBannerDismissed] = useState(false);
   const [form, setForm] = useState<FinanceInput>(() => initialForm(transaction, defaultType));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -71,6 +94,16 @@ export function FinanceTransactionModal({ transaction, categories, defaultType =
   const availableCategories = useMemo(() => categories.filter((item) => item.type === form.type), [categories, form.type]);
 
   useEffect(() => { pendingImagesRef.current = pendingImages; }, [pendingImages]);
+
+  useEffect(() => {
+    scheduleSave({
+      type: form.type,
+      amount: form.amount,
+      date: form.date,
+      categoryId: form.categoryId,
+      description: form.description,
+    });
+  }, [form.type, form.amount, form.date, form.categoryId, form.description, scheduleSave]);
 
   useEffect(() => () => {
     for (const image of pendingImagesRef.current) URL.revokeObjectURL(image.previewUrl);
@@ -132,11 +165,37 @@ export function FinanceTransactionModal({ transaction, categories, defaultType =
     if (links.some((link) => !isValidHttpUrl(link.url))) return setLinkError("Liên kết chứng từ không hợp lệ.");
     setSaving(true); setError("");
     try {
-      const [images, files] = await Promise.all([
-        Promise.all(pendingImages.map((item) => uploadImage(item.file))),
-        Promise.all(pendingFiles.map((item) => uploadFile(item.file))),
+      const images: string[] = [];
+      const files: FinanceFileAttachment[] = [];
+      const uploadResult = await runUploadBatch([
+        ...pendingImages.map((item) => ({
+          id: item.id,
+          upload: async () => { images.push(await uploadImage(item.file)); },
+        })),
+        ...pendingFiles.map((item) => ({
+          id: item.id,
+          upload: async () => { files.push(await uploadFile(item.file)); },
+        })),
       ]);
+      const uploadedIds = new Set(uploadResult.succeededIds);
+      if (images.length || files.length) {
+        setForm((current) => ({
+          ...current,
+          receiptImages: [...(current.receiptImages ?? []), ...images],
+          receiptFiles: [...(current.receiptFiles ?? []), ...files],
+        }));
+        setPendingImages((current) => current.filter((item) => {
+          if (!uploadedIds.has(item.id)) return true;
+          URL.revokeObjectURL(item.previewUrl);
+          return false;
+        }));
+        setPendingFiles((current) => current.filter((item) => !uploadedIds.has(item.id)));
+      }
+      if (uploadResult.failures.length) {
+        throw new Error(`Không thể tải ${uploadResult.failures.length} tệp. Các tệp đã tải xong được giữ lại; bấm Lưu để thử lại tệp lỗi.`);
+      }
       await onSave({ ...form, receiptImages: [...(form.receiptImages ?? []), ...images], receiptFiles: [...(form.receiptFiles ?? []), ...files], receiptLinks: links });
+      clearDraft();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Không thể lưu giao dịch.");
       setSaving(false);
@@ -152,6 +211,20 @@ export function FinanceTransactionModal({ transaction, categories, defaultType =
           <button type="button" onClick={onClose} disabled={saving} className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700" aria-label="Đóng"><X className="h-5 w-5" /></button>
         </header>
         <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5 sm:px-6">
+          {draft && !draftBannerDismissed && (
+            <FormDraftBanner
+              savedAt={draft.savedAt}
+              conflict={draft.conflict}
+              onRestore={() => {
+                setForm((prev) => ({ ...prev, ...draft.data }));
+                setDraftBannerDismissed(true);
+              }}
+              onDiscard={() => {
+                clearDraft();
+                setDraftBannerDismissed(true);
+              }}
+            />
+          )}
           <fieldset><legend className="mb-2 text-xs font-semibold text-gray-600">Loại giao dịch</legend><div className="grid grid-cols-2 gap-2 rounded-xl bg-gray-100 p-1">
             <TypeButton active={form.type === "thu"} type="thu" onClick={() => setType("thu")} />
             <TypeButton active={form.type === "chi"} type="chi" onClick={() => setType("chi")} />

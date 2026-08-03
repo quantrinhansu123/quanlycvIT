@@ -5,6 +5,7 @@ import {
   DEFAULT_PROJECT_STEPS,
   type Project,
   type ProjectColor,
+  type ProjectDirectoryItem,
   type ProjectInput,
   type ProjectMember,
   type ProjectStepConfig,
@@ -23,11 +24,13 @@ import type {
   TaskReportLink,
   TaskStatus,
   WorkTask,
+  WorkTaskDirectoryItem,
   WorkTaskInput,
 } from "@/types/task";
 import { deriveWorkTaskStatus } from "@/types/task";
 import type { ProjectTask } from "@/services/mock-data";
 import { getAppDateKey } from "@/lib/utils";
+import { measureApiTiming } from "@/lib/api/observability";
 
 interface AccountRow {
   id: string;
@@ -202,11 +205,20 @@ const PROJECT_SELECT =
   `du_an_quan_ly(tai_khoan_id,la_chinh,tai_khoan(${ACCOUNT_SELECT})),` +
   `du_an_thanh_vien(tai_khoan_id,tai_khoan(${ACCOUNT_SELECT})),` +
   "cong_viec(id,trang_thai,ngay_hoan_thanh)";
+const PROJECT_DIRECTORY_SELECT =
+  "id,ma_da,ten_da,hop_mau,ngay_bd,ngay_kt,nguoi_ql_id," +
+  `legacy_manager:tai_khoan!nguoi_ql_id(${ACCOUNT_SELECT}),` +
+  `du_an_quan_ly(tai_khoan_id,la_chinh,tai_khoan(${ACCOUNT_SELECT})),` +
+  `du_an_thanh_vien(tai_khoan_id,tai_khoan(${ACCOUNT_SELECT}))`;
 const WORK_TASK_SELECT =
   "id,ten_cv,mo_ta,created_at,updated_at,du_an_id,nguoi_phu_trach_id,trang_thai,uu_tien,ngay_bat_dau,ngay_hoan_thanh,tien_do_thuc_te,nhan_tag,cong_viec_tien_de_id,hinh_anh,tep_dinh_kem,lien_ket_dinh_kem," +
   `legacy_assignee:tai_khoan!nguoi_phu_trach_id(${ACCOUNT_SELECT}),` +
   `cong_viec_phu_trach(tai_khoan_id,la_chinh,tai_khoan(${ACCOUNT_SELECT})),` +
   "task(tien_do_thuc_te,trang_thai)";
+const WORK_TASK_DIRECTORY_SELECT =
+  "id,ten_cv,du_an_id,ngay_bat_dau,ngay_hoan_thanh,nguoi_phu_trach_id," +
+  `legacy_assignee:tai_khoan!nguoi_phu_trach_id(${ACCOUNT_SELECT}),` +
+  `cong_viec_phu_trach(tai_khoan_id,la_chinh,tai_khoan(${ACCOUNT_SELECT}))`;
 const SUBTASK_SELECT =
   "id,ten_task,mo_ta,created_at,updated_at,ngay_bat_dau,ngay_ket_thuc,nguoi_phu_trach_id,trang_thai,uu_tien,tien_do_thuc_te,nhan_tag,hinh_anh,tep_dinh_kem,lien_ket_dinh_kem,task_tien_de_id,cong_viec_id," +
   `legacy_assignee:tai_khoan!nguoi_phu_trach_id(${ACCOUNT_SELECT}),` +
@@ -607,6 +619,56 @@ export async function listProjects(
   return hydrateProjects((data ?? []) as unknown as ProjectRow[]);
 }
 
+/** Danh sách dự án tối giản cho dropdown/form, không tải mô tả, tệp hay thống kê. */
+export async function listProjectDirectory(
+  supabase: ApiSupabaseClient,
+  participantAccountId?: string
+): Promise<ProjectDirectoryItem[]> {
+  const visibleProjectIds = participantAccountId
+    ? await listProjectIdsForParticipant(supabase, participantAccountId)
+    : undefined;
+  if (visibleProjectIds?.length === 0) return [];
+
+  let query = supabase
+    .from("du_an")
+    .select(PROJECT_DIRECTORY_SELECT)
+    .order("ten_da");
+  if (visibleProjectIds) query = query.in("id", visibleProjectIds);
+  const { data, error } = await query;
+  throwDatabaseError(error);
+
+  return (data ?? []).map((raw) => {
+    const row = raw as unknown as Pick<ProjectRow,
+      "id" | "ma_da" | "ten_da" | "hop_mau" | "ngay_bd" | "ngay_kt" | "nguoi_ql_id" |
+      "legacy_manager" | "du_an_quan_ly" | "du_an_thanh_vien">;
+    const managerAssignments = row.du_an_quan_ly ?? [];
+    const managers = managerAssignments
+      .slice()
+      .sort((a, b) => Number(b.la_chinh) - Number(a.la_chinh))
+      .map((assignment) => assignment.tai_khoan)
+      .filter((account): account is AccountRow => Boolean(account))
+      .map(toProjectMember);
+    if (managers.length === 0 && row.legacy_manager) managers.push(toProjectMember(row.legacy_manager));
+    const managerIds = new Set(managerAssignments.map((assignment) => assignment.tai_khoan_id));
+    if (row.nguoi_ql_id) managerIds.add(row.nguoi_ql_id);
+    const members = (row.du_an_thanh_vien ?? [])
+      .filter((membership) => !managerIds.has(membership.tai_khoan_id))
+      .map((membership) => membership.tai_khoan)
+      .filter((account): account is AccountRow => Boolean(account))
+      .map(toProjectMember);
+    return {
+      id: row.id,
+      code: row.ma_da,
+      name: row.ten_da,
+      color: projectColor(row.hop_mau),
+      startDate: row.ngay_bd ?? "",
+      endDate: row.ngay_kt ?? "",
+      managers,
+      members,
+    };
+  });
+}
+
 /** Giống `listProjects` nhưng chỉ tải một trang kết quả. */
 export async function listProjectsPage(
   supabase: ApiSupabaseClient,
@@ -901,6 +963,52 @@ export async function listWorkTasks(
   return hydrateWorkTasks((data ?? []) as unknown as WorkTaskRow[]);
 }
 
+/** Danh sách công việc tối giản cho dropdown và quan hệ tiền đề. */
+export async function listWorkTaskDirectory(
+  supabase: ApiSupabaseClient,
+  assigneeIds?: string[]
+): Promise<WorkTaskDirectoryItem[]> {
+  let visibleTaskIds: string[] | undefined;
+  if (assigneeIds && assigneeIds.length > 0) {
+    const accountIds = await resolveAccountIds(supabase, assigneeIds, "Người phụ trách");
+    const { data, error } = await supabase
+      .from("cong_viec_phu_trach")
+      .select("cong_viec_id")
+      .in("tai_khoan_id", accountIds);
+    throwDatabaseError(error);
+    visibleTaskIds = uniqueValues((data ?? []).map((row) => row.cong_viec_id as string));
+    if (visibleTaskIds.length === 0) return [];
+  }
+
+  let query = supabase
+    .from("cong_viec")
+    .select(WORK_TASK_DIRECTORY_SELECT)
+    .order("ten_cv");
+  if (visibleTaskIds) query = query.in("id", visibleTaskIds);
+  const { data, error } = await query;
+  throwDatabaseError(error);
+  return (data ?? []).map((raw) => {
+    const row = raw as unknown as Pick<WorkTaskRow,
+      "id" | "ten_cv" | "du_an_id" | "ngay_bat_dau" | "ngay_hoan_thanh" |
+      "legacy_assignee" | "cong_viec_phu_trach">;
+    const assignees = (row.cong_viec_phu_trach ?? [])
+      .slice()
+      .sort((a, b) => Number(b.la_chinh) - Number(a.la_chinh))
+      .map((assignment) => assignment.tai_khoan)
+      .filter((account): account is AccountRow => Boolean(account))
+      .map(toProjectMember);
+    if (assignees.length === 0 && row.legacy_assignee) assignees.push(toProjectMember(row.legacy_assignee));
+    return {
+      id: row.id,
+      title: row.ten_cv,
+      projectId: row.du_an_id,
+      startDate: row.ngay_bat_dau ?? "",
+      dueDate: row.ngay_hoan_thanh ?? "",
+      assignees,
+    };
+  });
+}
+
 /**
  * Giống `listWorkTasks` nhưng chỉ tải một trang kết quả (dùng cho trang danh sách
  * dạng bảng có phân trang) thay vì hydrate toàn bộ tập kết quả khớp bộ lọc.
@@ -1192,13 +1300,21 @@ export async function createWorkTask(
   const taskRow = data as unknown as WorkTaskRow;
 
   const taskId = taskRow.id;
-  await syncAssignments(
-    supabase,
-    "cong_viec_phu_trach",
-    "cong_viec_id",
-    taskId,
-    assigneeIds
-  );
+  try {
+    await syncAssignments(
+      supabase,
+      "cong_viec_phu_trach",
+      "cong_viec_id",
+      taskId,
+      assigneeIds
+    );
+  } catch (syncError) {
+    // Không phải RPC transaction thật (2 round-trip riêng) — nhưng bù lại bằng
+    // compensating delete, cùng mẫu đã dùng ở createProject(), để không để lại
+    // công việc không có người phụ trách khi bước gán lỗi.
+    await supabase.from("cong_viec").delete().eq("id", taskId);
+    throw syncError;
+  }
 
   const [task] = hydrateWorkTasks([
     withWorkTaskAssignees(taskRow, assigneeIds, accountsById),
@@ -1550,13 +1666,20 @@ export async function createSubtask(
   const subtaskRow = data as unknown as SubtaskRow;
 
   const subtaskId = subtaskRow.id;
-  await syncAssignments(
-    supabase,
-    "task_phu_trach",
-    "task_id",
-    subtaskId,
-    assigneeIds
-  );
+  try {
+    await syncAssignments(
+      supabase,
+      "task_phu_trach",
+      "task_id",
+      subtaskId,
+      assigneeIds
+    );
+  } catch (syncError) {
+    // Xem chú thích tương ứng trong createWorkTask() — compensating delete, không
+    // phải RPC transaction thật.
+    await supabase.from("task").delete().eq("id", subtaskId);
+    throw syncError;
+  }
 
   const subtask = await getSubtask(supabase, subtaskId);
   if (!subtask) throw new ApiException("Không thể đọc lại task vừa tạo.", 500);
@@ -1946,6 +2069,15 @@ export async function uploadTaskReportFile(
   return path;
 }
 
+export async function removeTaskReportFiles(
+  supabase: ApiSupabaseClient,
+  paths: string[]
+): Promise<void> {
+  if (paths.length === 0) return;
+  const { error } = await supabase.storage.from(TASK_REPORT_BUCKET).remove(paths);
+  throwDatabaseError(error);
+}
+
 const SUBTASK_REPORT_SELECT =
   "id,task_id,nguoi_bao_cao_id,noi_dung,tien_do,created_at";
 
@@ -2126,19 +2258,21 @@ export async function createSubtaskReport(
 
 /** Xác thực người gọi API hiện tại có role admin trong bảng tài khoản. */
 export async function assertAdminAccount(supabase: ApiSupabaseClient): Promise<void> {
-  const authUserId = await resolveAuthUserId(supabase);
-  if (!authUserId) throw new ApiException("Bạn cần đăng nhập để thực hiện thao tác này.", 401);
+  await measureApiTiming("auth", async () => {
+    const authUserId = await resolveAuthUserId(supabase);
+    if (!authUserId) throw new ApiException("Bạn cần đăng nhập để thực hiện thao tác này.", 401);
 
-  const { data, error } = await supabase
-    .from("tai_khoan")
-    .select("role")
-    .eq("auth_user_id", authUserId)
-    .maybeSingle();
-  throwDatabaseError(error);
+    const { data, error } = await supabase
+      .from("tai_khoan")
+      .select("role")
+      .eq("auth_user_id", authUserId)
+      .maybeSingle();
+    throwDatabaseError(error);
 
-  if (!data || data.role !== "admin") {
-    throw new ApiException("Chỉ quản trị viên mới được thực hiện thao tác này.", 403);
-  }
+    if (!data || data.role !== "admin") {
+      throw new ApiException("Chỉ quản trị viên mới được thực hiện thao tác này.", 403);
+    }
+  });
 }
 
 /**

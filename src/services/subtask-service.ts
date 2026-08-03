@@ -66,7 +66,10 @@ export const subtaskService = {
   },
 
   /** Tải một trang task từ server, có thể lọc theo dự án và nhiều người thực hiện. */
-  async getSubtasksPage(filters: SubtaskListFilters): Promise<SubtaskPage> {
+  async getSubtasksPage(
+    filters: SubtaskListFilters,
+    options?: { signal?: AbortSignal }
+  ): Promise<SubtaskPage> {
     const params = new URLSearchParams();
     if (filters.search) params.set("search", filters.search);
     if (filters.workTaskId) params.set("workTaskId", filters.workTaskId);
@@ -83,7 +86,9 @@ export const subtaskService = {
     if (filters.overdueOnly) params.set("overdueOnly", "true");
     params.set("page", String(filters.page));
     params.set("pageSize", String(filters.pageSize));
-    return apiClient.get<SubtaskPage>(`/subtasks?${params.toString()}`);
+    return apiClient.get<SubtaskPage>(`/subtasks?${params.toString()}`, {
+      signal: options?.signal,
+    });
   },
 
   async getSubtaskById(id: string): Promise<Subtask | null> {
@@ -94,8 +99,10 @@ export const subtaskService = {
     return apiClient.get<Subtask[]>(`/tasks/${workTaskId}/subtasks`);
   },
 
-  async createSubtask(input: SubtaskInput): Promise<Subtask> {
-    return apiClient.post<Subtask>("/subtasks", input);
+  async createSubtask(input: SubtaskInput, options?: { idempotencyKey?: string }): Promise<Subtask> {
+    return apiClient.post<Subtask>("/subtasks", input, {
+      headers: options?.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : undefined,
+    });
   },
 
   async updateSubtask(

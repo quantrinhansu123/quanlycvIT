@@ -43,6 +43,8 @@ import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 import { DetailAttachments } from "@/components/tasks/DetailAttachments";
 import { useCurrentAccount } from "@/hooks/useCurrentAccount";
+import { useSessionDataCache } from "@/components/providers/SessionDataCacheProvider";
+import { CACHE_RESOURCE } from "@/lib/client-cache/resources";
 
 const SubtaskFormModal = dynamic(
   () => import("@/components/subtasks/SubtaskFormModal").then((mod) => mod.SubtaskFormModal),
@@ -83,6 +85,7 @@ export function SubtaskDetailView({
   const router = useRouter();
   const { notify } = useFeedback();
   const { account } = useCurrentAccount();
+  const cache = useSessionDataCache();
   const [subtask, setSubtask] = useState<Subtask | null>(initialSubtask);
   const [workTasks, setWorkTasks] = useState<WorkTask[]>(initialWorkTasks);
   const [reports, setReports] = useState<SubtaskReport[]>(initialReports);
@@ -146,6 +149,10 @@ export function SubtaskDetailView({
       if (!updated) throw new Error("Task không tồn tại hoặc đã bị xóa.");
       setSubtask(updated);
       notify({ type: "success", title: "Đã cập nhật Task" });
+      // Đổi ưu tiên/người thực hiện nhanh không đi qua load() — xóa cache list task
+      // con + list công việc (tiến độ công việc cha tính từ trung bình các task con).
+      cache.invalidate(CACHE_RESOURCE.subtasksList);
+      cache.invalidate(CACHE_RESOURCE.tasksList);
     } catch (updateError) {
       notify({
         type: "error",
@@ -167,6 +174,8 @@ export function SubtaskDetailView({
       const accepted = await subtaskService.acceptSubtask(subtask.id);
       setSubtask(accepted);
       window.dispatchEvent(new CustomEvent("app:notifications-changed"));
+      cache.invalidate(CACHE_RESOURCE.subtasksList);
+      cache.invalidate(CACHE_RESOURCE.tasksList);
       notify({
         type: "success",
         title: "Đã xác nhận nhận Task",
@@ -534,6 +543,8 @@ export function SubtaskDetailView({
           onSaved={() => {
             setEditing(false);
             load();
+            cache.invalidate(CACHE_RESOURCE.subtasksList);
+            cache.invalidate(CACHE_RESOURCE.tasksList);
           }}
         />
       )}
@@ -555,6 +566,8 @@ export function SubtaskDetailView({
           onSubmitted={() => {
             setTab("reports");
             load();
+            cache.invalidate(CACHE_RESOURCE.subtasksList);
+            cache.invalidate(CACHE_RESOURCE.tasksList);
           }}
         />
       )}

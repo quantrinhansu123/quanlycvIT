@@ -46,6 +46,8 @@ import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 import { DetailAttachments } from "@/components/tasks/DetailAttachments";
 import { TaskPriorityBadge, TaskStatusBadge } from "@/components/tasks/TaskBadges";
+import { useSessionDataCache } from "@/components/providers/SessionDataCacheProvider";
+import { CACHE_RESOURCE } from "@/lib/client-cache/resources";
 
 const TaskFormModal = dynamic(
   () => import("@/components/tasks/TaskFormModal").then((mod) => mod.TaskFormModal),
@@ -87,6 +89,7 @@ export function TaskDetailView({
 }: TaskDetailViewProps) {
   const router = useRouter();
   const { notify } = useFeedback();
+  const cache = useSessionDataCache();
   const [task, setTask] = useState<WorkTask | null>(initialTask);
   const [projects, setProjects] = useState<Project[]>(initialProjects);
   const [allTasks, setAllTasks] = useState<WorkTask[]>(initialAllTasks);
@@ -159,6 +162,10 @@ export function TaskDetailView({
       }
       setTask(updated);
       notify({ type: "success", title: "Đã cập nhật công việc" });
+      // Đổi ưu tiên/người phụ trách nhanh không đi qua load() nên phải tự xóa
+      // cache list công việc + directory phụ thuộc (dropdown "tiền đề" ở trang khác).
+      cache.invalidate(CACHE_RESOURCE.tasksList);
+      cache.invalidate(CACHE_RESOURCE.directoryTasks);
     } catch (updateError) {
       notify({
         type: "error",
@@ -546,6 +553,11 @@ export function TaskDetailView({
           onSaved={() => {
             setEditing(false);
             load();
+            // Sửa công việc có thể đổi dự án/tiến độ/tên — xóa cache list công việc,
+            // directory phụ thuộc, và list dự án (thẻ dự án hiển thị stats.total/done).
+            cache.invalidate(CACHE_RESOURCE.tasksList);
+            cache.invalidate(CACHE_RESOURCE.directoryTasks);
+            cache.invalidate(CACHE_RESOURCE.projectsList);
           }}
         />
       )}

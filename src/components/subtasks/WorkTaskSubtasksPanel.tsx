@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
   Download,
@@ -30,6 +29,8 @@ import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 import { exportTablePdf } from "@/lib/pdf-export";
 import { cn, formatDateVN } from "@/lib/utils";
+import { useSessionDataCache } from "@/components/providers/SessionDataCacheProvider";
+import { CACHE_RESOURCE } from "@/lib/client-cache/resources";
 
 const SubtaskFormModal = dynamic(
   () => import("@/components/subtasks/SubtaskFormModal").then((mod) => mod.SubtaskFormModal),
@@ -60,9 +61,9 @@ export function WorkTaskSubtasksPanel({
   members,
   onSubtasksChanged,
 }: WorkTaskSubtasksPanelProps) {
-  const router = useRouter();
   const { confirm, notify } = useFeedback();
   const { account } = useCurrentAccount();
+  const cache = useSessionDataCache();
   const isAdmin = account?.role === "admin";
   const isMember = account?.role === "member";
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
@@ -139,6 +140,17 @@ export function WorkTaskSubtasksPanel({
     [currentPage, pageSize, subtasks]
   );
 
+  /**
+   * Panel này tự fetch riêng (không qua SessionDataCache) — mọi thay đổi task con
+   * (tạo/sửa/xóa/duyệt/xác nhận/báo cáo) phải tự xóa cache list task con của trang
+   * chính + list công việc (tiến độ công việc cha tính theo trung bình các task con),
+   * theo ma trận invalidation GĐ6 ("Báo cáo/duyệt task -> công việc cha").
+   */
+  function invalidateSharedCaches() {
+    cache.invalidate(CACHE_RESOURCE.subtasksList);
+    cache.invalidate(CACHE_RESOURCE.tasksList);
+  }
+
   function toggleSelect(id: string) {
     setSelectedIds((current) =>
       current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
@@ -177,6 +189,7 @@ export function WorkTaskSubtasksPanel({
         title: "Đã xóa task",
         description: `Task “${subtask.title}” đã được xóa.`,
       });
+      invalidateSharedCaches();
       onSubtasksChanged();
     } catch (deleteError) {
       notify({
@@ -199,6 +212,7 @@ export function WorkTaskSubtasksPanel({
         title: "Đã duyệt task",
         description: `Task “${subtask.title}” đã chuyển sang Đã hoàn thành.`,
       });
+      invalidateSharedCaches();
       onSubtasksChanged();
     } catch (approveError) {
       notify({
@@ -221,6 +235,7 @@ export function WorkTaskSubtasksPanel({
         title: "Đã xác nhận nhận Task",
         description: `Task “${subtask.title}” đã chuyển sang Đang làm.`,
       });
+      invalidateSharedCaches();
       onSubtasksChanged();
     } catch (acceptError) {
       notify({
@@ -378,9 +393,6 @@ export function WorkTaskSubtasksPanel({
             selectedIds={selectedIds}
             onToggleSelect={toggleSelect}
             onToggleSelectAll={toggleSelectAll}
-            onOpenSubtask={(subtask) =>
-              router.push(`/quan-ly-cong-viec/danh-sach-task/${subtask.id}`)
-            }
             onReport={setReportDrawer}
             onViewReports={(subtask) => setQuickView({ subtask, tab: "reports" })}
             onEdit={(subtask) => setFormModal({ mode: "edit", subtask })}
@@ -402,9 +414,6 @@ export function WorkTaskSubtasksPanel({
                 subtask={subtask}
                 workTask={workTask}
                 assignee={membersById.get(subtask.assigneeId)}
-                onOpen={(subtask) =>
-                  router.push(`/quan-ly-cong-viec/danh-sach-task/${subtask.id}`)
-                }
                 onReport={setReportDrawer}
                 onViewReports={(item) => setQuickView({ subtask: item, tab: "reports" })}
                 onEdit={(item) => setFormModal({ mode: "edit", subtask: item })}
@@ -451,6 +460,7 @@ export function WorkTaskSubtasksPanel({
                 : [saved, ...current];
             });
             setFormModal(null);
+            invalidateSharedCaches();
             onSubtasksChanged();
           }}
         />
@@ -465,6 +475,7 @@ export function WorkTaskSubtasksPanel({
           onClose={() => setQuickView(null)}
           onReportAdded={() => {
             loadSubtasks(filters);
+            invalidateSharedCaches();
             onSubtasksChanged();
           }}
         />
@@ -486,6 +497,7 @@ export function WorkTaskSubtasksPanel({
           onClose={() => setReportDrawer(null)}
           onSubmitted={() => {
             loadSubtasks(filters);
+            invalidateSharedCaches();
             onSubtasksChanged();
           }}
         />

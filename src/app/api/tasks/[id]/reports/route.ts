@@ -5,6 +5,7 @@ import {
 } from "@/lib/api/response";
 import { createApiSupabaseClient } from "@/lib/supabase/api";
 import { listTaskReports } from "@/lib/supabase/data";
+import { beginApiObservation } from "@/lib/api/observability";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -20,7 +21,8 @@ export async function GET(request: Request, { params }: RouteParams) {
   }
 }
 
-export async function POST() {
+export async function POST(request: Request) {
+  beginApiObservation(request);
   return handleApiError(
     new ApiException(
       "Tiến độ công việc được tính tự động từ các Task. Chỉ được báo cáo tiến độ ở cấp Task.",

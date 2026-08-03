@@ -10,6 +10,8 @@ import {
   type SubtaskFilters,
 } from "@/lib/supabase/data";
 import type { TaskPriority, TaskStatus } from "@/types/task";
+import type { Subtask } from "@/types/subtask";
+import { readIdempotencyKey, withIdempotency } from "@/lib/supabase/idempotency";
 
 function filtersFromRequest(request: NextRequest): SubtaskFilters {
   const params = request.nextUrl.searchParams;
@@ -68,9 +70,20 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: Request) {
   try {
+    const supabase = createApiSupabaseClient(request);
+    // Route này không giới hạn theo vai trò (khác /api/projects, /api/tasks) —
+    // giữ nguyên hành vi cũ, chỉ thêm requireRequestAccount để lấy accountId cho
+    // idempotency; quyền tạo task con vẫn do assertWorkTaskAssignees trong
+    // createSubtask() quyết định như trước.
+    const access = await requireRequestAccount(supabase);
+    const idempotencyKey = readIdempotencyKey(request);
     const input = parseSubtaskInput(await readJsonObject(request));
-    const subtask = await createSubtask(createApiSupabaseClient(request), input);
-    return apiSuccess(subtask, 201, "Tạo task thành công.");
+    const { status, body } = await withIdempotency<Subtask>(
+      supabase,
+      { accountId: access.id, idempotencyKey, scope: "create-subtask" },
+      async () => ({ status: 201, body: await createSubtask(supabase, input) })
+    );
+    return apiSuccess(body, status, "Tạo task thành công.");
   } catch (error) {
     return handleApiError(error);
   }

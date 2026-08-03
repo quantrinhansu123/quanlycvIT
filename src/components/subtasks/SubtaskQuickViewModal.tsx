@@ -14,7 +14,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { Subtask, SubtaskReport } from "@/types/subtask";
-import type { WorkTask } from "@/types/task";
+import type { WorkTaskDirectoryItem } from "@/types/task";
 import type { ProjectMember } from "@/types/project";
 import { subtaskService } from "@/services/subtask-service";
 import { Button } from "@/components/ui/Button";
@@ -30,7 +30,7 @@ type QuickViewTab = "info" | "reports" | "timeline";
 
 interface SubtaskQuickViewModalProps {
   subtask: Subtask;
-  workTask?: WorkTask;
+  workTask?: WorkTaskDirectoryItem;
   assignee?: ProjectMember;
   initialTab?: QuickViewTab;
   onClose: () => void;

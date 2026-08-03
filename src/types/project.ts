@@ -74,6 +74,12 @@ export interface Project {
   images: string[];
 }
 
+/** Payload tối giản cho bộ lọc/form chọn dự án; không mang mô tả, tệp hay thống kê. */
+export type ProjectDirectoryItem = Pick<
+  Project,
+  "id" | "code" | "name" | "color" | "startDate" | "endDate" | "managers" | "members"
+>;
+
 export interface ProjectInput {
   name: string;
   code: string;

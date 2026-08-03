@@ -8,6 +8,7 @@ import { createApiSupabaseClient } from "@/lib/supabase/api";
 import {
   createSubtaskReport,
   listSubtaskReports,
+  removeTaskReportFiles,
   uploadTaskReportFile,
   type TaskReportAttachmentInput,
 } from "@/lib/supabase/data";
@@ -15,6 +16,7 @@ import {
   TASK_REPORT_IMAGE_MIME_TYPES,
   TASK_REPORT_MAX_FILE_SIZE,
 } from "@/types/task";
+import { runUploadBatch } from "@/lib/upload-concurrency";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -70,31 +72,63 @@ export async function POST(request: Request, { params }: RouteParams) {
     const files = formData
       .getAll("files")
       .filter((entry): entry is File => entry instanceof File);
+    if (images.length > 10 || files.length > 10) {
+      throw new ApiException("Mỗi báo cáo chỉ được đính kèm tối đa 10 ảnh và 10 tệp.", 400);
+    }
     for (const image of images) assertFileValid(image, true);
     for (const file of files) assertFileValid(file, false);
 
     const supabase = createApiSupabaseClient(request);
-    const attachments: TaskReportAttachmentInput[] = await Promise.all([
-      ...images.map(async (file) => ({
-        kind: "image" as const,
-        fileName: file.name,
-        path: await uploadTaskReportFile(supabase, id, file),
-        mimeType: file.type || undefined,
-        size: file.size,
+    const attachments: TaskReportAttachmentInput[] = [];
+    const uploadResult = await runUploadBatch([
+      ...images.map((file, index) => ({
+        id: `image:${index}`,
+        upload: async () => {
+          attachments.push({
+            kind: "image",
+            fileName: file.name,
+            path: await uploadTaskReportFile(supabase, id, file),
+            mimeType: file.type || undefined,
+            size: file.size,
+          });
+        },
       })),
-      ...files.map(async (file) => ({
-        kind: "file" as const,
-        fileName: file.name,
-        path: await uploadTaskReportFile(supabase, id, file),
-        mimeType: file.type || undefined,
-        size: file.size,
+      ...files.map((file, index) => ({
+        id: `file:${index}`,
+        upload: async () => {
+          attachments.push({
+            kind: "file",
+            fileName: file.name,
+            path: await uploadTaskReportFile(supabase, id, file),
+            mimeType: file.type || undefined,
+            size: file.size,
+          });
+        },
       })),
     ]);
+    if (uploadResult.failures.length) {
+      try {
+        await removeTaskReportFiles(supabase, attachments.map((attachment) => attachment.path));
+      } catch (cleanupError) {
+        console.error("Cannot clean up partial task report uploads:", cleanupError);
+      }
+      throw uploadResult.failures[0].reason;
+    }
 
-    const report = await createSubtaskReport(supabase, id, {
-      ...fields,
-      attachments,
-    });
+    let report;
+    try {
+      report = await createSubtaskReport(supabase, id, {
+        ...fields,
+        attachments,
+      });
+    } catch (createError) {
+      try {
+        await removeTaskReportFiles(supabase, attachments.map((attachment) => attachment.path));
+      } catch (cleanupError) {
+        console.error("Cannot clean up task report uploads after save failure:", cleanupError);
+      }
+      throw createError;
+    }
     return apiSuccess(report, 201, "Gửi báo cáo tiến độ task thành công.");
   } catch (error) {
     return handleApiError(error);

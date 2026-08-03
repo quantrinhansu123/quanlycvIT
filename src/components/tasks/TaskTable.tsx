@@ -3,11 +3,12 @@
 import { CalendarDays, Pencil, Trash2 } from "lucide-react";
 import type { WorkTask } from "@/types/task";
 import { isTaskOverdue } from "@/types/task";
-import type { Project, ProjectMember } from "@/types/project";
+import type { ProjectDirectoryItem, ProjectMember } from "@/types/project";
 import { Avatar, AvatarStack } from "@/components/ui/Avatar";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { TaskPriorityBadge, TaskStatusBadge, OverdueTag } from "@/components/tasks/TaskBadges";
 import { ActionIconButton } from "@/components/ui/ActionIconButton";
+import { IntentPrefetchLink } from "@/components/navigation/IntentPrefetchLink";
 import {
   taskColumnWidths,
   WORK_ITEM_PROGRESS_CLASS,
@@ -18,12 +19,11 @@ import { formatDateVN } from "@/lib/utils";
 
 interface TaskTableProps {
   tasks: WorkTask[];
-  projectsById: Map<string, Project>;
+  projectsById: Map<string, ProjectDirectoryItem>;
   membersById: Map<string, ProjectMember>;
   selectedIds: string[];
   onToggleSelect: (id: string) => void;
   onToggleSelectAll: () => void;
-  onOpenTask: (task: WorkTask) => void;
   onEdit: (task: WorkTask) => void;
   onDelete: (task: WorkTask) => void;
   hideProjectColumn?: boolean;
@@ -37,7 +37,6 @@ export function TaskTable({
   selectedIds,
   onToggleSelect,
   onToggleSelectAll,
-  onOpenTask,
   onEdit,
   onDelete,
   hideProjectColumn = false,
@@ -93,13 +92,12 @@ export function TaskTable({
                   />
                 </td>}
                 <td className="min-w-0 px-2 py-3 align-top">
-                  <button
-                    type="button"
-                    onClick={() => onOpenTask(task)}
+                  <IntentPrefetchLink
+                    href={`/quan-ly-cong-viec/danh-sach-cong-viec/${task.id}`}
                     className={WORK_ITEM_TITLE_CLASS}
                   >
                     {task.title}
-                  </button>
+                  </IntentPrefetchLink>
                   {task.description && (
                     <p className="mt-0.5 truncate text-xs text-gray-400">{task.description}</p>
                   )}

@@ -57,10 +57,10 @@ export function EmployeeDetailPage({ employeeId }: { employeeId: string }) {
     try {
       const [employee, directory] = await Promise.all([
         accountService.getById(employeeId),
-        accountService.getAll(),
+        accountService.getDepartments(),
       ]);
       setAccount(employee);
-      setDepartments(directory.departments);
+      setDepartments(directory);
     } catch (error) {
       notify({
         type: "error",

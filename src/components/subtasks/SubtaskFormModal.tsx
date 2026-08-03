@@ -13,7 +13,7 @@ import type {
   TaskFileAttachment,
   TaskLinkAttachment,
 } from "@/types/subtask";
-import { TASK_PRIORITY_OPTIONS, type WorkTask } from "@/types/task";
+import { TASK_PRIORITY_OPTIONS, type WorkTaskDirectoryItem } from "@/types/task";
 import type { ProjectMember } from "@/types/project";
 import { subtaskService } from "@/services/subtask-service";
 import { toDateInputValue, cn } from "@/lib/utils";
@@ -23,11 +23,15 @@ import { SingleSelectDropdown } from "@/components/ui/SingleSelectDropdown";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 import { TaskAttachmentFields } from "@/components/tasks/TaskAttachmentFields";
+import { useCurrentAccount } from "@/hooks/useCurrentAccount";
+import { buildFormDraftKey, useVersionedFormDraft } from "@/hooks/useVersionedFormDraft";
+import { FormDraftBanner, RememberDraftToggle } from "@/components/ui/FormDraftBanner";
+import { runUploadBatch } from "@/lib/upload-concurrency";
 
 interface SubtaskFormModalProps {
   mode: "create" | "edit";
   subtask?: Subtask;
-  workTasks: WorkTask[];
+  workTasks: WorkTaskDirectoryItem[];
   members: ProjectMember[];
   defaultWorkTaskId?: string;
   onClose: () => void;
@@ -48,6 +52,12 @@ interface FormState {
   links: TaskLinkAttachment[];
   images: string[];
 }
+
+/** Phần của FormState lưu được vào bản nháp (GĐ7) — loại `files`/`links`/`images`. */
+type SubtaskDraftData = Pick<
+  FormState,
+  "title" | "description" | "workTaskId" | "assigneeIds" | "priority" | "startDate" | "dueDate" | "progress" | "tagsText"
+>;
 
 interface PendingTaskImage {
   id: string;
@@ -106,7 +116,7 @@ function isValidHttpUrl(value: string): boolean {
 
 function buildInitialState(
   subtask: Subtask | undefined,
-  workTasks: WorkTask[],
+  workTasks: WorkTaskDirectoryItem[],
   defaultWorkTaskId?: string
 ): FormState {
   if (subtask) {
@@ -157,7 +167,7 @@ function WorkTaskSelect({
   onChange,
   invalid,
 }: {
-  options: WorkTask[];
+  options: WorkTaskDirectoryItem[];
   value: string;
   onChange: (id: string) => void;
   invalid?: boolean;
@@ -299,6 +309,19 @@ export function SubtaskFormModal({
   onSaved,
 }: SubtaskFormModalProps) {
   const { notify } = useFeedback();
+  const { account } = useCurrentAccount();
+  const draftStorageKey = account
+    ? buildFormDraftKey({ accountId: account.id, formType: "subtask", mode, entityId: subtask?.id })
+    : null;
+  const { draft, scheduleSave, clearDraft, persistent, setPersistent } = useVersionedFormDraft<SubtaskDraftData>({
+    storageKey: draftStorageKey,
+    entityVersion: subtask?.updatedAt,
+  });
+  const [draftBannerDismissed, setDraftBannerDismissed] = useState(false);
+  // Xem chú thích tương ứng trong ProjectFormModal.tsx — GĐ9 (idempotency).
+  const [createIdempotencyKey] = useState<string | undefined>(() =>
+    mode === "create" ? crypto.randomUUID() : undefined
+  );
   const [form, setForm] = useState<FormState>(() =>
     buildInitialState(subtask, workTasks, defaultWorkTaskId)
   );
@@ -322,6 +345,31 @@ export function SubtaskFormModal({
   useEffect(() => {
     resizeDescriptionTextarea(descriptionRef.current);
   }, []);
+
+  useEffect(() => {
+    scheduleSave({
+      title: form.title,
+      description: form.description,
+      workTaskId: form.workTaskId,
+      assigneeIds: form.assigneeIds,
+      priority: form.priority,
+      startDate: form.startDate,
+      dueDate: form.dueDate,
+      progress: form.progress,
+      tagsText: form.tagsText,
+    });
+  }, [
+    form.title,
+    form.description,
+    form.workTaskId,
+    form.assigneeIds,
+    form.priority,
+    form.startDate,
+    form.dueDate,
+    form.progress,
+    form.tagsText,
+    scheduleSave,
+  ]);
 
   useEffect(() => {
     pendingImagesRef.current = pendingImages;
@@ -548,10 +596,35 @@ export function SubtaskFormModal({
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const [uploadedImages, uploadedFiles] = await Promise.all([
-        Promise.all(pendingImages.map((image) => subtaskService.uploadImage(image.file))),
-        Promise.all(pendingFiles.map((pending) => subtaskService.uploadFile(pending.file))),
+      const uploadedImages: string[] = [];
+      const uploadedFiles: TaskFileAttachment[] = [];
+      const uploadResult = await runUploadBatch([
+        ...pendingImages.map((image) => ({
+          id: image.id,
+          upload: async () => { uploadedImages.push(await subtaskService.uploadImage(image.file)); },
+        })),
+        ...pendingFiles.map((pending) => ({
+          id: pending.id,
+          upload: async () => { uploadedFiles.push(await subtaskService.uploadFile(pending.file)); },
+        })),
       ]);
+      const uploadedIds = new Set(uploadResult.succeededIds);
+      if (uploadedImages.length || uploadedFiles.length) {
+        setForm((current) => ({
+          ...current,
+          images: [...current.images, ...uploadedImages],
+          files: [...current.files, ...uploadedFiles],
+        }));
+        setPendingImages((current) => current.filter((item) => {
+          if (!uploadedIds.has(item.id)) return true;
+          URL.revokeObjectURL(item.previewUrl);
+          return false;
+        }));
+        setPendingFiles((current) => current.filter((item) => !uploadedIds.has(item.id)));
+      }
+      if (uploadResult.failures.length) {
+        throw new Error(`Không thể tải ${uploadResult.failures.length} tệp. Các tệp đã tải xong được giữ lại; bấm Lưu để thử lại tệp lỗi.`);
+      }
       const input: SubtaskInput = {
         title: form.title.trim(),
         description: form.description || undefined,
@@ -571,13 +644,14 @@ export function SubtaskFormModal({
       };
       const saved = mode === "edit" && subtask
         ? await subtaskService.updateSubtask(subtask.id, input)
-        : await subtaskService.createSubtask(input);
+        : await subtaskService.createSubtask(input, { idempotencyKey: createIdempotencyKey });
       if (!saved) throw new Error("Không tìm thấy task để cập nhật.");
       notify({
         type: "success",
         title: mode === "edit" ? "Đã cập nhật task" : "Đã tạo task",
         description: `Task “${input.title}” đã được lưu thành công.`,
       });
+      clearDraft();
       onSaved(saved);
     } catch (error) {
       const message = getErrorMessage(error, "Không thể lưu task. Vui lòng thử lại.");
@@ -618,6 +692,21 @@ export function SubtaskFormModal({
         </div>
 
         <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
+          {draft && !draftBannerDismissed && (
+            <FormDraftBanner
+              savedAt={draft.savedAt}
+              conflict={draft.conflict}
+              onRestore={() => {
+                setForm((prev) => ({ ...prev, ...draft.data }));
+                setDraftBannerDismissed(true);
+              }}
+              onDiscard={() => {
+                clearDraft();
+                setDraftBannerDismissed(true);
+              }}
+            />
+          )}
+
           {(workTasks.length === 0 || members.length === 0) && (
             <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
               {workTasks.length === 0
@@ -810,21 +899,24 @@ export function SubtaskFormModal({
           {submitError && <p className="text-sm text-rose-500">{submitError}</p>}
         </div>
 
-        <div className="flex shrink-0 items-center justify-end gap-3 border-t border-gray-100 px-6 py-4">
-          <Button type="button" variant="secondary" onClick={onClose} disabled={submitting}>
-            Hủy
-          </Button>
-          <Button type="submit" disabled={submitting || workTasks.length === 0 || members.length === 0}>
-            {submitting
-              ? "Đang lưu..."
-              : workTasks.length === 0
-                ? "Chưa có công việc"
-                : members.length === 0
-                  ? "Chưa có nhân sự"
-                  : mode === "edit"
-                    ? "Cập nhật"
-                    : "Tạo mới"}
-          </Button>
+        <div className="flex shrink-0 items-center justify-between gap-3 border-t border-gray-100 px-6 py-4">
+          {setPersistent && <RememberDraftToggle checked={persistent} onChange={setPersistent} />}
+          <div className="flex items-center gap-3">
+            <Button type="button" variant="secondary" onClick={onClose} disabled={submitting}>
+              Hủy
+            </Button>
+            <Button type="submit" disabled={submitting || workTasks.length === 0 || members.length === 0}>
+              {submitting
+                ? "Đang lưu..."
+                : workTasks.length === 0
+                  ? "Chưa có công việc"
+                  : members.length === 0
+                    ? "Chưa có nhân sự"
+                    : mode === "edit"
+                      ? "Cập nhật"
+                      : "Tạo mới"}
+            </Button>
+          </div>
         </div>
       </form>
     </div>

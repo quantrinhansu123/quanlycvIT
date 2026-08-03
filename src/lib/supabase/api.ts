@@ -2,6 +2,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { ApiException } from "@/lib/api/response";
+import { beginApiObservation, observedDatabaseFetch } from "@/lib/api/observability";
 
 /**
  * `bearerToken` giữ lại JWT gốc từ header `Authorization` để `requireRequestAccount`/
@@ -13,6 +14,7 @@ import { ApiException } from "@/lib/api/response";
 export type ApiSupabaseClient = SupabaseClient & { bearerToken?: string };
 
 export function createApiSupabaseClient(request: Request): ApiSupabaseClient {
+  beginApiObservation(request);
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
@@ -32,7 +34,10 @@ export function createApiSupabaseClient(request: Request): ApiSupabaseClient {
       persistSession: false,
       detectSessionInUrl: false,
     },
-    ...(isBearer ? { global: { headers: { Authorization: authorization! } } } : {}),
+    global: {
+      fetch: observedDatabaseFetch,
+      ...(isBearer ? { headers: { Authorization: authorization! } } : {}),
+    },
   });
 
   return Object.assign(client, {

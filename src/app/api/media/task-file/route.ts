@@ -1,4 +1,5 @@
 import { ApiException, apiSuccess, handleApiError } from "@/lib/api/response";
+import { beginApiObservation } from "@/lib/api/observability";
 
 export const runtime = "nodejs";
 
@@ -18,6 +19,7 @@ function configuration() {
 }
 
 export async function POST(request: Request) {
+  beginApiObservation(request);
   try {
     let formData: FormData;
     try {

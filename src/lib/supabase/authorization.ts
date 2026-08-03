@@ -1,6 +1,7 @@
 import type { ApiSupabaseClient } from "@/lib/supabase/api";
 import { ApiException, throwDatabaseError } from "@/lib/api/response";
 import type { AccountRole } from "@/types/account";
+import { measureApiTiming } from "@/lib/api/observability";
 
 export interface RequestAccountAccess {
   id: string;
@@ -73,25 +74,27 @@ export async function resolveAuthUserId(supabase: ApiSupabaseClient): Promise<st
 export async function requireRequestAccount(
   supabase: ApiSupabaseClient
 ): Promise<RequestAccountAccess> {
-  const authUserId = await resolveAuthUserId(supabase);
-  if (!authUserId) {
-    throw new ApiException("Bạn cần đăng nhập để xem dữ liệu công việc.", 401);
-  }
+  return measureApiTiming("auth", async () => {
+    const authUserId = await resolveAuthUserId(supabase);
+    if (!authUserId) {
+      throw new ApiException("Bạn cần đăng nhập để xem dữ liệu công việc.", 401);
+    }
 
-  const { data, error } = await supabase
-    .from("tai_khoan")
-    .select("id,ma_nv,role,status")
-    .eq("auth_user_id", authUserId)
-    .maybeSingle();
-  throwDatabaseError(error);
-  if (!data) throw new ApiException("Không tìm thấy tài khoản nhân viên tương ứng.", 403);
-  if (data.status !== "active") throw new ApiException("Tài khoản này đang bị khóa.", 403);
+    const { data, error } = await supabase
+      .from("tai_khoan")
+      .select("id,ma_nv,role,status")
+      .eq("auth_user_id", authUserId)
+      .maybeSingle();
+    throwDatabaseError(error);
+    if (!data) throw new ApiException("Không tìm thấy tài khoản nhân viên tương ứng.", 403);
+    if (data.status !== "active") throw new ApiException("Tài khoản này đang bị khóa.", 403);
 
-  return {
-    id: data.id as string,
-    employeeCode: data.ma_nv as string,
-    role: data.role as AccountRole,
-  };
+    return {
+      id: data.id as string,
+      employeeCode: data.ma_nv as string,
+      role: data.role as AccountRole,
+    };
+  });
 }
 
 async function hasRelation(

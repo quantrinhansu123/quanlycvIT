@@ -3,12 +3,13 @@
 import { CalendarDays, CheckCircle2, FilePenLine, History, Pencil, Trash2 } from "lucide-react";
 import type { Subtask } from "@/types/subtask";
 import { isSubtaskOverdue } from "@/types/subtask";
-import type { WorkTask } from "@/types/task";
-import type { Project, ProjectMember } from "@/types/project";
+import type { WorkTaskDirectoryItem } from "@/types/task";
+import type { ProjectDirectoryItem, ProjectMember } from "@/types/project";
 import { Avatar, AvatarStack } from "@/components/ui/Avatar";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { TaskPriorityBadge, TaskStatusBadge, OverdueTag } from "@/components/tasks/TaskBadges";
 import { ActionIconButton } from "@/components/ui/ActionIconButton";
+import { IntentPrefetchLink } from "@/components/navigation/IntentPrefetchLink";
 import {
   subtaskColumnWidths,
   WORK_ITEM_PROGRESS_CLASS,
@@ -19,19 +20,18 @@ import { formatDateVN } from "@/lib/utils";
 
 interface SubtaskTableProps {
   subtasks: Subtask[];
-  workTasksById: Map<string, WorkTask>;
+  workTasksById: Map<string, WorkTaskDirectoryItem>;
   membersById: Map<string, ProjectMember>;
   selectedIds: string[];
   onToggleSelect: (id: string) => void;
   onToggleSelectAll: () => void;
-  onOpenSubtask: (subtask: Subtask) => void;
   onReport: (subtask: Subtask) => void;
   onViewReports: (subtask: Subtask) => void;
   onEdit: (subtask: Subtask) => void;
   onDelete: (subtask: Subtask) => void;
   hideWorkTaskColumn?: boolean;
   /** Truyền vào để hiện thêm cột "Dự án" ngay sau cột "Thuộc công việc". */
-  projectsById?: Map<string, Project>;
+  projectsById?: Map<string, ProjectDirectoryItem>;
   /** Chỉ quản trị viên mới thấy thao tác Duyệt khi task đang chờ đánh giá. */
   canApprove?: boolean;
   onApprove?: (subtask: Subtask) => void;
@@ -49,7 +49,6 @@ export function SubtaskTable({
   selectedIds,
   onToggleSelect,
   onToggleSelectAll,
-  onOpenSubtask,
   onReport,
   onViewReports,
   onEdit,
@@ -121,13 +120,12 @@ export function SubtaskTable({
                   />
                 </td>
                 <td className="min-w-0 px-2 py-3 align-top">
-                  <button
-                    type="button"
-                    onClick={() => onOpenSubtask(subtask)}
+                  <IntentPrefetchLink
+                    href={`/quan-ly-cong-viec/danh-sach-task/${subtask.id}`}
                     className={WORK_ITEM_TITLE_CLASS}
                   >
                     {subtask.title}
-                  </button>
+                  </IntentPrefetchLink>
                   {subtask.description && (
                     <p className="mt-0.5 truncate text-xs text-gray-400">{subtask.description}</p>
                   )}

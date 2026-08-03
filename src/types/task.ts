@@ -92,6 +92,12 @@ export interface WorkTask {
   images: string[];
 }
 
+/** Payload tối giản để chọn công việc/quan hệ tiền đề. */
+export type WorkTaskDirectoryItem = Pick<
+  WorkTask,
+  "id" | "title" | "projectId" | "startDate" | "dueDate" | "assignees"
+>;
+
 export interface WorkTaskInput {
   title: string;
   description?: string;

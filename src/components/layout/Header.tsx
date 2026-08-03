@@ -341,6 +341,12 @@ export function Header({ onToggleSidebar, onOpenMobileMenu }: HeaderProps) {
     }
   }
 
+  function prefetchNotification(notification: AppNotification) {
+    if (notification.taskId) {
+      router.prefetch(`/quan-ly-cong-viec/danh-sach-task/${notification.taskId}`);
+    }
+  }
+
   const changeTheme = (mode: ThemeMode) => {
     setThemeMode(mode);
     window.localStorage.setItem("goal-app:theme", mode);
@@ -447,6 +453,8 @@ export function Header({ onToggleSidebar, onOpenMobileMenu }: HeaderProps) {
                       <button
                         type="button"
                         onClick={() => void openNotification(notification)}
+                        onPointerEnter={() => prefetchNotification(notification)}
+                        onFocus={() => prefetchNotification(notification)}
                         className={`relative flex w-full gap-3 px-4 py-3.5 text-left transition hover:bg-gray-50 ${notification.read ? "bg-white" : "bg-brand-50/60"}`}
                       >
                         <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-600">

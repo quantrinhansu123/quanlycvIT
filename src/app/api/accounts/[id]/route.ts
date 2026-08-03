@@ -107,6 +107,44 @@ export async function PUT(request: Request, { params }: RouteParams) {
   }
 }
 
+export async function PATCH(request: Request, { params }: RouteParams) {
+  try {
+    const { id } = await params;
+    const supabase = createApiSupabaseClient(request);
+    assertManagerOrAdmin(await requireRequestAccount(supabase));
+    const body = await readJsonObject(request);
+    const status = body.status;
+    if (status !== "active" && status !== "inactive") {
+      throw new ApiException("Trạng thái tài khoản không hợp lệ.", 400);
+    }
+    const existing = await getAccount(supabase, id);
+    if (!existing) throw new ApiException("Không tìm thấy tài khoản.", 404);
+    const account = await updateAccount(supabase, id, {
+      employeeCode: existing.employeeCode,
+      name: existing.name,
+      phone: existing.phone,
+      address: existing.address,
+      avatarUrl: existing.avatarUrl,
+      birthDate: existing.birthDate,
+      startDate: existing.startDate,
+      endDate: existing.endDate,
+      bankAccount: existing.bankAccount,
+      bankName: existing.bankName,
+      note: existing.note,
+      username: existing.username,
+      email: existing.email,
+      departmentId: existing.departmentId,
+      position: existing.position,
+      role: existing.role,
+      status,
+    });
+    if (!account) throw new ApiException("Không tìm thấy tài khoản.", 404);
+    return apiSuccess(account, 200, "Cập nhật trạng thái thành công.");
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
 export async function DELETE(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;

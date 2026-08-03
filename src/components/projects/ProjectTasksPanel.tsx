@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
   Download,
@@ -28,6 +27,8 @@ import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 import { exportTablePdf } from "@/lib/pdf-export";
 import { cn, formatDateVN } from "@/lib/utils";
+import { useSessionDataCache } from "@/components/providers/SessionDataCacheProvider";
+import { CACHE_RESOURCE } from "@/lib/client-cache/resources";
 
 const TaskFormModal = dynamic(
   () => import("@/components/tasks/TaskFormModal").then((mod) => mod.TaskFormModal),
@@ -50,8 +51,8 @@ export function ProjectTasksPanel({
   onTasksChanged,
   readOnly = false,
 }: ProjectTasksPanelProps) {
-  const router = useRouter();
   const { confirm, notify } = useFeedback();
+  const cache = useSessionDataCache();
   const [tasks, setTasks] = useState<WorkTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -114,6 +115,18 @@ export function ProjectTasksPanel({
     [currentPage, pageSize, tasks]
   );
 
+  /**
+   * Panel này tự fetch riêng (không qua SessionDataCache), nên tạo/sửa/xóa công việc
+   * tại đây phải tự xóa cache của trang danh sách công việc chính + directory phụ
+   * thuộc + danh sách dự án (thẻ dự án hiển thị stats.total/done) — theo ma trận
+   * invalidation GĐ6. `onTasksChanged()` chỉ refetch cục bộ panel này, không đụng cache.
+   */
+  function invalidateSharedCaches() {
+    cache.invalidate(CACHE_RESOURCE.tasksList);
+    cache.invalidate(CACHE_RESOURCE.directoryTasks);
+    cache.invalidate(CACHE_RESOURCE.projectsList);
+  }
+
   function toggleSelect(id: string) {
     setSelectedIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
   }
@@ -145,6 +158,7 @@ export function ProjectTasksPanel({
       setTasks((current) => current.filter((item) => item.id !== task.id));
       setSelectedIds((current) => current.filter((id) => id !== task.id));
       notify({ type: "success", title: "Đã xóa công việc", description: `Công việc “${task.title}” đã được xóa.` });
+      invalidateSharedCaches();
       onTasksChanged();
     } catch (deleteError) {
       notify({
@@ -284,9 +298,6 @@ export function ProjectTasksPanel({
             selectedIds={selectedIds}
             onToggleSelect={toggleSelect}
             onToggleSelectAll={toggleSelectAll}
-            onOpenTask={(task) =>
-              router.push(`/quan-ly-cong-viec/danh-sach-cong-viec/${task.id}`)
-            }
             onEdit={(task) => setFormModal({ mode: "edit", task })}
             onDelete={handleDelete}
             hideProjectColumn
@@ -300,9 +311,6 @@ export function ProjectTasksPanel({
                 task={task}
                 project={project}
                 assignee={membersById.get(task.assigneeId)}
-                onOpen={(task) =>
-                  router.push(`/quan-ly-cong-viec/danh-sach-cong-viec/${task.id}`)
-                }
                 onEdit={(item) => setFormModal({ mode: "edit", task: item })}
                 onDelete={handleDelete}
                 readOnly={readOnly}
@@ -343,6 +351,7 @@ export function ProjectTasksPanel({
                 : [saved, ...current];
             });
             setFormModal(null);
+            invalidateSharedCaches();
             onTasksChanged();
           }}
         />

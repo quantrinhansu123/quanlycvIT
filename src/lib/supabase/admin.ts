@@ -2,6 +2,7 @@ import "server-only";
 
 import { createClient } from "@supabase/supabase-js";
 import { ApiException } from "@/lib/api/response";
+import { observedDatabaseFetch } from "@/lib/api/observability";
 
 export function createAdminSupabaseClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -20,5 +21,6 @@ export function createAdminSupabaseClient() {
       persistSession: false,
       detectSessionInUrl: false,
     },
+    global: { fetch: observedDatabaseFetch },
   });
 }
