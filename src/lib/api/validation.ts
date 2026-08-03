@@ -131,6 +131,11 @@ function taskStatus(body: Record<string, unknown>): TaskStatus {
   return value;
 }
 
+function optionalTaskStatus(body: Record<string, unknown>): TaskStatus | undefined {
+  if (body.status === undefined || body.status === null || body.status === "") return undefined;
+  return taskStatus(body);
+}
+
 function taskPriority(body: Record<string, unknown>): TaskPriority {
   const value = requiredString(body, "priority", "Mức ưu tiên") as TaskPriority;
   if (!TASK_PRIORITIES.has(value)) {
@@ -331,6 +336,7 @@ export function parseSubtaskInput(body: Record<string, unknown>): SubtaskInput {
     description: optionalString(body, "description"),
     workTaskId: requiredString(body, "workTaskId", "Công việc"),
     assigneeIds: assigneeIds(body),
+    status: optionalTaskStatus(body),
     priority: taskPriority(body),
     startDate,
     dueDate,

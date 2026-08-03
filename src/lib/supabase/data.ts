@@ -260,20 +260,35 @@ function toDatabaseStatus(status: TaskStatus): string {
   return status === "inProgress" ? "in_progress" : status;
 }
 
-/**
- * Trạng thái Task con luôn được suy ra từ tiến độ, không nhận từ form.
- * "done" chỉ đạt được qua hành động Duyệt của quản trị viên (xem approveSubtask).
- */
+/** Trạng thái mặc định khi nhân viên gửi báo cáo tiến độ. */
 function deriveSubtaskStatus(progress: number): TaskStatus {
   if (progress >= 100) return "review";
   if (progress > 0) return "inProgress";
   return "todo";
 }
 
+/**
+ * Đồng bộ tiến độ khi quản trị viên đổi trạng thái trực tiếp:
+ * - Cần làm: chưa bắt đầu (0%).
+ * - Đang làm: giữ tiến độ hợp lệ hiện tại; nếu đang ở biên 0/100 thì bắt đầu ở 1%.
+ * - Chờ duyệt/Đã hoàn thành: công việc đã đạt 100%.
+ */
+function progressForSubtaskStatus(status: TaskStatus, currentProgress: number): number {
+  if (status === "todo") return 0;
+  if (status === "review" || status === "done") return 100;
+  return currentProgress > 0 && currentProgress < 100 ? currentProgress : 1;
+}
+
 function normalizeSubtaskStatus(status: string, progress: number): TaskStatus {
   const normalized = toApiStatus(status);
-  if (normalized === "done" && progress === 100) return "done";
-  if (normalized === "inProgress" && progress < 100) return "inProgress";
+  if (
+    normalized === "todo" ||
+    normalized === "inProgress" ||
+    normalized === "review" ||
+    normalized === "done"
+  ) {
+    return normalized;
+  }
   return deriveSubtaskStatus(progress);
 }
 
@@ -1699,6 +1714,13 @@ export async function updateSubtask(
   throwDatabaseError(currentError);
   if (!currentRow) return null;
 
+  const currentProgress = Number(currentRow.tien_do_thuc_te);
+  const nextStatus =
+    input.status ?? normalizeSubtaskStatus(String(currentRow.trang_thai), currentProgress);
+  const nextProgress = input.status
+    ? progressForSubtaskStatus(input.status, currentProgress)
+    : currentProgress;
+
   const [{ ids: assigneeIds }] = await Promise.all([
     resolveAccounts(supabase, input.assigneeIds, "Người phụ trách"),
     assertSubtaskScheduleWithinWorkTask(
@@ -1716,8 +1738,8 @@ export async function updateSubtask(
       subtaskPayload(
         input,
         assigneeIds[0],
-        Number(currentRow.tien_do_thuc_te),
-        normalizeSubtaskStatus(String(currentRow.trang_thai), Number(currentRow.tien_do_thuc_te))
+        nextProgress,
+        nextStatus
       )
     )
     .eq("id", id)
@@ -2245,7 +2267,11 @@ export async function createSubtaskReport(
       .from("task")
       .update({
         tien_do_thuc_te: input.progress,
-        trang_thai: toDatabaseStatus(normalizeSubtaskStatus(subtask.status, input.progress)),
+        trang_thai: toDatabaseStatus(
+          subtask.status === "done" && input.progress === 100
+            ? "done"
+            : deriveSubtaskStatus(input.progress)
+        ),
       })
       .eq("id", subtaskId);
     throwDatabaseError(progressError);
@@ -2277,7 +2303,7 @@ export async function assertAdminAccount(supabase: ApiSupabaseClient): Promise<v
 
 /**
  * Duyệt Task con đã báo cáo tiến độ 100% ("Chờ duyệt") sang "Hoàn thành".
- * Đây là con đường duy nhất để một task đạt trạng thái "done".
+ * Quản trị viên cũng có thể chỉnh trạng thái trực tiếp trong form chỉnh sửa Task.
  */
 export async function approveSubtask(
   supabase: ApiSupabaseClient,

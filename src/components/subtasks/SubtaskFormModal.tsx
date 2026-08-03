@@ -13,7 +13,13 @@ import type {
   TaskFileAttachment,
   TaskLinkAttachment,
 } from "@/types/subtask";
-import { TASK_PRIORITY_OPTIONS, type WorkTaskDirectoryItem } from "@/types/task";
+import {
+  TASK_PRIORITY_OPTIONS,
+  TASK_STATUS_META,
+  TASK_STATUS_OPTIONS,
+  type TaskStatus,
+  type WorkTaskDirectoryItem,
+} from "@/types/task";
 import type { ProjectMember } from "@/types/project";
 import { subtaskService } from "@/services/subtask-service";
 import { toDateInputValue, cn } from "@/lib/utils";
@@ -43,6 +49,7 @@ interface FormState {
   description: string;
   workTaskId: string;
   assigneeIds: string[];
+  status: TaskStatus;
   priority: SubtaskInput["priority"];
   startDate: string;
   dueDate: string;
@@ -56,7 +63,7 @@ interface FormState {
 /** Phần của FormState lưu được vào bản nháp (GĐ7) — loại `files`/`links`/`images`. */
 type SubtaskDraftData = Pick<
   FormState,
-  "title" | "description" | "workTaskId" | "assigneeIds" | "priority" | "startDate" | "dueDate" | "progress" | "tagsText"
+  "title" | "description" | "workTaskId" | "assigneeIds" | "status" | "priority" | "startDate" | "dueDate" | "progress" | "tagsText"
 >;
 
 interface PendingTaskImage {
@@ -96,6 +103,12 @@ const PRIORITY_SELECT_OPTIONS = TASK_PRIORITY_OPTIONS.map((option) => ({
   dotClassName: PRIORITY_DOT_CLASS[option.value],
 }));
 
+const STATUS_SELECT_OPTIONS = TASK_STATUS_OPTIONS.map((option) => ({
+  value: option.value,
+  label: option.label,
+  dotClassName: TASK_STATUS_META[option.value].dot,
+}));
+
 /** Chiều cao tối đa của ô mô tả trước khi hiện thanh cuộn thay vì phình to thêm. */
 const DESCRIPTION_MAX_HEIGHT = 200;
 
@@ -125,6 +138,7 @@ function buildInitialState(
       description: subtask.description ?? "",
       workTaskId: subtask.workTaskId,
       assigneeIds: subtask.assignees.map((member) => member.id),
+      status: subtask.status,
       priority: subtask.priority,
       startDate: toDateInputValue(subtask.startDate),
       dueDate: toDateInputValue(subtask.dueDate),
@@ -142,6 +156,7 @@ function buildInitialState(
     description: "",
     workTaskId,
     assigneeIds: [],
+    status: "todo",
     priority: "low",
     startDate: selectedWorkTask ? toDateInputValue(selectedWorkTask.startDate) : "",
     dueDate: selectedWorkTask ? toDateInputValue(selectedWorkTask.dueDate) : "",
@@ -352,6 +367,7 @@ export function SubtaskFormModal({
       description: form.description,
       workTaskId: form.workTaskId,
       assigneeIds: form.assigneeIds,
+      status: form.status,
       priority: form.priority,
       startDate: form.startDate,
       dueDate: form.dueDate,
@@ -363,6 +379,7 @@ export function SubtaskFormModal({
     form.description,
     form.workTaskId,
     form.assigneeIds,
+    form.status,
     form.priority,
     form.startDate,
     form.dueDate,
@@ -630,6 +647,7 @@ export function SubtaskFormModal({
         description: form.description || undefined,
         workTaskId: form.workTaskId,
         assigneeIds: form.assigneeIds,
+        ...(mode === "edit" && account?.role === "admin" ? { status: form.status } : {}),
         priority: form.priority,
         startDate: form.startDate,
         dueDate: form.dueDate,
@@ -830,15 +848,16 @@ export function SubtaskFormModal({
               />
             </div>
             <div className="flex-1">
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Tiến độ thực tế (%)</label>
-              <input
-                type="number"
-                value={form.progress}
-                readOnly
-                aria-describedby="subtask-progress-help"
-                className="h-10 w-full cursor-not-allowed rounded-lg border border-gray-200 bg-gray-100 px-3 text-sm text-gray-500 outline-none"
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Trạng thái task</label>
+              <SingleSelectDropdown
+                options={STATUS_SELECT_OPTIONS}
+                value={form.status}
+                onChange={(value) =>
+                  setForm((prev) => ({ ...prev, status: value as TaskStatus }))
+                }
+                disabled={mode !== "edit" || account?.role !== "admin"}
+                showSelectionIndicator={false}
               />
-              <p id="subtask-progress-help" className="mt-1 text-xs text-gray-400">Tiến độ chỉ được cập nhật qua Báo cáo tiến độ.</p>
             </div>
           </div>
 

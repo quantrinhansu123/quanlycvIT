@@ -44,7 +44,8 @@ export interface SubtaskInput {
   workTaskId: string;
   /** Danh sách người phụ trách; phần tử đầu tiên là người phụ trách chính. */
   assigneeIds: string[];
-  /** Trạng thái được server tự tính từ tiến độ, không nhận từ form. */
+  /** Chỉ quản trị viên được phép gửi trạng thái khi chỉnh sửa Task. */
+  status?: TaskStatus;
   priority: TaskPriority;
   startDate: string;
   dueDate: string;

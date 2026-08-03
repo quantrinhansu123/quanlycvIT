@@ -34,9 +34,15 @@ export async function GET(request: Request, { params }: RouteParams) {
 export async function PUT(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
+    const supabase = createApiSupabaseClient(request);
+    const access = await requireRequestAccount(supabase);
+    await assertSubtaskReadable(supabase, access, id);
     const input = parseSubtaskInput(await readJsonObject(request));
+    if (input.status !== undefined && access.role !== "admin") {
+      throw new ApiException("Chỉ quản trị viên mới được chỉnh sửa trạng thái task.", 403);
+    }
     const subtask = await updateSubtask(
-      createApiSupabaseClient(request),
+      supabase,
       id,
       input
     );

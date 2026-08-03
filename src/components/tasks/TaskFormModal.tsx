@@ -20,7 +20,6 @@ import { SingleSelectDropdown } from "@/components/ui/SingleSelectDropdown";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 import { TaskAttachmentFields } from "@/components/tasks/TaskAttachmentFields";
-import { TaskStatusBadge } from "@/components/tasks/TaskBadges";
 import { useCurrentAccount } from "@/hooks/useCurrentAccount";
 import { buildFormDraftKey, useVersionedFormDraft } from "@/hooks/useVersionedFormDraft";
 import { FormDraftBanner, RememberDraftToggle } from "@/components/ui/FormDraftBanner";
@@ -734,27 +733,16 @@ export function TaskFormModal({
             )}
           </div>
 
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Trạng thái</label>
-              <div className="flex min-h-11 flex-col items-start justify-center rounded-xl border border-gray-200 bg-gray-50 px-3">
-                <TaskStatusBadge status={form.status} />
-                <span className="mt-1 text-[11px] text-gray-400">
-                  Tự động theo trạng thái các Task
-                </span>
-              </div>
-            </div>
-            <div className="flex-1">
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Mức độ ưu tiên</label>
-              <SingleSelectDropdown
-                options={priorityOptions}
-                value={form.priority}
-                onChange={(value) =>
-                  setForm((prev) => ({ ...prev, priority: value as FormState["priority"] }))
-                }
-                showSelectionIndicator={false}
-              />
-            </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">Mức độ ưu tiên</label>
+            <SingleSelectDropdown
+              options={priorityOptions}
+              value={form.priority}
+              onChange={(value) =>
+                setForm((prev) => ({ ...prev, priority: value as FormState["priority"] }))
+              }
+              showSelectionIndicator={false}
+            />
           </div>
 
           <div className="flex gap-4">
