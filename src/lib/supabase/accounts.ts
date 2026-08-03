@@ -205,6 +205,37 @@ export async function listAccountAnalytics(
   };
 }
 
+const TRANSFER_RECIPIENT_SELECT = "id,ten_nv,so_tai_khoan,ten_ngan_hang";
+
+export interface BankTransferRecipient {
+  id: string;
+  name: string;
+  bankAccount: string;
+  bankName: string;
+}
+
+/** Nhân viên đang hoạt động và đã khai báo STK — dùng cho combobox chuyển khoản QR. */
+export async function listBankTransferRecipients(
+  supabase: ApiSupabaseClient
+): Promise<BankTransferRecipient[]> {
+  const { data, error } = await supabase
+    .from("tai_khoan")
+    .select(TRANSFER_RECIPIENT_SELECT)
+    .eq("status", "active")
+    .not("so_tai_khoan", "is", null)
+    .not("ten_ngan_hang", "is", null)
+    .order("ten_nv");
+  throwDatabaseError(error);
+  return (data ?? [])
+    .map((row) => ({
+      id: String(row.id),
+      name: String(row.ten_nv),
+      bankAccount: String(row.so_tai_khoan),
+      bankName: String(row.ten_ngan_hang),
+    }))
+    .filter((item) => item.bankAccount.trim() && item.bankName.trim());
+}
+
 export async function listAccountDepartments(
   supabase: ApiSupabaseClient
 ): Promise<Department[]> {

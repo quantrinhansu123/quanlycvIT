@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownCircle, ArrowDownUp, ArrowUpCircle, CalendarDays,
-  CircleDollarSign, Download, Eye, FilterX, Gauge,
+  CircleDollarSign, Download, Eye, FilterX, Gauge, Landmark,
   Pencil, Plus, ReceiptText, RefreshCw, Search, Tags, Trash2,
   WalletCards, X,
 } from "lucide-react";
@@ -28,6 +28,7 @@ import type {
 const FinanceTransactionModal = dynamic(() => import("./FinanceTransactionModal").then((mod) => mod.FinanceTransactionModal), { ssr: false, loading: () => <ModalLoadingFallback /> });
 const FinanceTransactionDetailModal = dynamic(() => import("./FinanceTransactionDetailModal").then((mod) => mod.FinanceTransactionDetailModal), { ssr: false, loading: () => <ModalLoadingFallback /> });
 const FinanceCategoryModal = dynamic(() => import("./FinanceCategoryModal").then((mod) => mod.FinanceCategoryModal), { ssr: false, loading: () => <ModalLoadingFallback /> });
+const TransferQrModal = dynamic(() => import("./TransferQrModal").then((mod) => mod.TransferQrModal), { ssr: false, loading: () => <ModalLoadingFallback /> });
 
 type SortKey = "date" | "amount" | "createdAt";
 type DatePreset = "month" | "lastMonth" | "quarter" | "year";
@@ -65,6 +66,7 @@ export function FinanceManagementPage() {
   const [viewing, setViewing] = useState<FinanceTransaction | null>(null);
   const [defaultType, setDefaultType] = useState<FinanceType>("chi");
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [transferModalOpen, setTransferModalOpen] = useState(false);
   const lastTransactionQuery = useRef("");
   const lastSummaryRange = useRef("");
 
@@ -222,7 +224,7 @@ export function FinanceManagementPage() {
       <div className="mx-auto max-w-[1600px] space-y-5">
         <header className="flex flex-col justify-between gap-4 xl:flex-row xl:items-center">
           <div><div className="flex items-center gap-2"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-600 text-white shadow-sm"><WalletCards className="h-5 w-5" /></span><div><h1 className="text-xl font-bold tracking-tight text-gray-950 sm:text-2xl">Quản lý thu chi</h1><p className="text-xs text-gray-500 sm:text-sm">Theo dõi dòng tiền và kiểm soát ngân sách văn phòng</p></div></div></div>
-          <div className="flex flex-wrap items-center gap-2"><Button variant="secondary" onClick={() => setCategoryModalOpen(true)}><Tags className="h-4 w-4" />Danh mục</Button><Button variant="secondary" onClick={() => openNew("thu")} className="text-emerald-700"><ArrowUpCircle className="h-4 w-4" />Thêm khoản thu</Button><Button onClick={() => openNew("chi")}><Plus className="h-4 w-4" />Thêm khoản chi</Button></div>
+          <div className="flex flex-wrap items-center gap-2"><Button variant="secondary" onClick={() => setTransferModalOpen(true)}><Landmark className="h-4 w-4" />Chuyển khoản</Button><Button variant="secondary" onClick={() => setCategoryModalOpen(true)}><Tags className="h-4 w-4" />Danh mục</Button><Button variant="secondary" onClick={() => openNew("thu")} className="text-emerald-700"><ArrowUpCircle className="h-4 w-4" />Thêm khoản thu</Button><Button onClick={() => openNew("chi")}><Plus className="h-4 w-4" />Thêm khoản chi</Button></div>
         </header>
 
         <section className="flex flex-wrap items-center gap-2 rounded-2xl border border-gray-200 bg-white p-2.5 shadow-sm" aria-label="Khoảng thời gian báo cáo">
@@ -301,6 +303,7 @@ export function FinanceManagementPage() {
       {editing && <FinanceTransactionModal transaction={editing === "new" ? undefined : editing} categories={categories} defaultType={defaultType} onClose={() => setEditing(null)} onSave={saveTransaction} />}
       {viewing && <FinanceTransactionDetailModal transaction={viewing} onClose={() => setViewing(null)} onEdit={() => { setViewing(null); setEditing(viewing); }} />}
       {categoryModalOpen && <FinanceCategoryModal categories={categories} onClose={() => setCategoryModalOpen(false)} onSave={saveCategory} onDelete={removeCategory} />}
+      {transferModalOpen && <TransferQrModal onClose={() => setTransferModalOpen(false)} />}
     </div>
   );
 }

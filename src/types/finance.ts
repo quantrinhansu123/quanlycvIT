@@ -8,3 +8,4 @@ export interface FinanceInput { type: FinanceType; amount: number; date: string;
 export interface FinanceSummary { income: number; expense: number; balance: number; series: { date: string; type: FinanceType; amount: number }[]; budgets: { category: FinanceCategory; spent: number }[]; }
 export interface FinanceTransactionPage { items: FinanceTransaction[]; total: number; }
 export interface FinanceDashboardData { categories: FinanceCategory[]; summary: FinanceSummary; transactions: FinanceTransactionPage; }
+export interface FinanceTransferRecipient { id: string; name: string; bankAccount: string; bankName: string; }
