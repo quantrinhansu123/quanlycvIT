@@ -32,7 +32,7 @@ const TransferQrModal = dynamic(() => import("./TransferQrModal").then((mod) => 
 
 type SortKey = "date" | "amount" | "createdAt";
 type DatePreset = "month" | "lastMonth" | "quarter" | "year";
-const EMPTY_SUMMARY: FinanceSummary = { income: 0, expense: 0, balance: 0, series: [], budgets: [] };
+const EMPTY_SUMMARY: FinanceSummary = { income: 0, expense: 0, series: [], budgets: [] };
 const money = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 });
 const compactMoney = new Intl.NumberFormat("vi-VN", { notation: "compact", maximumFractionDigits: 1 });
 const dateFormatter = new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
@@ -236,10 +236,9 @@ export function FinanceManagementPage() {
           <button type="button" onClick={() => void refreshAll()} disabled={refreshing} className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition hover:bg-brand-50 hover:text-brand-600 disabled:opacity-50" title="Tải lại dữ liệu"><RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} /></button>
         </section>
 
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Tổng quan thu chi">
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label="Tổng quan thu chi">
           <SummaryCard loading={loadingSummary} icon={ArrowUpCircle} label="Tổng thu" value={summary.income} tone="income" note={`${chartData.filter((item) => item.income > 0).length} ngày có khoản thu`} />
           <SummaryCard loading={loadingSummary} icon={ArrowDownCircle} label="Tổng chi" value={summary.expense} tone="expense" note={`${chartData.filter((item) => item.expense > 0).length} ngày có khoản chi`} />
-          <SummaryCard loading={loadingSummary} icon={WalletCards} label="Số dư kỳ này" value={summary.balance} tone={summary.balance >= 0 ? "balance" : "expense"} note={summary.balance >= 0 ? "Dòng tiền đang dương" : "Chi đang vượt thu"} />
           <SummaryCard loading={loadingSummary} icon={Gauge} label="Chi trung bình/ngày" value={averageExpense} tone="neutral" note={`Tính trên ${days} ngày`} />
         </section>
 
@@ -308,8 +307,8 @@ export function FinanceManagementPage() {
   );
 }
 
-function SummaryCard({ icon: Icon, label, value, note, tone, loading }: { icon: React.ElementType; label: string; value: number; note: string; tone: "income" | "expense" | "balance" | "neutral"; loading: boolean }) {
-  const styles = { income: "bg-emerald-50 text-emerald-600", expense: "bg-rose-50 text-rose-600", balance: "bg-brand-50 text-brand-600", neutral: "bg-amber-50 text-amber-600" }[tone];
+function SummaryCard({ icon: Icon, label, value, note, tone, loading }: { icon: React.ElementType; label: string; value: number; note: string; tone: "income" | "expense" | "neutral"; loading: boolean }) {
+  const styles = { income: "bg-emerald-50 text-emerald-600", expense: "bg-rose-50 text-rose-600", neutral: "bg-amber-50 text-amber-600" }[tone];
   return <div className="group rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-md"><div className="flex items-start justify-between"><span className={cn("flex h-10 w-10 items-center justify-center rounded-xl transition-transform duration-200 group-hover:scale-105", styles)}><Icon className="h-5 w-5" /></span><span className="text-[10px] font-medium uppercase tracking-wider text-gray-400">{label}</span></div>{loading ? <div className="mt-4 h-7 w-36 animate-pulse rounded bg-gray-100" /> : <p className={cn("mt-3 truncate text-xl font-bold tracking-tight text-gray-950", value < 0 && "text-rose-600")} title={money.format(value)}>{money.format(value)}</p>}<p className="mt-1 text-[11px] text-gray-400">{note}</p></div>;
 }
 
