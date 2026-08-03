@@ -2,14 +2,18 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Landmark, LoaderCircle, X } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 import { SingleSelectDropdown } from "@/components/ui/SingleSelectDropdown";
 import { apiClient } from "@/services/api-client";
 import { getErrorMessage } from "@/lib/errors";
-import { cn } from "@/lib/utils";
-import type { FinanceTransferRecipient } from "@/types/finance";
+import { cn, getAppDateKey } from "@/lib/utils";
+import type { FinanceCategory, FinanceInput, FinanceTransferRecipient } from "@/types/finance";
 
 interface Props {
+  categories: FinanceCategory[];
   onClose: () => void;
+  /** Ghi nhận khoản chi tương ứng sau khi người dùng xác nhận đã chuyển khoản thành công. */
+  onConfirm: (input: FinanceInput) => Promise<void>;
 }
 
 interface VietQrBank {
@@ -18,6 +22,7 @@ interface VietQrBank {
 }
 
 const integerFormatter = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 });
+const money = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 });
 
 function formatMoneyInput(value: number) {
   return value ? integerFormatter.format(value) : "";
@@ -31,7 +36,8 @@ function findBankBin(banks: VietQrBank[], bankName: string): string | undefined 
   return banks.find((bank) => bank.shortName.trim().toLocaleLowerCase("vi") === normalized)?.code;
 }
 
-export function TransferQrModal({ onClose }: Props) {
+export function TransferQrModal({ categories, onClose, onConfirm }: Props) {
+  const expenseCategories = useMemo(() => categories.filter((item) => item.type === "chi"), [categories]);
   const [recipients, setRecipients] = useState<FinanceTransferRecipient[]>([]);
   const [banks, setBanks] = useState<VietQrBank[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,6 +45,10 @@ export function TransferQrModal({ onClose }: Props) {
   const [recipientId, setRecipientId] = useState("");
   const [amount, setAmount] = useState(0);
   const [content, setContent] = useState("");
+  const [categoryId, setCategoryId] = useState(() => expenseCategories[0]?.id ?? "");
+  const [confirming, setConfirming] = useState(false);
+  const [confirmError, setConfirmError] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -81,6 +91,26 @@ export function TransferQrModal({ onClose }: Props) {
     return `https://img.vietqr.io/image/${bankBin}-${recipient.bankAccount}-compact2.png?${params}`;
   }, [amount, bankBin, content, recipient]);
 
+  async function handleConfirmTransfer() {
+    if (!recipient || amount <= 0 || !categoryId) return;
+    setConfirming(true);
+    setConfirmError("");
+    try {
+      await onConfirm({
+        type: "chi",
+        amount,
+        date: getAppDateKey(),
+        categoryId,
+        description: content.trim() || `Chuyển khoản cho ${recipient.name}`,
+      });
+      setConfirmed(true);
+    } catch (error) {
+      setConfirmError(getErrorMessage(error, "Không thể ghi nhận khoản chi. Vui lòng thử lại."));
+    } finally {
+      setConfirming(false);
+    }
+  }
+
   const inputClass = "h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm outline-none transition hover:border-gray-300 focus:border-brand-500 focus:ring-2 focus:ring-brand-100";
 
   return (
@@ -105,7 +135,7 @@ export function TransferQrModal({ onClose }: Props) {
                   onChange={selectRecipient}
                   placeholder={loading ? "Đang tải danh sách..." : "Chọn người nhận"}
                   emptyHint="Chưa có nhân viên nào khai báo số tài khoản"
-                  disabled={loading}
+                  disabled={loading || confirmed}
                   searchable
                   searchPlaceholder="Tìm theo tên..."
                   options={recipients.map((item) => ({
@@ -135,7 +165,8 @@ export function TransferQrModal({ onClose }: Props) {
                 <div className="relative">
                   <input
                     inputMode="numeric"
-                    className={cn(inputClass, "pr-14 text-base font-semibold")}
+                    disabled={confirmed}
+                    className={cn(inputClass, "pr-14 text-base font-semibold disabled:bg-gray-50")}
                     value={formatMoneyInput(amount)}
                     onChange={(event) => setAmount(Number(event.target.value.replace(/\D/g, "")))}
                     placeholder="0"
@@ -145,7 +176,20 @@ export function TransferQrModal({ onClose }: Props) {
               </Field>
 
               <Field label="Nội dung chuyển khoản">
-                <input className={inputClass} maxLength={200} value={content} onChange={(event) => setContent(event.target.value)} placeholder="VD: CK lương tháng 8" />
+                <input className={cn(inputClass, "disabled:bg-gray-50")} disabled={confirmed} maxLength={200} value={content} onChange={(event) => setContent(event.target.value)} placeholder="VD: CK lương tháng 8" />
+              </Field>
+
+              <Field label="Danh mục chi (khi xác nhận đã chuyển)" required>
+                <SingleSelectDropdown
+                  value={categoryId}
+                  onChange={setCategoryId}
+                  placeholder="Chọn danh mục chi"
+                  emptyHint="Chưa có danh mục chi, vào “Danh mục” để thêm"
+                  disabled={confirmed}
+                  searchable
+                  searchPlaceholder="Tìm danh mục..."
+                  options={expenseCategories.map((item) => ({ value: item.id, label: item.name }))}
+                />
               </Field>
 
               {loading && (
@@ -162,9 +206,28 @@ export function TransferQrModal({ onClose }: Props) {
               {recipient && bankBin && amount <= 0 && (
                 <p className="text-center text-xs text-gray-400">Nhập số tiền để hiển thị mã QR.</p>
               )}
+
+              {confirmError && <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-600">{confirmError}</p>}
+              {confirmed && (
+                <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
+                  Đã ghi nhận khoản chi {money.format(amount)} cho {recipient?.name}.
+                </p>
+              )}
             </>
           )}
         </div>
+
+        {!loadError && qrUrl && (
+          <footer className="flex justify-end gap-3 border-t border-gray-100 px-5 py-4 sm:px-6">
+            <Button type="button" variant="secondary" onClick={onClose}>{confirmed ? "Đóng" : "Hủy"}</Button>
+            {!confirmed && (
+              <Button type="button" onClick={() => void handleConfirmTransfer()} disabled={confirming || !categoryId}>
+                {confirming && <LoaderCircle className="h-4 w-4 animate-spin" />}
+                {confirming ? "Đang ghi nhận..." : "Xác nhận đã chuyển khoản"}
+              </Button>
+            )}
+          </footer>
+        )}
       </div>
     </div>
   );

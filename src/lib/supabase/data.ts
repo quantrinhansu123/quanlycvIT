@@ -17,6 +17,7 @@ import type {
   TaskFileAttachment,
   TaskLinkAttachment,
 } from "@/types/subtask";
+import type { TaskActivityEvent, TaskActivityType } from "@/types/activity";
 import type {
   TaskPriority,
   TaskReport,
@@ -138,6 +139,16 @@ interface SubtaskRow {
   task_phu_trach: AssignmentEmbedRow[];
 }
 
+interface TaskActivityRow {
+  id: string;
+  task_id: string;
+  loai: TaskActivityType;
+  tieu_de: string;
+  chi_tiet: Record<string, unknown> | null;
+  created_at: string;
+  tac_gia: AccountRow | null;
+}
+
 export interface WorkTaskFilters {
   search?: string;
   projectId?: string;
@@ -223,6 +234,10 @@ const SUBTASK_SELECT =
   "id,ten_task,mo_ta,created_at,updated_at,ngay_bat_dau,ngay_ket_thuc,nguoi_phu_trach_id,trang_thai,uu_tien,tien_do_thuc_te,nhan_tag,hinh_anh,tep_dinh_kem,lien_ket_dinh_kem,task_tien_de_id,cong_viec_id," +
   `legacy_assignee:tai_khoan!nguoi_phu_trach_id(${ACCOUNT_SELECT}),` +
   `task_phu_trach(tai_khoan_id,la_chinh,xac_nhan_luc,tai_khoan(${ACCOUNT_SELECT}))`;
+const TASK_ACTIVITY_SELECT =
+  "id,task_id,loai,tieu_de,chi_tiet,created_at," + `tac_gia:tai_khoan(${ACCOUNT_SELECT})`;
+/** Trang mặc định cho timeline hoạt động — panel nhỏ, không cần tải nhiều mỗi lần. */
+const TASK_ACTIVITY_PAGE_SIZE = 20;
 
 function avatarColor(value: string): string {
   const colors = ["#F59E0B", "#1F2937", "#DC2626", "#0EA5E9", "#16A34A", "#7C5CFC"];
@@ -1820,6 +1835,43 @@ export async function deleteSubtask(
     .maybeSingle();
   throwDatabaseError(error);
   return Boolean(data);
+}
+
+function hydrateTaskActivity(rows: TaskActivityRow[]): TaskActivityEvent[] {
+  return rows.map((row) => ({
+    id: row.id,
+    taskId: row.task_id,
+    type: row.loai,
+    title: row.tieu_de,
+    detail: row.chi_tiet ?? undefined,
+    actorId: row.tac_gia ? accountReference(row.tac_gia) : undefined,
+    actorName: row.tac_gia?.ten_nv,
+    actorColor: row.tac_gia ? avatarColor(row.tac_gia.id) : undefined,
+    createdAt: row.created_at,
+  }));
+}
+
+/**
+ * Nhật ký hoạt động Task (tạo, xác nhận, đổi trạng thái, báo cáo, duyệt, sửa) — được ghi
+ * bằng trigger ở tầng database (xem migration `task_activity_log`), API chỉ đọc lại.
+ * Có phân trang vì Task hoạt động lâu ngày có thể phát sinh rất nhiều sự kiện.
+ */
+export async function listSubtaskActivity(
+  supabase: ApiSupabaseClient,
+  subtaskId: string,
+  page = 1,
+  pageSize = TASK_ACTIVITY_PAGE_SIZE
+): Promise<PagedResult<TaskActivityEvent>> {
+  const { from, to } = pageRange(page, pageSize);
+  const { data, error, count } = await supabase
+    .from("task_hoat_dong")
+    .select(TASK_ACTIVITY_SELECT, { count: "exact" })
+    .eq("task_id", subtaskId)
+    .order("created_at", { ascending: false })
+    .range(from, to);
+  throwDatabaseError(error);
+  const items = hydrateTaskActivity((data ?? []) as unknown as TaskActivityRow[]);
+  return { items, total: count ?? 0 };
 }
 
 const TASK_REPORT_SELECT =

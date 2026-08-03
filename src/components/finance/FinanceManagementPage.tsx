@@ -175,6 +175,13 @@ export function FinanceManagementPage() {
     notify({ type: "success", title: isNew ? "Đã thêm giao dịch" : "Đã cập nhật giao dịch", description: `${input.type === "thu" ? "Thu" : "Chi"} ${money.format(input.amount)}` });
     void loadDashboard(transactionQuery(), false);
   }
+  async function confirmTransfer(input: FinanceInput) {
+    const saved = await apiClient.post<FinanceTransaction>("/thu-chi", input);
+    setTransactions((current) => (page !== 1 || !matchesCurrentFilters(saved)) ? current : [saved, ...current].slice(0, pageSize));
+    if (matchesCurrentFilters(saved)) setTotal((current) => current + 1);
+    notify({ type: "success", title: "Đã ghi nhận khoản chi chuyển khoản", description: money.format(input.amount) });
+    void loadDashboard(transactionQuery(), false);
+  }
   async function removeTransaction(item: FinanceTransaction) {
     if (!await confirm({ title: "Xóa giao dịch này?", description: `${item.description || item.category?.name || "Giao dịch"} · ${money.format(item.amount)}. Thao tác này không thể hoàn tác.`, confirmLabel: "Xóa giao dịch" })) return;
     try { await apiClient.delete<boolean>(`/thu-chi/${item.id}`); setTransactions((current) => current.filter((transaction) => transaction.id !== item.id)); setTotal((current) => Math.max(0, current - 1)); notify({ type: "success", title: "Đã xóa giao dịch" }); void loadDashboard(transactionQuery(), false); }
@@ -302,7 +309,7 @@ export function FinanceManagementPage() {
       {editing && <FinanceTransactionModal transaction={editing === "new" ? undefined : editing} categories={categories} defaultType={defaultType} onClose={() => setEditing(null)} onSave={saveTransaction} />}
       {viewing && <FinanceTransactionDetailModal transaction={viewing} onClose={() => setViewing(null)} onEdit={() => { setViewing(null); setEditing(viewing); }} />}
       {categoryModalOpen && <FinanceCategoryModal categories={categories} onClose={() => setCategoryModalOpen(false)} onSave={saveCategory} onDelete={removeCategory} />}
-      {transferModalOpen && <TransferQrModal onClose={() => setTransferModalOpen(false)} />}
+      {transferModalOpen && <TransferQrModal categories={categories} onClose={() => setTransferModalOpen(false)} onConfirm={confirmTransfer} />}
     </div>
   );
 }

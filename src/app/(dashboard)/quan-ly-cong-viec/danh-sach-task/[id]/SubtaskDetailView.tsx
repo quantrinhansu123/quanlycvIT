@@ -30,7 +30,9 @@ import type { WorkTask } from "@/types/task";
 import { TASK_PRIORITY_OPTIONS } from "@/types/task";
 import type { Subtask, SubtaskReport } from "@/types/subtask";
 import { isSubtaskOverdue } from "@/types/subtask";
+import type { TaskActivityEvent } from "@/types/activity";
 import { AvatarStack } from "@/components/ui/Avatar";
+import { TaskActivityTimeline } from "@/components/timeline/TaskActivityTimeline";
 import { TaskStatusBadge } from "@/components/tasks/TaskBadges";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -73,7 +75,11 @@ interface SubtaskDetailViewProps {
   initialWorkTasks: WorkTask[];
   initialReports: SubtaskReport[];
   initialMembers: ProjectMember[];
+  initialActivity: TaskActivityEvent[];
+  initialActivityTotal: number;
 }
+
+const ACTIVITY_PAGE_SIZE = 20;
 
 export function SubtaskDetailView({
   subtaskId,
@@ -81,6 +87,8 @@ export function SubtaskDetailView({
   initialWorkTasks,
   initialReports,
   initialMembers,
+  initialActivity,
+  initialActivityTotal,
 }: SubtaskDetailViewProps) {
   const router = useRouter();
   const { notify } = useFeedback();
@@ -90,6 +98,9 @@ export function SubtaskDetailView({
   const [workTasks, setWorkTasks] = useState<WorkTask[]>(initialWorkTasks);
   const [reports, setReports] = useState<SubtaskReport[]>(initialReports);
   const [members, setMembers] = useState<ProjectMember[]>(initialMembers);
+  const [activity, setActivity] = useState<TaskActivityEvent[]>(initialActivity);
+  const [activityTotal, setActivityTotal] = useState(initialActivityTotal);
+  const [activityLoadingMore, setActivityLoadingMore] = useState(false);
   const [error, setError] = useState(false);
   const [tab, setTab] = useState<Tab>("info");
   const [editing, setEditing] = useState(false);
@@ -98,17 +109,20 @@ export function SubtaskDetailView({
   const [accepting, setAccepting] = useState(false);
   const load = useCallback(async () => {
     try {
-      const [subtaskData, workTaskList, reportData, memberData] =
+      const [subtaskData, workTaskList, reportData, memberData, activityPage] =
         await Promise.all([
           subtaskService.getSubtaskById(subtaskId),
           taskService.getTasks(),
           subtaskService.getSubtaskReports(subtaskId),
           projectService.getDirectory(),
+          subtaskService.getSubtaskActivity(subtaskId, 1, ACTIVITY_PAGE_SIZE),
         ]);
       setSubtask(subtaskData);
       setWorkTasks(workTaskList);
       setReports(reportData);
       setMembers(memberData);
+      setActivity(activityPage.items);
+      setActivityTotal(activityPage.total);
       setError(false);
     } catch (loadError) {
       setError(true);
@@ -122,6 +136,43 @@ export function SubtaskDetailView({
       });
     }
   }, [subtaskId, notify]);
+
+  /**
+   * Nhật ký hoạt động được ghi bằng trigger DB ngay khi mutation ghi xong nên chỉ cần
+   * đọc lại trang đầu — không cần full reload 4 nguồn dữ liệu như `load()`.
+   */
+  const refreshActivity = useCallback(async () => {
+    try {
+      const activityPage = await subtaskService.getSubtaskActivity(subtaskId, 1, ACTIVITY_PAGE_SIZE);
+      setActivity(activityPage.items);
+      setActivityTotal(activityPage.total);
+    } catch {
+      // Bỏ qua lỗi làm mới timeline — không chặn luồng thao tác chính.
+    }
+  }, [subtaskId]);
+
+  async function handleLoadMoreActivity() {
+    if (activityLoadingMore || activity.length >= activityTotal) return;
+    setActivityLoadingMore(true);
+    try {
+      const nextPage = Math.floor(activity.length / ACTIVITY_PAGE_SIZE) + 1;
+      const activityPage = await subtaskService.getSubtaskActivity(
+        subtaskId,
+        nextPage,
+        ACTIVITY_PAGE_SIZE
+      );
+      setActivity((current) => [...current, ...activityPage.items]);
+      setActivityTotal(activityPage.total);
+    } catch (loadMoreError) {
+      notify({
+        type: "error",
+        title: "Không thể tải thêm hoạt động",
+        description: getErrorMessage(loadMoreError, "Vui lòng thử lại."),
+      });
+    } finally {
+      setActivityLoadingMore(false);
+    }
+  }
 
   async function handleQuickUpdate(
     patch: Partial<Pick<Subtask, "priority">> & {
@@ -153,6 +204,7 @@ export function SubtaskDetailView({
       // con + list công việc (tiến độ công việc cha tính từ trung bình các task con).
       cache.invalidate(CACHE_RESOURCE.subtasksList);
       cache.invalidate(CACHE_RESOURCE.tasksList);
+      void refreshActivity();
     } catch (updateError) {
       notify({
         type: "error",
@@ -176,6 +228,7 @@ export function SubtaskDetailView({
       window.dispatchEvent(new CustomEvent("app:notifications-changed"));
       cache.invalidate(CACHE_RESOURCE.subtasksList);
       cache.invalidate(CACHE_RESOURCE.tasksList);
+      void refreshActivity();
       notify({
         type: "success",
         title: "Đã xác nhận nhận Task",
@@ -469,15 +522,12 @@ export function SubtaskDetailView({
                 title="Timeline hoạt động Task"
                 subtitle="Nhật ký lịch trình xử lý & báo cáo"
               >
-                <div className="flex min-h-36 flex-col items-center justify-center rounded-2xl border border-dashed border-gray-200 px-6 text-center">
-                  <CalendarDays className="h-9 w-9 text-gray-300" />
-                  <p className="mt-3 text-sm font-bold text-gray-800">
-                    Chưa có lịch sử hoạt động
-                  </p>
-                  <p className="mt-1 text-xs text-gray-400">
-                    Các cập nhật trạng thái, phân công và báo cáo
-                  </p>
-                </div>
+                <TaskActivityTimeline
+                  events={activity}
+                  hasMore={activity.length < activityTotal}
+                  loadingMore={activityLoadingMore}
+                  onLoadMore={handleLoadMoreActivity}
+                />
               </Panel>
             </section>
           </div>

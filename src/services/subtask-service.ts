@@ -5,6 +5,7 @@ import type {
   TaskPriority,
   TaskStatus,
 } from "@/types/task";
+import type { TaskActivityEvent } from "@/types/activity";
 
 export interface SubtaskFilters {
   search?: string;
@@ -37,6 +38,11 @@ export interface SubtaskListFilters extends SubtaskFilters {
 
 export interface SubtaskPage {
   items: Subtask[];
+  total: number;
+}
+
+export interface TaskActivityPage {
+  items: TaskActivityEvent[];
   total: number;
 }
 
@@ -127,6 +133,16 @@ export const subtaskService = {
 
   async getSubtaskReports(subtaskId: string): Promise<SubtaskReport[]> {
     return apiClient.get<SubtaskReport[]>(`/subtasks/${subtaskId}/reports`);
+  },
+
+  async getSubtaskActivity(
+    subtaskId: string,
+    page = 1,
+    pageSize = 20
+  ): Promise<TaskActivityPage> {
+    return apiClient.get<TaskActivityPage>(
+      `/subtasks/${subtaskId}/activity?page=${page}&pageSize=${pageSize}`
+    );
   },
 
   async addSubtaskReport(
