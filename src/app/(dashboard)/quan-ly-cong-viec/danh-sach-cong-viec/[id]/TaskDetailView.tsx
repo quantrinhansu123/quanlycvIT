@@ -26,7 +26,7 @@ import { taskService } from "@/services/task-service";
 import { subtaskService } from "@/services/subtask-service";
 import type { Project, ProjectMember } from "@/types/project";
 import type { Subtask } from "@/types/subtask";
-import type { TaskReport, WorkTask } from "@/types/task";
+import type { TaskFileAttachment, TaskLinkAttachment, TaskReport, WorkTask } from "@/types/task";
 import {
   TASK_PRIORITY_OPTIONS,
   isTaskOverdue,
@@ -45,6 +45,7 @@ import { cn, formatDateVN } from "@/lib/utils";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 import { DetailAttachments } from "@/components/tasks/DetailAttachments";
+import { InlineTaskAttachmentEditor } from "@/components/tasks/InlineTaskAttachmentEditor";
 import { TaskPriorityBadge, TaskStatusBadge } from "@/components/tasks/TaskBadges";
 import { useSessionDataCache } from "@/components/providers/SessionDataCacheProvider";
 import { CACHE_RESOURCE } from "@/lib/client-cache/resources";
@@ -131,6 +132,43 @@ export function TaskDetailView({
       });
     }
   }, [taskId, notify]);
+
+  const handleAttachmentSave = useCallback(async (value: {
+    files: TaskFileAttachment[];
+    links: TaskLinkAttachment[];
+    images: string[];
+  }) => {
+    if (!task || readOnly) return;
+    try {
+      const updated = await taskService.updateTask(task.id, {
+        title: task.title,
+        description: task.description,
+        projectId: task.projectId,
+        assigneeIds: task.assignees.map((member) => member.id),
+        status: task.status,
+        priority: task.priority,
+        startDate: task.startDate,
+        dueDate: task.dueDate,
+        progress: task.progress,
+        tags: task.tags,
+        dependsOnTaskId: task.dependsOnTaskId,
+        files: value.files,
+        links: value.links,
+        images: value.images,
+      });
+      if (!updated) throw new Error("Công việc không tồn tại hoặc đã bị xóa.");
+      setTask(updated);
+      cache.invalidate(CACHE_RESOURCE.tasksList);
+      cache.invalidate(CACHE_RESOURCE.directoryTasks);
+    } catch (updateError) {
+      notify({
+        type: "error",
+        title: "Không thể cập nhật tài liệu công việc",
+        description: getErrorMessage(updateError, "Vui lòng thử lại."),
+      });
+      throw updateError;
+    }
+  }, [cache, notify, readOnly, task]);
 
   async function handleQuickUpdate(
     patch: Partial<Pick<WorkTask, "priority">> & {
@@ -356,12 +394,25 @@ export function TaskDetailView({
                     emptyText="Chưa có mô tả cho công việc này."
                   />
                 </div>
-                <DetailAttachments
-                  entityLabel="công việc"
-                  files={task.files}
-                  links={task.links}
-                  images={task.images}
-                />
+                {readOnly ? (
+                  <DetailAttachments
+                    entityLabel="công việc"
+                    files={task.files}
+                    links={task.links}
+                    images={task.images}
+                  />
+                ) : (
+                  <InlineTaskAttachmentEditor
+                    key={`${task.id}:${JSON.stringify(task.files)}:${JSON.stringify(task.links)}`}
+                    entityLabel="công việc"
+                    files={task.files}
+                    links={task.links}
+                    images={task.images}
+                    onUploadFile={taskService.uploadFile}
+                    onUploadImage={taskService.uploadImage}
+                    onSave={handleAttachmentSave}
+                  />
+                )}
                 <div className="mt-6 grid grid-cols-1 gap-5 border-t border-gray-100 pt-4 sm:grid-cols-2">
                   <DateInfo
                     label="Thời gian bắt đầu:"

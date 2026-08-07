@@ -12,6 +12,7 @@ import {
 interface PendingAttachmentFile {
   id: string;
   file: File;
+  description?: string;
 }
 
 interface PendingAttachmentImage extends PendingAttachmentFile {
@@ -40,6 +41,8 @@ interface TaskAttachmentFieldsProps {
   onRemoveLink: (index: number) => void;
   onRemoveSavedFile: (url: string) => void;
   onRemovePendingFile: (id: string) => void;
+  onUpdateSavedFile?: (url: string, patch: Partial<TaskFileAttachment>) => void;
+  onUpdatePendingFile?: (id: string, patch: { description?: string }) => void;
   onRemoveSavedImage: (url: string) => void;
   onRemovePendingImage: (id: string) => void;
 }
@@ -66,6 +69,8 @@ export function TaskAttachmentFields({
   onRemoveLink,
   onRemoveSavedFile,
   onRemovePendingFile,
+  onUpdateSavedFile,
+  onUpdatePendingFile,
   onRemoveSavedImage,
   onRemovePendingImage,
 }: TaskAttachmentFieldsProps) {
@@ -163,49 +168,69 @@ export function TaskAttachmentFields({
           {files.map((fileItem) => (
             <li
               key={fileItem.url}
-              className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2"
+              className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-2"
             >
-              <FileText className="h-4 w-4 shrink-0 text-gray-400" />
-              <a
-                href={fileItem.url}
-                target="_blank"
-                rel="noreferrer"
-                className="min-w-0 flex-1 truncate text-sm text-gray-700 hover:text-brand-600"
-              >
-                {fileItem.name}
-              </a>
-              <button
-                type="button"
-                onClick={() => onRemoveSavedFile(fileItem.url)}
-                disabled={submitting}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-600"
-                aria-label={`Xóa tệp ${fileItem.name}`}
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+              <div className="flex items-center gap-2 px-1">
+                <FileText className="h-4 w-4 shrink-0 text-gray-400" />
+                <a
+                  href={fileItem.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="min-w-0 flex-1 truncate text-sm text-gray-700 hover:text-brand-600"
+                >
+                  {fileItem.name}
+                </a>
+                <button
+                  type="button"
+                  onClick={() => onRemoveSavedFile(fileItem.url)}
+                  disabled={submitting}
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-600"
+                  aria-label={`Xóa tệp ${fileItem.name}`}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+              {onUpdateSavedFile && (
+                <input
+                  type="text"
+                  value={fileItem.description ?? ""}
+                  onChange={(event) => onUpdateSavedFile(fileItem.url, { description: event.target.value })}
+                  placeholder="Mô tả tệp (không bắt buộc)"
+                  maxLength={500}
+                  className="h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+                />
+              )}
             </li>
           ))}
           {pendingFiles.map((pending) => (
             <li
               key={pending.id}
-              className="flex items-center gap-2 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2"
+              className="space-y-2 rounded-lg border border-brand-200 bg-brand-50 p-2"
             >
-              <FileText className="h-4 w-4 shrink-0 text-brand-400" />
-              <span className="min-w-0 flex-1 truncate text-sm text-gray-700">
-                {pending.file.name}
-              </span>
-              <span className="shrink-0 rounded-md bg-brand-600 px-2 py-0.5 text-[10px] font-semibold text-white">
-                Chưa lưu
-              </span>
-              <button
-                type="button"
-                onClick={() => onRemovePendingFile(pending.id)}
-                disabled={submitting}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-600"
-                aria-label={`Bỏ tệp ${pending.file.name}`}
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+              <div className="flex items-center gap-2 px-1">
+                <FileText className="h-4 w-4 shrink-0 text-brand-400" />
+                <span className="min-w-0 flex-1 truncate text-sm text-gray-700">{pending.file.name}</span>
+                <span className="shrink-0 rounded-md bg-brand-600 px-2 py-0.5 text-[10px] font-semibold text-white">Chưa lưu</span>
+                <button
+                  type="button"
+                  onClick={() => onRemovePendingFile(pending.id)}
+                  disabled={submitting}
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-600"
+                  aria-label={`Bỏ tệp ${pending.file.name}`}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+              {onUpdatePendingFile && (
+                <input
+                  type="text"
+                  value={pending.description ?? ""}
+                  onChange={(event) => onUpdatePendingFile(pending.id, { description: event.target.value })}
+                  placeholder="Mô tả tệp (không bắt buộc)"
+                  maxLength={500}
+                  className="h-9 w-full rounded-lg border border-brand-200 bg-white px-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+                />
+              )}
             </li>
           ))}
         </ul>

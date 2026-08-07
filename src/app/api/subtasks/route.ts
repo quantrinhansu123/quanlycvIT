@@ -15,12 +15,20 @@ import { readIdempotencyKey, withIdempotency } from "@/lib/supabase/idempotency"
 
 function filtersFromRequest(request: NextRequest): SubtaskFilters {
   const params = request.nextUrl.searchParams;
+  const statuses = params.get("statuses")
+    ?.split(",")
+    .filter(Boolean) as TaskStatus[] | undefined;
+  const priorities = params.get("priorities")
+    ?.split(",")
+    .filter(Boolean) as TaskPriority[] | undefined;
   return {
     search: params.get("search") ?? undefined,
     workTaskId: params.get("workTaskId") ?? undefined,
     assigneeId: params.get("assigneeId") ?? undefined,
     priority: (params.get("priority") as TaskPriority | null) ?? undefined,
+    priorities: priorities?.length ? priorities : undefined,
     status: (params.get("status") as TaskStatus | null) ?? undefined,
+    statuses: statuses?.length ? statuses : undefined,
     overdueOnly: params.get("overdueOnly") === "true",
   };
 }

@@ -12,7 +12,11 @@ export interface SubtaskFilters {
   workTaskId?: string;
   assigneeId?: string;
   priority?: TaskPriority;
+  /** Lọc đồng thời nhiều mức ưu tiên; `priority` được giữ cho các màn hình cũ. */
+  priorities?: TaskPriority[];
   status?: TaskStatus;
+  /** Lọc đồng thời nhiều trạng thái; `status` được giữ cho các màn hình cũ. */
+  statuses?: TaskStatus[];
   overdueOnly?: boolean;
 }
 
@@ -22,7 +26,9 @@ function buildQuery(filters: SubtaskFilters): string {
   if (filters.workTaskId) params.set("workTaskId", filters.workTaskId);
   if (filters.assigneeId) params.set("assigneeId", filters.assigneeId);
   if (filters.priority) params.set("priority", filters.priority);
+  if (filters.priorities && filters.priorities.length > 0) params.set("priorities", filters.priorities.join(","));
   if (filters.status) params.set("status", filters.status);
+  if (filters.statuses && filters.statuses.length > 0) params.set("statuses", filters.statuses.join(","));
   if (filters.overdueOnly) params.set("overdueOnly", "true");
   const query = params.toString();
   return query ? `?${query}` : "";
@@ -88,7 +94,13 @@ export const subtaskService = {
       params.set("assigneeIds", filters.assigneeIds.join(","));
     }
     if (filters.priority) params.set("priority", filters.priority);
+    if (filters.priorities && filters.priorities.length > 0) {
+      params.set("priorities", filters.priorities.join(","));
+    }
     if (filters.status) params.set("status", filters.status);
+    if (filters.statuses && filters.statuses.length > 0) {
+      params.set("statuses", filters.statuses.join(","));
+    }
     if (filters.overdueOnly) params.set("overdueOnly", "true");
     params.set("page", String(filters.page));
     params.set("pageSize", String(filters.pageSize));

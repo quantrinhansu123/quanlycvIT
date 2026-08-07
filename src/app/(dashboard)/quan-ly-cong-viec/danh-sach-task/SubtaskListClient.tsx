@@ -22,7 +22,6 @@ import type { WorkTaskDirectoryItem, TaskPriority, TaskStatus } from "@/types/ta
 import { TASK_PRIORITY_OPTIONS, TASK_STATUS_OPTIONS } from "@/types/task";
 import type { Subtask } from "@/types/subtask";
 import { Button } from "@/components/ui/Button";
-import { FilterSelect } from "@/components/ui/FilterSelect";
 import { MemberFilterMultiSelect } from "@/components/ui/MemberFilterMultiSelect";
 import { SearchableFilterSelect } from "@/components/ui/SearchableFilterSelect";
 import { SearchableFilterMultiSelect } from "@/components/ui/SearchableFilterMultiSelect";
@@ -93,8 +92,8 @@ export function SubtaskListClient({
   const [projectId, setProjectId] = useState("");
   const [workTaskIds, setWorkTaskIds] = useState<string[]>([]);
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
-  const [priority, setPriority] = useState<TaskPriority | "">("");
-  const [status, setStatus] = useState<TaskStatus | "">("");
+  const [priorities, setPriorities] = useState<TaskPriority[]>([]);
+  const [statuses, setStatuses] = useState<TaskStatus[]>([]);
   const [overdueOnly, setOverdueOnly] = useState(false);
 
   const [viewMode, setViewMode] = useState<ViewMode>("table");
@@ -113,8 +112,8 @@ export function SubtaskListClient({
       workTaskIds: workTaskIds.length > 0 ? workTaskIds : undefined,
       projectId: projectId || undefined,
       assigneeIds: assigneeIds.length > 0 ? assigneeIds : undefined,
-      priority: priority || undefined,
-      status: status || undefined,
+      priorities: priorities.length > 0 ? priorities : undefined,
+      statuses: statuses.length > 0 ? statuses : undefined,
       overdueOnly,
     };
   }
@@ -123,7 +122,7 @@ export function SubtaskListClient({
     accountId,
     role: accountRole,
     resource: CACHE_RESOURCE.subtasksList,
-    filters: { search, projectId, workTaskIds, assigneeIds, priority, status, overdueOnly },
+    filters: { search, projectId, workTaskIds, assigneeIds, priorities, statuses, overdueOnly },
     page,
     pageSize,
   });
@@ -220,7 +219,7 @@ export function SubtaskListClient({
     // Bộ lọc thay đổi thì quay về trang đầu để không rơi vào trang trống.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(1);
-  }, [search, projectId, workTaskIds, assigneeIds, priority, status, overdueOnly]);
+  }, [search, projectId, workTaskIds, assigneeIds, priorities, statuses, overdueOnly]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -415,20 +414,20 @@ export function SubtaskListClient({
             options={members}
           />
         )}
-        <FilterSelect
-          compact
+        <SearchableFilterMultiSelect
           className="w-[112px] shrink-0 2xl:w-[124px]"
           label="Mức độ ưu tiên"
-          value={priority}
-          onChange={(value) => setPriority(value as TaskPriority | "")}
+          searchPlaceholder="Tìm mức ưu tiên..."
+          value={priorities}
+          onChange={(values) => setPriorities(values as TaskPriority[])}
           options={TASK_PRIORITY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
         />
-        <FilterSelect
-          compact
+        <SearchableFilterMultiSelect
           className="w-[92px] shrink-0 2xl:w-[104px]"
           label="Trạng thái"
-          value={status}
-          onChange={(value) => setStatus(value as TaskStatus | "")}
+          searchPlaceholder="Tìm trạng thái..."
+          value={statuses}
+          onChange={(values) => setStatuses(values as TaskStatus[])}
           options={TASK_STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
         />
         <button

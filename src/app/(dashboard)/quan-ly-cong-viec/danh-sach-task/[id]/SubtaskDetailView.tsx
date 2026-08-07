@@ -26,7 +26,7 @@ import { projectService } from "@/services/project-service";
 import { taskService } from "@/services/task-service";
 import { subtaskService } from "@/services/subtask-service";
 import type { ProjectMember } from "@/types/project";
-import type { WorkTask } from "@/types/task";
+import type { TaskFileAttachment, TaskLinkAttachment, WorkTask } from "@/types/task";
 import { TASK_PRIORITY_OPTIONS } from "@/types/task";
 import type { Subtask, SubtaskReport } from "@/types/subtask";
 import { isSubtaskOverdue } from "@/types/subtask";
@@ -43,7 +43,7 @@ import { ModalLoadingFallback } from "@/components/ui/ModalLoadingFallback";
 import { cn, formatDateVN } from "@/lib/utils";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
-import { DetailAttachments } from "@/components/tasks/DetailAttachments";
+import { InlineTaskAttachmentEditor } from "@/components/tasks/InlineTaskAttachmentEditor";
 import { useCurrentAccount } from "@/hooks/useCurrentAccount";
 import { useSessionDataCache } from "@/components/providers/SessionDataCacheProvider";
 import { CACHE_RESOURCE } from "@/lib/client-cache/resources";
@@ -150,6 +150,42 @@ export function SubtaskDetailView({
       // Bỏ qua lỗi làm mới timeline — không chặn luồng thao tác chính.
     }
   }, [subtaskId]);
+
+  const handleAttachmentSave = useCallback(async (value: {
+    files: TaskFileAttachment[];
+    links: TaskLinkAttachment[];
+    images: string[];
+  }) => {
+    if (!subtask) return;
+    try {
+      const updated = await subtaskService.updateSubtask(subtask.id, {
+        title: subtask.title,
+        description: subtask.description,
+        workTaskId: subtask.workTaskId,
+        assigneeIds: subtask.assignees.map((member) => member.id),
+        priority: subtask.priority,
+        startDate: subtask.startDate,
+        dueDate: subtask.dueDate,
+        progress: subtask.progress,
+        tags: subtask.tags,
+        files: value.files,
+        links: value.links,
+        images: value.images,
+      });
+      if (!updated) throw new Error("Task không tồn tại hoặc đã bị xóa.");
+      setSubtask(updated);
+      cache.invalidate(CACHE_RESOURCE.subtasksList);
+      cache.invalidate(CACHE_RESOURCE.tasksList);
+      void refreshActivity();
+    } catch (updateError) {
+      notify({
+        type: "error",
+        title: "Không thể cập nhật tài liệu Task",
+        description: getErrorMessage(updateError, "Vui lòng thử lại."),
+      });
+      throw updateError;
+    }
+  }, [cache, notify, refreshActivity, subtask]);
 
   async function handleLoadMoreActivity() {
     if (activityLoadingMore || activity.length >= activityTotal) return;
@@ -419,11 +455,15 @@ export function SubtaskDetailView({
                     emptyText="Chưa có mô tả cho Task này."
                   />
                 </div>
-                <DetailAttachments
+                <InlineTaskAttachmentEditor
+                  key={`${subtask.id}:${JSON.stringify(subtask.files)}:${JSON.stringify(subtask.links)}`}
                   entityLabel="Task"
                   files={subtask.files}
                   links={subtask.links}
                   images={subtask.images}
+                  onUploadFile={subtaskService.uploadFile}
+                  onUploadImage={subtaskService.uploadImage}
+                  onSave={handleAttachmentSave}
                 />
                 <div className="mt-6 grid grid-cols-1 gap-5 border-t border-gray-100 pt-4 sm:grid-cols-2">
                   <DateInfo

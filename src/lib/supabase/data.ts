@@ -183,7 +183,11 @@ export interface SubtaskFilters {
   assigneeId?: string;
   assigneeIds?: string[];
   priority?: TaskPriority;
+  /** Lọc đồng thời nhiều mức ưu tiên; `priority` được giữ cho các nơi gọi cũ. */
+  priorities?: TaskPriority[];
   status?: TaskStatus;
+  /** Lọc đồng thời nhiều trạng thái; `status` được giữ cho các nơi gọi cũ. */
+  statuses?: TaskStatus[];
   overdueOnly?: boolean;
 }
 
@@ -1546,8 +1550,10 @@ export async function listSubtasks(
     );
     query = query.eq("nguoi_phu_trach_id", accountId);
   }
-  if (filters.priority) query = query.eq("uu_tien", filters.priority);
-  if (filters.status) query = query.eq("trang_thai", toDatabaseStatus(filters.status));
+  if (filters.priorities?.length) query = query.in("uu_tien", filters.priorities);
+  else if (filters.priority) query = query.eq("uu_tien", filters.priority);
+  if (filters.statuses?.length) query = query.in("trang_thai", filters.statuses.map(toDatabaseStatus));
+  else if (filters.status) query = query.eq("trang_thai", toDatabaseStatus(filters.status));
   if (filters.overdueOnly) {
     query = query
       .neq("trang_thai", "done")
@@ -1618,8 +1624,10 @@ export async function listSubtasksPage(
     );
     query = query.eq("nguoi_phu_trach_id", accountId);
   }
-  if (filters.priority) query = query.eq("uu_tien", filters.priority);
-  if (filters.status) query = query.eq("trang_thai", toDatabaseStatus(filters.status));
+  if (filters.priorities?.length) query = query.in("uu_tien", filters.priorities);
+  else if (filters.priority) query = query.eq("uu_tien", filters.priority);
+  if (filters.statuses?.length) query = query.in("trang_thai", filters.statuses.map(toDatabaseStatus));
+  else if (filters.status) query = query.eq("trang_thai", toDatabaseStatus(filters.status));
   if (filters.overdueOnly) {
     query = query
       .neq("trang_thai", "done")

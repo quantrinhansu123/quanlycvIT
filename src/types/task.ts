@@ -57,6 +57,8 @@ export const TASK_PRIORITY_META: Record<TaskPriority, { label: string; badge: st
 export interface TaskFileAttachment {
   name: string;
   url: string;
+  /** Mô tả ngắn về nội dung hoặc mục đích của tệp. */
+  description?: string;
 }
 
 /** Liên kết ngoài đính kèm. */

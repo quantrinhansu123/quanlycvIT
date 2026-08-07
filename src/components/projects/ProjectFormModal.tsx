@@ -71,6 +71,7 @@ interface PendingProjectImage {
 interface PendingProjectFile {
   id: string;
   file: File;
+  description?: string;
 }
 
 const MAX_PROJECT_IMAGES = 10;
@@ -455,6 +456,17 @@ export function ProjectFormModal({ mode, project, members, onClose, onSave, onSa
     setFileError("");
   }
 
+  function updateSavedFile(url: string, patch: Partial<TaskFileAttachment>) {
+    setForm((current) => ({
+      ...current,
+      files: current.files.map((file) => file.url === url ? { ...file, ...patch } : file),
+    }));
+  }
+
+  function updatePendingFile(id: string, patch: { description?: string }) {
+    setPendingFiles((current) => current.map((file) => file.id === id ? { ...file, ...patch } : file));
+  }
+
   function addLinkRow() {
     setForm((prev) => ({ ...prev, links: [...prev.links, { label: "", url: "" }] }));
     setErrors((prev) => ({ ...prev, links: undefined }));
@@ -522,7 +534,10 @@ export function ProjectFormModal({ mode, project, members, onClose, onSave, onSa
           })),
           ...pendingFiles.map((pending) => ({
             id: pending.id,
-            upload: async () => { uploadedFiles.push(await projectService.uploadFile(pending.file)); },
+            upload: async () => {
+              const uploaded = await projectService.uploadFile(pending.file);
+              uploadedFiles.push({ ...uploaded, description: pending.description?.trim() || undefined });
+            },
           })),
         ]);
         const uploadedIds = new Set(uploadResult.succeededIds);
@@ -752,6 +767,8 @@ export function ProjectFormModal({ mode, project, members, onClose, onSave, onSa
             onRemoveLink={removeLinkRow}
             onRemoveSavedFile={removeSavedFile}
             onRemovePendingFile={removePendingFile}
+            onUpdateSavedFile={updateSavedFile}
+            onUpdatePendingFile={updatePendingFile}
             onRemoveSavedImage={removeSavedImage}
             onRemovePendingImage={removePendingImage}
           />

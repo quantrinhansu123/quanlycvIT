@@ -82,7 +82,11 @@ function fileAttachments(body: Record<string, unknown>): TaskFileAttachment[] {
     if (typeof entry.name !== "string" || !entry.name.trim()) {
       throw new ApiException("Tệp đính kèm phải có tên.", 400);
     }
-    return { name: entry.name.trim(), url: entry.url.trim() };
+    const description =
+      typeof entry.description === "string" && entry.description.trim()
+        ? entry.description.trim()
+        : undefined;
+    return { name: entry.name.trim(), url: entry.url.trim(), description };
   });
 }
 

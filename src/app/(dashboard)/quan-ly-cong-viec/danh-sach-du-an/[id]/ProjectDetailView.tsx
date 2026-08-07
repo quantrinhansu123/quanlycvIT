@@ -27,6 +27,7 @@ import {
   type Project,
   type ProjectMember,
 } from "@/types/project";
+import type { TaskFileAttachment, TaskLinkAttachment } from "@/types/task";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -47,6 +48,7 @@ const ProjectFormModal = dynamic(
 );
 import { getErrorMessage } from "@/lib/errors";
 import { DetailAttachments } from "@/components/tasks/DetailAttachments";
+import { InlineTaskAttachmentEditor } from "@/components/tasks/InlineTaskAttachmentEditor";
 
 type Tab = "info" | "tasks" | "history";
 
@@ -108,6 +110,41 @@ export function ProjectDetailView({
       });
     }
   }, [projectId, notify, readOnly]);
+
+  const handleAttachmentSave = useCallback(async (value: {
+    files: TaskFileAttachment[];
+    links: TaskLinkAttachment[];
+    images: string[];
+  }) => {
+    if (!project || readOnly) return;
+    try {
+      const updated = await projectService.updateProject(project.id, {
+        name: project.name,
+        code: project.code,
+        color: project.color,
+        steps: project.steps,
+        description: project.description,
+        startDate: project.startDate,
+        endDate: project.endDate,
+        managerIds: project.managers.map((member) => member.id),
+        memberIds: project.members.map((member) => member.id),
+        files: value.files,
+        links: value.links,
+        images: value.images,
+      });
+      if (!updated) throw new Error("Dự án không tồn tại hoặc đã bị xóa.");
+      setProject(updated);
+      cache.invalidate(CACHE_RESOURCE.projectsList);
+      cache.invalidate(CACHE_RESOURCE.directoryProjects);
+    } catch (updateError) {
+      notify({
+        type: "error",
+        title: "Không thể cập nhật tài liệu dự án",
+        description: getErrorMessage(updateError, "Vui lòng thử lại."),
+      });
+      throw updateError;
+    }
+  }, [cache, notify, project, readOnly]);
 
   if (error) {
     return (
@@ -277,12 +314,25 @@ export function ProjectDetailView({
                 <div className="min-h-24 max-w-full overflow-x-auto rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-4 text-sm leading-6 text-gray-700">
                   <ProjectDescription description={project.description} />
                 </div>
-                <DetailAttachments
-                  entityLabel="dự án"
-                  files={project.files}
-                  links={project.links}
-                  images={project.images}
-                />
+                {readOnly ? (
+                  <DetailAttachments
+                    entityLabel="dự án"
+                    files={project.files}
+                    links={project.links}
+                    images={project.images}
+                  />
+                ) : (
+                  <InlineTaskAttachmentEditor
+                    key={`${project.id}:${JSON.stringify(project.files)}:${JSON.stringify(project.links)}`}
+                    entityLabel="dự án"
+                    files={project.files}
+                    links={project.links}
+                    images={project.images}
+                    onUploadFile={projectService.uploadFile}
+                    onUploadImage={projectService.uploadImage}
+                    onSave={handleAttachmentSave}
+                  />
+                )}
                 <div className="mt-6 grid grid-cols-1 gap-5 border-t border-gray-100 pt-4 sm:grid-cols-2">
                   <DateInfo
                     label="Thời gian bắt đầu:"

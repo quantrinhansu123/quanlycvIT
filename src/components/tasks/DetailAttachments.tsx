@@ -85,6 +85,11 @@ export function DetailAttachments({
                         <span className="min-w-0 flex-1 truncate">{file.name}</span>
                         <ExternalLink className="h-3 w-3 shrink-0 text-gray-400" />
                       </a>
+                      {file.description && (
+                        <p className="mt-1 truncate px-2.5 text-[11px] text-gray-400">
+                          {file.description}
+                        </p>
+                      )}
                     </li>
                   ))}
                 </ul>
