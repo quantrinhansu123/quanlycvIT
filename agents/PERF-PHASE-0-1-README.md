@@ -63,9 +63,9 @@ Rule `react-hooks/set-state-in-effect` báo lỗi khi effect gọi thẳng hàm 
 
 ## 4. Đã kiểm tra
 
-- `npm run lint` — pass, không còn lỗi/warning.
-- `npx tsc --noEmit` — pass, không lỗi kiểu.
-- `npm run build` — build production thành công (Next.js 16.2.12, Turbopack).
+- `pnpm lint` — pass, không còn lỗi/warning.
+- `pnpm exec tsc --noEmit` — pass, không lỗi kiểu.
+- `pnpm build` — build production thành công (Next.js 16.2.12, Turbopack).
 
 **Chưa kiểm tra (cần bạn tự làm trên trình duyệt):**
 - Gõ nhanh 10 ký tự vào ô tìm kiếm ở cả 3 trang → chỉ nên thấy 1–2 request Network hoàn tất (không phải 10).
@@ -89,7 +89,7 @@ Theo thứ tự trong `PERF-UNIFIED-IMPLEMENTATION-PLAN.md`:
 
 ### 6.1 Xác minh trước khi sửa
 
-Database Supabase của dự án **đã liên kết và có thể truy vấn được** qua `npx supabase db query --linked` (không phải chỉ staging giả định) — dùng luôn để xác minh thay vì đoán:
+Database Supabase của dự án **đã liên kết và có thể truy vấn được** qua `pnpm exec supabase db query --linked` (không phải chỉ staging giả định) — dùng luôn để xác minh thay vì đoán:
 
 - Tên bảng/cột thực tế khớp 100% với bản nháp SQL đã có sẵn trong `PERF-UNIFIED-IMPLEMENTATION-PLAN.md`: `cong_viec.ten_cv`, `task.ten_task`, cả hai bảng đều có cột `created_at`.
 - Dung lượng bảng hiện tại (qua `pg_stat_user_tables`): `du_an` 4 dòng, `cong_viec` 18 dòng, `task` 24 dòng — đây là **dữ liệu môi trường dev/test**, không phải quy mô production (200 dự án/20.000 công việc/40.000 task) mà chỉ tiêu hiệu năng trong kế hoạch nhắm tới.
@@ -176,7 +176,7 @@ Viết lại toàn bộ `src/services/api-client.ts` (không đổi API bề m�
 
 ### 7.4 Đã kiểm tra
 
-- `npm run lint`, `npx tsc --noEmit`, `npm run build` — đều pass.
+- `pnpm lint`, `pnpm exec tsc --noEmit`, `pnpm build` — đều pass.
 - Rà soát toàn bộ codebase: không có nơi nào khác import `ApiError` hay dùng `error.status` từ `api-client.ts` ngoài chính file đó — thêm field `kind` vào `ApiError` không phá vỡ chỗ nào.
 
 **Chưa kiểm tra (cần bạn tự làm bằng DevTools):**
@@ -252,7 +252,7 @@ Sửa:
 
 ### 8.6 Đã kiểm tra
 
-- `npm run lint`, `npx tsc --noEmit`, `npm run build` — đều pass sau khi sửa xong.
+- `pnpm lint`, `pnpm exec tsc --noEmit`, `pnpm build` — đều pass sau khi sửa xong.
 - Rà soát lại thứ tự `invalidate`/`setData` ở cả 3 trang sau khi phát hiện vấn đề mô tả ở 8.3 — đã sửa và build lại lần cuối để xác nhận.
 
 **Chưa kiểm tra (cần bạn tự làm bằng trình duyệt thật — đây là phần quan trọng nhất còn thiếu của GĐ4):**
@@ -285,7 +285,7 @@ Cho cả 3 trang (`danh-sach-du-an`, `danh-sach-cong-viec`, `danh-sach-task`):
 
 ### 9.3 Xác nhận đã đúng hướng — không phải chỉ "code chạy được"
 
-- `npm run build`: cả 3 route (`/quan-ly-cong-viec/danh-sach-du-an`, `danh-sach-cong-viec`, `danh-sach-task`) đổi ký hiệu từ `○` (Static, prerender một lần lúc build) sang `ƒ` (Dynamic, server-render mỗi request) — đây là bằng chứng khách quan (không phải suy luận) rằng Next.js giờ coi các trang này là phụ thuộc dữ liệu runtime (cookie phiên đăng nhập), đúng như thiết kế.
+- `pnpm build`: cả 3 route (`/quan-ly-cong-viec/danh-sach-du-an`, `danh-sach-cong-viec`, `danh-sach-task`) đổi ký hiệu từ `○` (Static, prerender một lần lúc build) sang `ƒ` (Dynamic, server-render mỗi request) — đây là bằng chứng khách quan (không phải suy luận) rằng Next.js giờ coi các trang này là phụ thuộc dữ liệu runtime (cookie phiên đăng nhập), đúng như thiết kế.
 - Chạy thử `next build && next start`, `curl` vào cả 3 route khi **chưa đăng nhập**: nhận `307` (redirect, do `src/proxy.ts` chặn ở edge trước khi vào tới trang) cho `danh-sach-cong-viec`/`danh-sach-task`, và theo redirect (`curl -L`) tới trang `/dang-nhap` trả `200` cho `danh-sach-du-an` — không có lỗi `500`, xác nhận Server Component mới không crash khi không có phiên đăng nhập (tình huống mà proxy vốn đã chặn từ trước, nhưng vẫn đáng kiểm tra vì code Server Component là hoàn toàn mới).
 - **Chưa test được luồng đã đăng nhập** — không có tài khoản thật để đăng nhập trong phiên làm việc này. Đây là khoảng trống lớn nhất của đợt sửa này, xem mục 9.5.
 
@@ -317,7 +317,7 @@ Sửa:
 ### 9.6 Đã kiểm tra / chưa kiểm tra
 
 **Đã kiểm tra:**
-- `npm run lint`, `npx tsc --noEmit`, `npm run build` — đều pass.
+- `pnpm lint`, `pnpm exec tsc --noEmit`, `pnpm build` — đều pass.
 - `next build && next start` + `curl` luồng chưa đăng nhập cho cả 3 route — không lỗi `500`, redirect đúng như proxy đã cấu hình từ trước.
 - Ký hiệu route trong output `next build` đổi từ Static sang Dynamic — xác nhận khách quan việc chuyển sang Server Component có hiệu lực.
 
@@ -354,7 +354,7 @@ Sửa:
 
 ### 10.4 Đã kiểm tra
 
-- `npm run lint`, `npx tsc --noEmit`, `npm run build` — pass.
+- `pnpm lint`, `pnpm exec tsc --noEmit`, `pnpm build` — pass.
 - Production build nhận đủ route mới `/api/accounts/analytics`, `/api/accounts/directory`; ba trang danh sách công việc vẫn là Dynamic (`ƒ`).
 - Trình duyệt thật khi chưa đăng nhập: `/nhan-vien` và ba trang danh sách dự án/công việc/task đều redirect về `/dang-nhap`, trang đăng nhập render bình thường.
 - `GET /api/accounts?page=1&pageSize=20` khi chưa đăng nhập trả `401` và có `x-request-id`.
@@ -379,9 +379,9 @@ Sửa:
 
 ### 11.2 Đã xác minh tự động
 
-- `npm run lint` — pass, không còn warning.
-- `npx tsc --noEmit` — pass.
-- `npm run build` — pass trên Next.js 16.2.12; route `/api/observability/web-vitals` xuất hiện trong production build.
+- `pnpm lint` — pass, không còn warning.
+- `pnpm exec tsc --noEmit` — pass.
+- `pnpm build` — pass trên Next.js 16.2.12; route `/api/observability/web-vitals` xuất hiện trong production build.
 - Smoke test bằng production server riêng: Web Vitals trả `202`, `/api/accounts` chưa đăng nhập trả `401`; cả hai response đều có UUID `x-request-id`, đủ `Server-Timing auth/db/map/total`, và log JSON khớp request id. Server smoke test đã được tắt sau khi kiểm tra.
 - Kiểm thử trình duyệt thật với phiên `admin` đang có trên Supabase online: trang dự án render 4 dòng, trang công việc 18 dòng, trang task 25 dòng ngay từ lần hiển thị được quan sát, không có skeleton toàn bảng; số link detail tương ứng đúng số dòng.
 - Chuyển trang dự án sang dạng Card và click tiêu đề `Quản lý Công việc IT Việt Nhật` mở đúng URL chi tiết dự án; không có lỗi console.

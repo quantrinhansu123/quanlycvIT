@@ -4,12 +4,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   ChevronDown,
+  Plus,
   Search,
+  Trash2,
   X,
 } from "lucide-react";
 import type {
   Subtask,
   SubtaskInput,
+  SubtaskUpdateEntry,
   TaskFileAttachment,
   TaskLinkAttachment,
 } from "@/types/subtask";
@@ -44,6 +47,15 @@ interface SubtaskFormModalProps {
   onSaved: (subtask: Subtask) => void;
 }
 
+interface UpdateEntryFormState {
+  id: string;
+  createdAt: string;
+  description: string;
+  files: TaskFileAttachment[];
+  links: TaskLinkAttachment[];
+  images: string[];
+}
+
 interface FormState {
   title: string;
   description: string;
@@ -58,6 +70,7 @@ interface FormState {
   files: TaskFileAttachment[];
   links: TaskLinkAttachment[];
   images: string[];
+  updates: UpdateEntryFormState[];
 }
 
 /** Phần của FormState lưu được vào bản nháp (GĐ7) — loại `files`/`links`/`images`. */
@@ -148,6 +161,10 @@ function buildInitialState(
       files: subtask.files,
       links: subtask.links,
       images: subtask.images,
+      updates: subtask.updates.map((entry) => ({
+        ...entry,
+        description: entry.description ?? "",
+      })),
     };
   }
   const workTaskId = defaultWorkTaskId ?? workTasks[0]?.id ?? "";
@@ -166,6 +183,7 @@ function buildInitialState(
     files: [],
     links: [],
     images: [],
+    updates: [],
   };
 }
 
@@ -341,6 +359,7 @@ export function SubtaskFormModal({
   const [form, setForm] = useState<FormState>(() =>
     buildInitialState(subtask, workTasks, defaultWorkTaskId)
   );
+  const [selectedUpdateId, setSelectedUpdateId] = useState("initial");
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -350,6 +369,12 @@ export function SubtaskFormModal({
   const [pendingFiles, setPendingFiles] = useState<PendingTaskFile[]>([]);
   const [fileError, setFileError] = useState("");
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
+  const [entryPendingImages, setEntryPendingImages] = useState<Record<string, PendingTaskImage[]>>({});
+  const [entryPendingFiles, setEntryPendingFiles] = useState<Record<string, PendingTaskFile[]>>({});
+  const [entryImageErrors, setEntryImageErrors] = useState<Record<string, string>>({});
+  const [entryFileErrors, setEntryFileErrors] = useState<Record<string, string>>({});
+  const [entryLinkErrors, setEntryLinkErrors] = useState<Record<string, string>>({});
+  const entryPendingImagesRef = useRef<Record<string, PendingTaskImage[]>>({});
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -393,10 +418,17 @@ export function SubtaskFormModal({
     pendingImagesRef.current = pendingImages;
   }, [pendingImages]);
 
+  useEffect(() => {
+    entryPendingImagesRef.current = entryPendingImages;
+  }, [entryPendingImages]);
+
   useEffect(
     () => () => {
       for (const image of pendingImagesRef.current) {
         URL.revokeObjectURL(image.previewUrl);
+      }
+      for (const images of Object.values(entryPendingImagesRef.current)) {
+        for (const image of images) URL.revokeObjectURL(image.previewUrl);
       }
     },
     []
@@ -552,6 +584,114 @@ export function SubtaskFormModal({
     setPendingFiles((current) => current.map((file) => file.id === id ? { ...file, ...patch } : file));
   }
 
+  function updateEntry(id: string, updater: (entry: UpdateEntryFormState) => UpdateEntryFormState) {
+    setForm((current) => ({
+      ...current,
+      updates: current.updates.map((entry) => entry.id === id ? updater(entry) : entry),
+    }));
+  }
+
+  function addUpdateEntry() {
+    const id = crypto.randomUUID();
+    setForm((current) => ({
+      ...current,
+      updates: [...current.updates, {
+        id,
+        createdAt: new Date().toISOString(),
+        description: "",
+        files: [],
+        links: [],
+        images: [],
+      }],
+    }));
+    setSelectedUpdateId(id);
+  }
+
+  function removeUpdateEntry(id: string) {
+    setSelectedUpdateId("initial");
+    setForm((current) => ({ ...current, updates: current.updates.filter((entry) => entry.id !== id) }));
+    setEntryPendingImages((current) => {
+      for (const image of current[id] ?? []) URL.revokeObjectURL(image.previewUrl);
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+    setEntryPendingFiles((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+  }
+
+  function handleEntryImageSelection(id: string, files: FileList | File[] | null) {
+    if (!files?.length) return;
+    const entry = form.updates.find((item) => item.id === id);
+    if (!entry) return;
+    const availableSlots = MAX_TASK_IMAGES - entry.images.length - (entryPendingImages[id]?.length ?? 0);
+    if (availableSlots <= 0) {
+      setEntryImageErrors((current) => ({ ...current, [id]: `Mỗi lần chỉ được lưu tối đa ${MAX_TASK_IMAGES} ảnh.` }));
+      return;
+    }
+    const selected = Array.from(files);
+    const invalid = selected.find((file) => !ALLOWED_TASK_IMAGE_TYPES.has(file.type));
+    if (invalid) {
+      setEntryImageErrors((current) => ({ ...current, [id]: "Chỉ hỗ trợ ảnh JPG, PNG, WEBP hoặc AVIF." }));
+      return;
+    }
+    const oversized = selected.find((file) => file.size === 0 || file.size > MAX_TASK_IMAGE_SIZE);
+    if (oversized) {
+      setEntryImageErrors((current) => ({ ...current, [id]: `Ảnh “${oversized.name}” phải có dung lượng tối đa 10 MB.` }));
+      return;
+    }
+    const additions = selected.slice(0, availableSlots).map((file) => ({
+      id: crypto.randomUUID(), file, previewUrl: URL.createObjectURL(file),
+    }));
+    setEntryPendingImages((current) => ({ ...current, [id]: [...(current[id] ?? []), ...additions] }));
+    setEntryImageErrors((current) => ({
+      ...current,
+      [id]: selected.length > availableSlots ? `Chỉ thêm ${availableSlots} ảnh để không vượt quá giới hạn.` : "",
+    }));
+  }
+
+  function handleEntryFileSelection(id: string, files: FileList | null) {
+    if (!files?.length) return;
+    const entry = form.updates.find((item) => item.id === id);
+    if (!entry) return;
+    const availableSlots = MAX_TASK_FILES - entry.files.length - (entryPendingFiles[id]?.length ?? 0);
+    if (availableSlots <= 0) {
+      setEntryFileErrors((current) => ({ ...current, [id]: `Mỗi lần chỉ được đính kèm tối đa ${MAX_TASK_FILES} tệp.` }));
+      return;
+    }
+    const selected = Array.from(files);
+    const oversized = selected.find((file) => file.size === 0 || file.size > MAX_TASK_FILE_SIZE);
+    if (oversized) {
+      setEntryFileErrors((current) => ({ ...current, [id]: `Tệp “${oversized.name}” phải có dung lượng tối đa 20 MB.` }));
+      return;
+    }
+    const additions = selected.slice(0, availableSlots).map((file) => ({ id: crypto.randomUUID(), file }));
+    setEntryPendingFiles((current) => ({ ...current, [id]: [...(current[id] ?? []), ...additions] }));
+    setEntryFileErrors((current) => ({
+      ...current,
+      [id]: selected.length > availableSlots ? `Chỉ thêm ${availableSlots} tệp để không vượt quá giới hạn.` : "",
+    }));
+  }
+
+  function removeEntryPendingImage(id: string, imageId: string) {
+    setEntryPendingImages((current) => {
+      const target = (current[id] ?? []).find((image) => image.id === imageId);
+      if (target) URL.revokeObjectURL(target.previewUrl);
+      return { ...current, [id]: (current[id] ?? []).filter((image) => image.id !== imageId) };
+    });
+  }
+
+  function normalizeLinks(links: TaskLinkAttachment[]): TaskLinkAttachment[] {
+    return links.map((link) => ({
+      label: link.label?.trim() || undefined,
+      url: link.url.trim(),
+      description: link.description?.trim() || undefined,
+    })).filter((link) => link.url);
+  }
+
   function addLinkRow() {
     setForm((prev) => ({ ...prev, links: [...prev.links, { label: "", url: "" }] }));
     setErrors((prev) => ({ ...prev, links: undefined }));
@@ -571,13 +711,7 @@ export function SubtaskFormModal({
 
   /** Bỏ qua các dòng liên kết chưa nhập gì thay vì bắt lỗi. */
   function normalizedLinks(): TaskLinkAttachment[] {
-    return form.links
-      .map((link) => ({
-        label: link.label?.trim() || undefined,
-        url: link.url.trim(),
-        description: link.description?.trim() || undefined,
-      }))
-      .filter((link) => link.url);
+    return normalizeLinks(form.links);
   }
 
   function validate(): boolean {
@@ -614,8 +748,14 @@ export function SubtaskFormModal({
     if (invalidLink) {
       nextErrors.links = `Liên kết “${invalidLink.url}” không hợp lệ.`;
     }
+    const nextEntryLinkErrors: Record<string, string> = {};
+    for (const entry of form.updates) {
+      const invalidEntryLink = normalizeLinks(entry.links).find((link) => !isValidHttpUrl(link.url));
+      if (invalidEntryLink) nextEntryLinkErrors[entry.id] = `Liên kết “${invalidEntryLink.url}” không hợp lệ.`;
+    }
+    setEntryLinkErrors(nextEntryLinkErrors);
     setErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
+    return Object.keys(nextErrors).length === 0 && Object.keys(nextEntryLinkErrors).length === 0;
   }
 
   async function handleSubmit(event: React.FormEvent) {
@@ -627,6 +767,12 @@ export function SubtaskFormModal({
     try {
       const uploadedImages: string[] = [];
       const uploadedFiles: TaskFileAttachment[] = [];
+      const entryUploadedImages: Record<string, string[]> = Object.fromEntries(
+        form.updates.map((entry) => [entry.id, []])
+      );
+      const entryUploadedFiles: Record<string, TaskFileAttachment[]> = Object.fromEntries(
+        form.updates.map((entry) => [entry.id, []])
+      );
       const uploadResult = await runUploadBatch([
         ...pendingImages.map((image) => ({
           id: image.id,
@@ -639,6 +785,24 @@ export function SubtaskFormModal({
             uploadedFiles.push({ ...uploaded, description: pending.description?.trim() || undefined });
           },
         })),
+        ...form.updates.flatMap((entry) => [
+          ...(entryPendingImages[entry.id] ?? []).map((image) => ({
+            id: image.id,
+            upload: async () => {
+              entryUploadedImages[entry.id].push(await subtaskService.uploadImage(image.file));
+            },
+          })),
+          ...(entryPendingFiles[entry.id] ?? []).map((pending) => ({
+            id: pending.id,
+            upload: async () => {
+              const uploaded = await subtaskService.uploadFile(pending.file);
+              entryUploadedFiles[entry.id].push({
+                ...uploaded,
+                description: pending.description?.trim() || undefined,
+              });
+            },
+          })),
+        ]),
       ]);
       const uploadedIds = new Set(uploadResult.succeededIds);
       if (uploadedImages.length || uploadedFiles.length) {
@@ -654,9 +818,39 @@ export function SubtaskFormModal({
         }));
         setPendingFiles((current) => current.filter((item) => !uploadedIds.has(item.id)));
       }
+      setEntryPendingImages((current) => Object.fromEntries(
+        Object.entries(current).map(([entryId, images]) => [entryId, images.filter((image) => {
+          if (!uploadedIds.has(image.id)) return true;
+          URL.revokeObjectURL(image.previewUrl);
+          return false;
+        })])
+      ));
+      setEntryPendingFiles((current) => Object.fromEntries(
+        Object.entries(current).map(([entryId, files]) => [entryId, files.filter((file) => !uploadedIds.has(file.id))])
+      ));
+      if (form.updates.some((entry) => entryUploadedImages[entry.id].length || entryUploadedFiles[entry.id].length)) {
+        setForm((current) => ({
+          ...current,
+          updates: current.updates.map((entry) => ({
+            ...entry,
+            images: [...entry.images, ...(entryUploadedImages[entry.id] ?? [])],
+            files: [...entry.files, ...(entryUploadedFiles[entry.id] ?? [])],
+          })),
+        }));
+      }
       if (uploadResult.failures.length) {
         throw new Error(`Không thể tải ${uploadResult.failures.length} tệp. Các tệp đã tải xong được giữ lại; bấm Lưu để thử lại tệp lỗi.`);
       }
+      const updates: SubtaskUpdateEntry[] = form.updates.map((entry) => ({
+        id: entry.id,
+        createdAt: entry.createdAt,
+        description: entry.description.trim() || undefined,
+        files: [...entry.files, ...entryUploadedFiles[entry.id]],
+        links: normalizeLinks(entry.links),
+        images: [...entry.images, ...entryUploadedImages[entry.id]],
+      })).filter((entry) =>
+        Boolean(entry.description || entry.files.length || entry.links.length || entry.images.length)
+      );
       const input: SubtaskInput = {
         title: form.title.trim(),
         description: form.description || undefined,
@@ -674,6 +868,7 @@ export function SubtaskFormModal({
         files: [...form.files, ...uploadedFiles],
         links: normalizedLinks(),
         images: [...form.images, ...uploadedImages],
+        updates,
       };
       const saved = mode === "edit" && subtask
         ? await subtaskService.updateSubtask(subtask.id, input)
@@ -765,49 +960,151 @@ export function SubtaskFormModal({
             {errors.title && <p className="mt-1 text-xs text-rose-500">{errors.title}</p>}
           </div>
 
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-gray-700">Mô tả task</label>
-            <textarea
-              ref={descriptionRef}
-              value={form.description}
-              onChange={(event) => {
-                setForm((prev) => ({ ...prev, description: event.target.value }));
-                resizeDescriptionTextarea(event.target);
-              }}
-              placeholder="Chi tiết yêu cầu task..."
-              rows={3}
-              style={{ maxHeight: DESCRIPTION_MAX_HEIGHT }}
-              className="w-full resize-none overflow-y-auto rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
-            />
-          </div>
+          <section className="space-y-4 rounded-xl border border-gray-200 bg-gray-50/60 p-4">
+            <div>
+              <span className="mb-2 block text-sm font-semibold text-gray-700">Chọn lần</span>
+              <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Chọn lần mô tả và đính kèm Task">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={selectedUpdateId === "initial"}
+                  onClick={() => setSelectedUpdateId("initial")}
+                  className={cn(
+                    "h-9 rounded-lg border px-3 text-sm font-semibold transition",
+                    selectedUpdateId === "initial"
+                      ? "border-brand-500 bg-brand-50 text-brand-700"
+                      : "border-gray-200 bg-white text-gray-600 hover:border-brand-300 hover:text-brand-600"
+                  )}
+                >
+                  Lần 1
+                </button>
+                {form.updates.map((entry, index) => (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={selectedUpdateId === entry.id}
+                    onClick={() => setSelectedUpdateId(entry.id)}
+                    className={cn(
+                      "h-9 rounded-lg border px-3 text-sm font-semibold transition",
+                      selectedUpdateId === entry.id
+                        ? "border-brand-500 bg-brand-50 text-brand-700"
+                        : "border-gray-200 bg-white text-gray-600 hover:border-brand-300 hover:text-brand-600"
+                    )}
+                  >
+                    Lần {index + 2}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={addUpdateEntry}
+                  disabled={submitting || form.updates.length >= 20}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-dashed border-gray-300 bg-white px-3 text-sm font-semibold text-gray-600 transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600 disabled:opacity-50"
+                >
+                  <Plus className="h-4 w-4" />
+                  Thêm lần
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-gray-400">Mô tả và đính kèm được lưu riêng theo lần đang chọn.</p>
+            </div>
 
-          <TaskAttachmentFields
-            label="Đính kèm Task"
-            entityLabel="Task"
-            files={form.files}
-            pendingFiles={pendingFiles}
-            links={form.links}
-            images={form.images}
-            pendingImages={pendingImages}
-            maxFiles={MAX_TASK_FILES}
-            maxLinks={MAX_TASK_LINKS}
-            maxImages={MAX_TASK_IMAGES}
-            submitting={submitting}
-            fileError={fileError}
-            linkError={errors.links}
-            imageError={imageError}
-            onSelectFiles={handleFileSelection}
-            onSelectImages={handleImageSelection}
-            onAddLink={addLinkRow}
-            onUpdateLink={updateLinkRow}
-            onRemoveLink={removeLinkRow}
-            onRemoveSavedFile={removeSavedFile}
-            onRemovePendingFile={removePendingFile}
-            onUpdateSavedFile={updateSavedFile}
-            onUpdatePendingFile={updatePendingFile}
-            onRemoveSavedImage={removeSavedImage}
-            onRemovePendingImage={removePendingImage}
-          />
+            {selectedUpdateId === "initial" ? (
+              <div className="space-y-4" role="tabpanel">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Mô tả Task — Lần 1</label>
+                  <textarea
+                    ref={descriptionRef}
+                    value={form.description}
+                    onChange={(event) => {
+                      setForm((prev) => ({ ...prev, description: event.target.value }));
+                      resizeDescriptionTextarea(event.target);
+                    }}
+                    placeholder="Chi tiết yêu cầu task..."
+                    rows={3}
+                    style={{ maxHeight: DESCRIPTION_MAX_HEIGHT }}
+                    className="w-full resize-none overflow-y-auto rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+                  />
+                </div>
+                <TaskAttachmentFields
+                  label="Đính kèm — Lần 1"
+                  entityLabel="Task"
+                  files={form.files}
+                  pendingFiles={pendingFiles}
+                  links={form.links}
+                  images={form.images}
+                  pendingImages={pendingImages}
+                  maxFiles={MAX_TASK_FILES}
+                  maxLinks={MAX_TASK_LINKS}
+                  maxImages={MAX_TASK_IMAGES}
+                  submitting={submitting}
+                  fileError={fileError}
+                  linkError={errors.links}
+                  imageError={imageError}
+                  onSelectFiles={handleFileSelection}
+                  onSelectImages={handleImageSelection}
+                  onAddLink={addLinkRow}
+                  onUpdateLink={updateLinkRow}
+                  onRemoveLink={removeLinkRow}
+                  onRemoveSavedFile={removeSavedFile}
+                  onRemovePendingFile={removePendingFile}
+                  onUpdateSavedFile={updateSavedFile}
+                  onUpdatePendingFile={updatePendingFile}
+                  onRemoveSavedImage={removeSavedImage}
+                  onRemovePendingImage={removePendingImage}
+                />
+              </div>
+            ) : form.updates.map((entry, index) => entry.id === selectedUpdateId ? (
+              <div key={entry.id} className="space-y-4" role="tabpanel">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-gray-700">Mô tả Task — Lần {index + 2}</label>
+                  <button
+                    type="button"
+                    onClick={() => removeUpdateEntry(entry.id)}
+                    disabled={submitting}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-gray-400 hover:bg-rose-50 hover:text-rose-600"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Xóa lần
+                  </button>
+                </div>
+                <textarea
+                  value={entry.description}
+                  onChange={(event) => updateEntry(entry.id, (current) => ({ ...current, description: event.target.value }))}
+                  placeholder="Nội dung bổ sung..."
+                  rows={3}
+                  style={{ maxHeight: DESCRIPTION_MAX_HEIGHT }}
+                  className="w-full resize-none overflow-y-auto rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+                />
+                <TaskAttachmentFields
+                  label={`Đính kèm — Lần ${index + 2}`}
+                  entityLabel="Task"
+                  files={entry.files}
+                  pendingFiles={entryPendingFiles[entry.id] ?? []}
+                  links={entry.links}
+                  images={entry.images}
+                  pendingImages={entryPendingImages[entry.id] ?? []}
+                  maxFiles={MAX_TASK_FILES}
+                  maxLinks={MAX_TASK_LINKS}
+                  maxImages={MAX_TASK_IMAGES}
+                  submitting={submitting}
+                  fileError={entryFileErrors[entry.id]}
+                  linkError={entryLinkErrors[entry.id]}
+                  imageError={entryImageErrors[entry.id]}
+                  onSelectFiles={(files) => handleEntryFileSelection(entry.id, files)}
+                  onSelectImages={(files) => handleEntryImageSelection(entry.id, files)}
+                  onAddLink={() => updateEntry(entry.id, (current) => ({ ...current, links: [...current.links, { label: "", url: "" }] }))}
+                  onUpdateLink={(rowIndex, linkPatch) => updateEntry(entry.id, (current) => ({ ...current, links: current.links.map((link, i) => i === rowIndex ? { ...link, ...linkPatch } : link) }))}
+                  onRemoveLink={(rowIndex) => updateEntry(entry.id, (current) => ({ ...current, links: current.links.filter((_, i) => i !== rowIndex) }))}
+                  onRemoveSavedFile={(url) => updateEntry(entry.id, (current) => ({ ...current, files: current.files.filter((file) => file.url !== url) }))}
+                  onRemovePendingFile={(fileId) => setEntryPendingFiles((current) => ({ ...current, [entry.id]: (current[entry.id] ?? []).filter((file) => file.id !== fileId) }))}
+                  onUpdateSavedFile={(url, filePatch) => updateEntry(entry.id, (current) => ({ ...current, files: current.files.map((file) => file.url === url ? { ...file, ...filePatch } : file) }))}
+                  onUpdatePendingFile={(fileId, filePatch) => setEntryPendingFiles((current) => ({ ...current, [entry.id]: (current[entry.id] ?? []).map((file) => file.id === fileId ? { ...file, ...filePatch } : file) }))}
+                  onRemoveSavedImage={(url) => updateEntry(entry.id, (current) => ({ ...current, images: current.images.filter((image) => image !== url) }))}
+                  onRemovePendingImage={(imageId) => removeEntryPendingImage(entry.id, imageId)}
+                />
+              </div>
+            ) : null)}
+          </section>
 
           <div>
             <label className="mb-1.5 block text-sm font-medium text-gray-700">

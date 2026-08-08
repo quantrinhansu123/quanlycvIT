@@ -1,6 +1,6 @@
 import { ApiException } from "@/lib/api/response";
 import type { ProjectColor, ProjectInput, ProjectStepConfig } from "@/types/project";
-import type { SubtaskInput, TaskFileAttachment, TaskLinkAttachment } from "@/types/subtask";
+import type { SubtaskInput, SubtaskUpdateEntry, TaskFileAttachment, TaskLinkAttachment } from "@/types/subtask";
 import type { TaskPriority, TaskStatus, WorkTaskInput } from "@/types/task";
 
 const PROJECT_COLORS = new Set<ProjectColor>(["purple", "green", "orange", "red", "blue"]);
@@ -51,8 +51,12 @@ function isHttpUrl(value: string): boolean {
   }
 }
 
-function imageUrls(body: Record<string, unknown>): string[] {
-  const images = stringArray(body, "images");
+function parseImageUrlArray(value: unknown): string[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    throw new ApiException("images phải là một mảng chuỗi.", 400);
+  }
+  const images = [...new Set(value.map((item) => (item as string).trim()).filter(Boolean))];
   if (images.length > 10) {
     throw new ApiException("Mỗi Task chỉ được lưu tối đa 10 ảnh.", 400);
   }
@@ -62,8 +66,11 @@ function imageUrls(body: Record<string, unknown>): string[] {
   return images;
 }
 
-function fileAttachments(body: Record<string, unknown>): TaskFileAttachment[] {
-  const value = body.files;
+function imageUrls(body: Record<string, unknown>): string[] {
+  return parseImageUrlArray(body.images);
+}
+
+function parseFileAttachmentArray(value: unknown): TaskFileAttachment[] {
   if (value === undefined || value === null) return [];
   if (!Array.isArray(value)) {
     throw new ApiException("Danh sách tệp đính kèm phải là một mảng.", 400);
@@ -90,8 +97,11 @@ function fileAttachments(body: Record<string, unknown>): TaskFileAttachment[] {
   });
 }
 
-function linkAttachments(body: Record<string, unknown>): TaskLinkAttachment[] {
-  const value = body.links;
+function fileAttachments(body: Record<string, unknown>): TaskFileAttachment[] {
+  return parseFileAttachmentArray(body.files);
+}
+
+function parseLinkAttachmentArray(value: unknown): TaskLinkAttachment[] {
   if (value === undefined || value === null) return [];
   if (!Array.isArray(value)) {
     throw new ApiException("Danh sách liên kết phải là một mảng.", 400);
@@ -116,6 +126,46 @@ function linkAttachments(body: Record<string, unknown>): TaskLinkAttachment[] {
         ? entry.description.trim()
         : undefined;
     return { label, url: entry.url.trim(), description };
+  });
+}
+
+function linkAttachments(body: Record<string, unknown>): TaskLinkAttachment[] {
+  return parseLinkAttachmentArray(body.links);
+}
+
+/** Lần bổ sung mô tả + đính kèm (Lần 2 trở đi) gửi kèm khi tạo/sửa Task. */
+function subtaskUpdateEntries(body: Record<string, unknown>): SubtaskUpdateEntry[] {
+  const value = body.updates;
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    throw new ApiException("Danh sách lần bổ sung phải là một mảng.", 400);
+  }
+  if (value.length > 20) {
+    throw new ApiException("Mỗi Task chỉ được có tối đa 20 lần bổ sung.", 400);
+  }
+  return value.map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new ApiException("Lần bổ sung không hợp lệ.", 400);
+    }
+    const entry = item as Record<string, unknown>;
+    const id =
+      typeof entry.id === "string" && entry.id.trim() ? entry.id.trim() : crypto.randomUUID();
+    const description =
+      typeof entry.description === "string" && entry.description.trim()
+        ? entry.description.trim()
+        : undefined;
+    const createdAt =
+      typeof entry.createdAt === "string" && entry.createdAt.trim()
+        ? entry.createdAt.trim()
+        : new Date().toISOString();
+    return {
+      id,
+      description,
+      images: parseImageUrlArray(entry.images),
+      files: parseFileAttachmentArray(entry.files),
+      links: parseLinkAttachmentArray(entry.links),
+      createdAt,
+    };
   });
 }
 
@@ -349,5 +399,6 @@ export function parseSubtaskInput(body: Record<string, unknown>): SubtaskInput {
     files: fileAttachments(body),
     links: linkAttachments(body),
     images: imageUrls(body),
+    updates: subtaskUpdateEntries(body),
   };
 }

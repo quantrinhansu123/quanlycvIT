@@ -3,7 +3,7 @@
 Ngày triển khai: **02/08/2026**
 Nguồn kế hoạch: `PERF-UNIFIED-IMPLEMENTATION-PLAN.md` (mục "Giai đoạn 6")
 Báo cáo trước: `PERF-PHASE-0-1-README.md` (GĐ0 một phần → GĐ5 một phần)
-Trạng thái: **Xong về mặt code + `npm run lint`/`npx tsc --noEmit`/`npm run build` đều pass — chưa tự kiểm thử tay bằng trình duyệt thật (không có tài khoản đăng nhập thật trong phiên làm việc này)**
+Trạng thái: **Xong về mặt code + `pnpm lint`/`pnpm exec tsc --noEmit`/`pnpm build` đều pass — chưa tự kiểm thử tay bằng trình duyệt thật (không có tài khoản đăng nhập thật trong phiên làm việc này)**
 
 **Cập nhật 02/08/2026 (cùng ngày, đợt sau):** đã bổ sung tiếp **Giai đoạn 7 — Lưu bản nháp form an toàn** vào cùng file báo cáo này, xem mục 6 phía dưới.
 
@@ -79,9 +79,9 @@ Không đổi: `src/lib/client-cache/session-data-cache.ts`, `resources.ts`, `tt
 
 ## 4. Đã kiểm tra
 
-- `npm run lint` — pass, không lỗi/warning.
-- `npx tsc --noEmit` — pass, không lỗi kiểu.
-- `npm run build` — build production thành công (Next.js 16.2.12, Turbopack), toàn bộ 43 route lên trang không lỗi.
+- `pnpm lint` — pass, không lỗi/warning.
+- `pnpm exec tsc --noEmit` — pass, không lỗi kiểu.
+- `pnpm build` — build production thành công (Next.js 16.2.12, Turbopack), toàn bộ 43 route lên trang không lỗi.
 
 **Chưa kiểm tra (cần bạn tự làm bằng trình duyệt thật, đăng nhập ít nhất 1 tài khoản mỗi vai trò admin/manager/member):**
 
@@ -111,7 +111,7 @@ Theo đúng thứ tự ưu tiên trong `PERF-UNIFIED-IMPLEMENTATION-PLAN.md`:
 ## 6. Giai đoạn 7 — Lưu bản nháp form an toàn (bổ sung 02/08/2026)
 
 Nguồn kế hoạch: mục "Giai đoạn 7" trong `PERF-UNIFIED-IMPLEMENTATION-PLAN.md` (gốc từ `Cross-Project GĐ3`).
-Trạng thái: **Xong về mặt code + `npm run lint`/`npx tsc --noEmit`/`npm run build` đều pass — chưa tự kiểm thử tay bằng trình duyệt thật.**
+Trạng thái: **Xong về mặt code + `pnpm lint`/`pnpm exec tsc --noEmit`/`pnpm build` đều pass — chưa tự kiểm thử tay bằng trình duyệt thật.**
 
 ### 6.1 Mục tiêu
 
@@ -175,9 +175,9 @@ Không đổi: `AccountFormModal.tsx` — cố tình không áp dụng, đúng l
 ### 6.7 Đã kiểm tra / chưa kiểm tra
 
 **Đã kiểm tra:**
-- `npm run lint` — pass (sau khi sửa 1 lỗi `react-hooks/set-state-in-effect` bằng `eslint-disable-next-line`, đúng tiền lệ đã dùng ở GĐ1/GĐ4 cho các effect đồng bộ dữ liệu ngoài — xem `PERF-PHASE-0-1-README.md` mục 3).
-- `npx tsc --noEmit` — pass.
-- `npm run build` — build production thành công, không route nào lỗi.
+- `pnpm lint` — pass (sau khi sửa 1 lỗi `react-hooks/set-state-in-effect` bằng `eslint-disable-next-line`, đúng tiền lệ đã dùng ở GĐ1/GĐ4 cho các effect đồng bộ dữ liệu ngoài — xem `PERF-PHASE-0-1-README.md` mục 3).
+- `pnpm exec tsc --noEmit` — pass.
+- `pnpm build` — build production thành công, không route nào lỗi.
 
 **Chưa kiểm tra (cần bạn tự làm bằng trình duyệt thật):**
 
@@ -194,7 +194,7 @@ Không đổi: `AccountFormModal.tsx` — cố tình không áp dụng, đúng l
 ## 7. Giai đoạn 9 — Idempotency & mutation nguyên tử (bổ sung 02/08/2026)
 
 Nguồn kế hoạch: mục "Giai đoạn 9" trong `PERF-UNIFIED-IMPLEMENTATION-PLAN.md` (gốc từ `Cross-Project GĐ4`). Theo yêu cầu, đã **bỏ qua GĐ8** (Batch API & kiểm soát đồng thời upload) để làm thẳng GĐ9.
-Trạng thái: **Phần idempotency xong về mặt code + đã push migration lên database liên kết + `npm run lint`/`npx tsc --noEmit`/`npm run build` đều pass. Phần "chuyển mutation nhiều bước sang RPC transaction" CHƯA làm — xem lý do ở mục 7.4.**
+Trạng thái: **Phần idempotency xong về mặt code + đã push migration lên database liên kết + `pnpm lint`/`pnpm exec tsc --noEmit`/`pnpm build` đều pass. Phần "chuyển mutation nhiều bước sang RPC transaction" CHƯA làm — xem lý do ở mục 7.4.**
 
 ### 7.1 Khảo sát trước khi sửa — xác nhận đúng vấn đề, không suy đoán
 
@@ -281,7 +281,7 @@ Không đổi: `src/services/api-client.ts` (đã hỗ trợ header tùy ý từ
 ### 7.6 Đã kiểm tra / chưa kiểm tra
 
 **Đã kiểm tra:**
-- `npm run lint`, `npx tsc --noEmit`, `npm run build` — đều pass.
+- `pnpm lint`, `pnpm exec tsc --noEmit`, `pnpm build` — đều pass.
 - `supabase db push --linked` áp dụng migration thành công (có hỏi xác nhận người dùng trước khi chạy).
 - `supabase db query --linked` xác nhận cả 4 constraint của `mutation_requests` tồn tại đúng như thiết kế, đặc biệt là unique constraint `(account_id, idempotency_key, scope)`.
 
@@ -316,9 +316,9 @@ Không đổi: `src/services/api-client.ts` (đã hỗ trợ header tùy ý từ
 
 ### 8.4 Đã kiểm tra
 
-- `npm run lint` — pass.
-- `npx tsc --noEmit` — pass.
-- `npm run build` — pass trên Next.js 16.2.12; route mới `/api/accounts/batch` xuất hiện trong production build.
+- `pnpm lint` — pass.
+- `pnpm exec tsc --noEmit` — pass.
+- `pnpm build` — pass trên Next.js 16.2.12; route mới `/api/accounts/batch` xuất hiện trong production build.
 - Test runtime `runUploadBatch` với 9 job (1 job cố ý lỗi): `maxConcurrent = 4`, 8 success và 1 failure vẫn được ghi nhận độc lập.
 
 ### 8.5 Còn phụ thuộc môi trường hoặc cố ý chưa làm

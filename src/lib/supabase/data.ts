@@ -14,6 +14,7 @@ import type {
   Subtask,
   SubtaskInput,
   SubtaskReport,
+  SubtaskUpdateEntry,
   TaskFileAttachment,
   TaskLinkAttachment,
 } from "@/types/subtask";
@@ -131,6 +132,7 @@ interface SubtaskRow {
   hinh_anh: string[] | null;
   tep_dinh_kem: TaskFileAttachment[] | null;
   lien_ket_dinh_kem: TaskLinkAttachment[] | null;
+  cap_nhat_bo_sung: SubtaskUpdateEntry[] | null;
   task_tien_de_id: string | null;
   cong_viec_id: string;
   /** Người phụ trách chính "cũ" (cột nguoi_phu_trach_id), lấy kèm qua embed. */
@@ -235,7 +237,7 @@ const WORK_TASK_DIRECTORY_SELECT =
   `legacy_assignee:tai_khoan!nguoi_phu_trach_id(${ACCOUNT_SELECT}),` +
   `cong_viec_phu_trach(tai_khoan_id,la_chinh,tai_khoan(${ACCOUNT_SELECT}))`;
 const SUBTASK_SELECT =
-  "id,ten_task,mo_ta,created_at,updated_at,ngay_bat_dau,ngay_ket_thuc,nguoi_phu_trach_id,trang_thai,uu_tien,tien_do_thuc_te,nhan_tag,hinh_anh,tep_dinh_kem,lien_ket_dinh_kem,task_tien_de_id,cong_viec_id," +
+  "id,ten_task,mo_ta,created_at,updated_at,ngay_bat_dau,ngay_ket_thuc,nguoi_phu_trach_id,trang_thai,uu_tien,tien_do_thuc_te,nhan_tag,hinh_anh,tep_dinh_kem,lien_ket_dinh_kem,cap_nhat_bo_sung,task_tien_de_id,cong_viec_id," +
   `legacy_assignee:tai_khoan!nguoi_phu_trach_id(${ACCOUNT_SELECT}),` +
   `task_phu_trach(tai_khoan_id,la_chinh,xac_nhan_luc,tai_khoan(${ACCOUNT_SELECT}))`;
 const TASK_ACTIVITY_SELECT =
@@ -1512,6 +1514,7 @@ function hydrateSubtasks(rows: SubtaskRow[]): Subtask[] {
       files: row.tep_dinh_kem ?? [],
       links: row.lien_ket_dinh_kem ?? [],
       images: row.hinh_anh ?? [],
+      updates: row.cap_nhat_bo_sung ?? [],
     };
   });
 }
@@ -1675,6 +1678,7 @@ function subtaskPayload(
     hinh_anh: input.images,
     tep_dinh_kem: input.files,
     lien_ket_dinh_kem: input.links,
+    cap_nhat_bo_sung: input.updates,
     cong_viec_id: input.workTaskId,
   };
 }

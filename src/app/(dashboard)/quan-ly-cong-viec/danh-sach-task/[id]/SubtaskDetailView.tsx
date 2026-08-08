@@ -170,6 +170,49 @@ export function SubtaskDetailView({
         files: value.files,
         links: value.links,
         images: value.images,
+        updates: subtask.updates,
+      });
+      if (!updated) throw new Error("Task không tồn tại hoặc đã bị xóa.");
+      setSubtask(updated);
+      cache.invalidate(CACHE_RESOURCE.subtasksList);
+      cache.invalidate(CACHE_RESOURCE.tasksList);
+      void refreshActivity();
+    } catch (updateError) {
+      notify({
+        type: "error",
+        title: "Không thể cập nhật tài liệu Task",
+        description: getErrorMessage(updateError, "Vui lòng thử lại."),
+      });
+      throw updateError;
+    }
+  }, [cache, notify, refreshActivity, subtask]);
+
+  const handleUpdateAttachmentSave = useCallback(async (
+    updateId: string,
+    value: {
+      files: TaskFileAttachment[];
+      links: TaskLinkAttachment[];
+      images: string[];
+    }
+  ) => {
+    if (!subtask) return;
+    try {
+      const updated = await subtaskService.updateSubtask(subtask.id, {
+        title: subtask.title,
+        description: subtask.description,
+        workTaskId: subtask.workTaskId,
+        assigneeIds: subtask.assignees.map((member) => member.id),
+        priority: subtask.priority,
+        startDate: subtask.startDate,
+        dueDate: subtask.dueDate,
+        progress: subtask.progress,
+        tags: subtask.tags,
+        files: subtask.files,
+        links: subtask.links,
+        images: subtask.images,
+        updates: subtask.updates.map((entry) =>
+          entry.id === updateId ? { ...entry, ...value } : entry
+        ),
       });
       if (!updated) throw new Error("Task không tồn tại hoặc đã bị xóa.");
       setSubtask(updated);
@@ -230,6 +273,7 @@ export function SubtaskDetailView({
         files: subtask.files,
         links: subtask.links,
         images: subtask.images,
+        updates: subtask.updates,
         ...patch,
       });
       if (!updated) throw new Error("Task không tồn tại hoặc đã bị xóa.");
@@ -464,22 +508,57 @@ export function SubtaskDetailView({
                 title="Chi tiết Task"
                 subtitle="Mô tả Task và thời hạn thực hiện chi tiết"
               >
-                <div className="max-w-full overflow-x-auto rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-4 text-sm leading-6 text-gray-700">
-                  <DetailDescription
-                    description={subtask.description}
-                    emptyText="Chưa có mô tả cho Task này."
-                  />
+                <div className="space-y-3">
+                  <div className="rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-4">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <span className="text-sm font-semibold text-gray-700">Lần 1</span>
+                      {subtask.createdAt && (
+                        <span className="text-xs text-gray-400">{formatDateVN(subtask.createdAt)}</span>
+                      )}
+                    </div>
+                    <div className="max-w-full overflow-x-auto text-sm leading-6 text-gray-700">
+                      <DetailDescription
+                        description={subtask.description}
+                        emptyText="Chưa có mô tả cho Task này."
+                      />
+                    </div>
+                    <InlineTaskAttachmentEditor
+                      key={`${subtask.id}:${JSON.stringify(subtask.files)}:${JSON.stringify(subtask.links)}`}
+                      entityLabel="Task"
+                      files={subtask.files}
+                      links={subtask.links}
+                      images={subtask.images}
+                      onUploadFile={subtaskService.uploadFile}
+                      onUploadImage={subtaskService.uploadImage}
+                      onSave={handleAttachmentSave}
+                    />
+                  </div>
+                  {subtask.updates.length > 0 && (
+                    <div className="space-y-3">
+                      {subtask.updates.map((entry, index) => (
+                        <div key={entry.id} className="rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-4">
+                          <div className="mb-2 flex items-center justify-between gap-3">
+                            <span className="text-sm font-semibold text-gray-700">Lần {index + 2}</span>
+                            <span className="text-xs text-gray-400">{formatDateVN(entry.createdAt)}</span>
+                          </div>
+                          <div className="max-w-full overflow-x-auto text-sm leading-6 text-gray-700">
+                            <DetailDescription description={entry.description} emptyText="Lần này chưa có mô tả." />
+                          </div>
+                          <InlineTaskAttachmentEditor
+                            key={`${entry.id}:${JSON.stringify(entry.files)}:${JSON.stringify(entry.links)}`}
+                            entityLabel="Task"
+                            files={entry.files}
+                            links={entry.links}
+                            images={entry.images}
+                            onUploadFile={subtaskService.uploadFile}
+                            onUploadImage={subtaskService.uploadImage}
+                            onSave={(value) => handleUpdateAttachmentSave(entry.id, value)}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <InlineTaskAttachmentEditor
-                  key={`${subtask.id}:${JSON.stringify(subtask.files)}:${JSON.stringify(subtask.links)}`}
-                  entityLabel="Task"
-                  files={subtask.files}
-                  links={subtask.links}
-                  images={subtask.images}
-                  onUploadFile={subtaskService.uploadFile}
-                  onUploadImage={subtaskService.uploadImage}
-                  onSave={handleAttachmentSave}
-                />
                 <div className="mt-6 grid grid-cols-1 gap-5 border-t border-gray-100 pt-4 sm:grid-cols-2">
                   <DateInfo
                     label="Thời gian bắt đầu:"

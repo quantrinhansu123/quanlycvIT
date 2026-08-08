@@ -141,7 +141,7 @@ TTL cache đề xuất (điều chỉnh theo số đo thật):
 - `src/services/project-service.ts`, `src/services/task-service.ts`, `src/services/subtask-service.ts`
 
 **Kiểm thử:** gõ 10 ký tự liên tục chỉ 1–2 request hoàn tất; đổi filter A→B→A khi mạng chậm, UI cuối cùng đúng A; đổi trang không nhấp nháy sai dữ liệu; không cập nhật state sau unmount.
-*(Đã chạy `npm run lint`, `tsc --noEmit`, `npm run build` — đều pass. Chưa tự kiểm thử tay trên trình duyệt với mạng chậm/nhiều request đồng thời — cần người dùng xác nhận trước khi coi GĐ1 là "xong" theo đúng checklist mục 8.)*
+*(Đã chạy `pnpm lint`, `tsc --noEmit`, `pnpm build` — đều pass. Chưa tự kiểm thử tay trên trình duyệt với mạng chậm/nhiều request đồng thời — cần người dùng xác nhận trước khi coi GĐ1 là "xong" theo đúng checklist mục 8.)*
 
 **Điều kiện hoàn thành:** request chính bắt đầu <50ms sau event; số request tìm kiếm giảm ≥60% khi gõ nhanh; không còn race condition quan sát được ở 3 danh sách chính. *(Cần đo lại bằng DevTools để xác nhận số liệu — xem GĐ0.)*
 
@@ -192,7 +192,7 @@ create index if not exists task_created_at_id_idx
 
 **File thay đổi:** chỉ `src/services/api-client.ts` — không cần sửa các service (`project-service.ts`/`task-service.ts`/...) hay trang danh sách vì chúng gọi qua `apiClient` sẵn, timeout/retry áp dụng trong suốt.
 
-**Kiểm thử:** mô phỏng 503 rồi thành công (GET tự hồi phục); mô phỏng timeout (UI thoát loading, cho phép thử lại); POST bị ngắt sau khi server đã ghi (chưa tự gửi lại ở giai đoạn này); upload timeout không khóa vĩnh viễn modal. *(Đã chạy `npm run lint`, `tsc --noEmit`, `npm run build` — pass. Chưa tự kiểm thử tay các kịch bản trên bằng DevTools throttling/mock — cần người dùng xác nhận.)*
+**Kiểm thử:** mô phỏng 503 rồi thành công (GET tự hồi phục); mô phỏng timeout (UI thoát loading, cho phép thử lại); POST bị ngắt sau khi server đã ghi (chưa tự gửi lại ở giai đoạn này); upload timeout không khóa vĩnh viễn modal. *(Đã chạy `pnpm lint`, `tsc --noEmit`, `pnpm build` — pass. Chưa tự kiểm thử tay các kịch bản trên bằng DevTools throttling/mock — cần người dùng xác nhận.)*
 
 ---
 
@@ -250,7 +250,7 @@ src/components/navigation/IntentPrefetchLink.tsx
 - [ ] Cursor pagination — đúng theo điều kiện "chỉ làm nếu sau index (GĐ2) vẫn đo thấy trang sâu chậm", mà GĐ2 chưa đo được trên dữ liệu lớn (xem GĐ2), nên chưa có căn cứ để làm bước này.
 - [x] `count: "exact"` — đã dùng cho tài khoản và đã xác nhận ba hàm `list*Page` hiện hữu cũng dùng exact count.
 
-**Điều kiện hoàn thành:** HTML/RSC đầu có dữ liệu trang đầu hoặc shell hợp lệ — **đạt**, xác nhận qua `npm run build`: cả 3 route đổi từ `○` (Static) sang `ƒ` (Dynamic, server-rendered mỗi request); không còn waterfall `hydrate → getSession → API` — **đạt cho 3 trang danh sách chính**. Payload trang đầu không tăng tuyến tính theo tổng dữ liệu — **đạt** nhờ phân trang server-side; phần còn lại GĐ5 đã hoàn tất sau bản ghi lịch sử ban đầu: endpoint directory tối giản, list/detail account tách field, account pagination phía server và payload budget đã có (xem `PERF-PHASE-0-1-README.md` mục 10–11). Directory không trả trường tài chính/địa chỉ/ghi chú nhạy cảm không cần cho dropdown.
+**Điều kiện hoàn thành:** HTML/RSC đầu có dữ liệu trang đầu hoặc shell hợp lệ — **đạt**, xác nhận qua `pnpm build`: cả 3 route đổi từ `○` (Static) sang `ƒ` (Dynamic, server-rendered mỗi request); không còn waterfall `hydrate → getSession → API` — **đạt cho 3 trang danh sách chính**. Payload trang đầu không tăng tuyến tính theo tổng dữ liệu — **đạt** nhờ phân trang server-side; phần còn lại GĐ5 đã hoàn tất sau bản ghi lịch sử ban đầu: endpoint directory tối giản, list/detail account tách field, account pagination phía server và payload budget đã có (xem `PERF-PHASE-0-1-README.md` mục 10–11). Directory không trả trường tài chính/địa chỉ/ghi chú nhạy cảm không cần cho dropdown.
 
 ---
 
@@ -416,7 +416,7 @@ Mỗi giai đoạn phải là commit độc lập hoặc có feature flag để 
 - [ ] Không cache dữ liệu theo quyền ở lớp dùng chung công khai.
 - [ ] Không log token, mật khẩu, số tài khoản hoặc payload nhạy cảm.
 - [ ] Test đủ vai trò admin/manager/member; test success, validation error, permission error, timeout, mạng chập chờn.
-- [ ] Chạy `npm run lint`, TypeScript check, `npm run build`.
+- [ ] Chạy `pnpm lint`, TypeScript check, `pnpm build`.
 - [ ] Đo lại median/p95/payload sau thay đổi, so sánh HAR trước/sau.
 - [ ] Cập nhật trạng thái trực tiếp trong tài liệu này, không tạo thêm file trạng thái mới.
 - [ ] Không đánh dấu hoàn thành chỉ vì cảm giác UI nhanh hơn.

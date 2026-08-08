@@ -11,6 +11,16 @@ import { getAppDateKey } from "@/lib/utils";
 /** Định nghĩa thật ở task.ts, dùng chung cho công việc, dự án và task. */
 export type { TaskFileAttachment, TaskLinkAttachment };
 
+/** Một lần bổ sung mô tả và đính kèm của Task, từ lần 2 trở đi. */
+export interface SubtaskUpdateEntry {
+  id: string;
+  description?: string;
+  images: string[];
+  files: TaskFileAttachment[];
+  links: TaskLinkAttachment[];
+  createdAt: string;
+}
+
 export interface Subtask {
   id: string;
   title: string;
@@ -36,6 +46,8 @@ export interface Subtask {
   links: TaskLinkAttachment[];
   /** Danh sách URL ảnh minh họa của Task. */
   images: string[];
+  /** Các lần bổ sung mô tả và đính kèm sau lần đầu tiên. */
+  updates: SubtaskUpdateEntry[];
 }
 
 export interface SubtaskInput {
@@ -57,6 +69,8 @@ export interface SubtaskInput {
   links: TaskLinkAttachment[];
   /** Tối đa 10 URL ảnh đã tải lên Cloudinary. */
   images: string[];
+  /** Các lần bổ sung mô tả và đính kèm sau lần đầu tiên. */
+  updates: SubtaskUpdateEntry[];
 }
 
 export interface SubtaskReport extends ProgressReport {
