@@ -128,7 +128,7 @@ export function InlineTaskAttachmentEditor({
     return () => clearTimeout(timer);
   }, [draftFiles, draftLinks, filesDirty, hasIncompleteLink, images, invalidLink, linksDirty, persist, saving]);
 
-  async function selectImages(fileList: FileList | null) {
+  async function selectImages(fileList: FileList | File[] | null) {
     if (!fileList?.length || saving) return;
     const available = MAX_ITEMS - images.length;
     if (available <= 0) return setImageError(`Mỗi ${entityLabel} chỉ được lưu tối đa ${MAX_ITEMS} ảnh.`);

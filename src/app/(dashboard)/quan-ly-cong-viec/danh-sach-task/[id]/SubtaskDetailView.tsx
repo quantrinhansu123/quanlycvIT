@@ -27,13 +27,12 @@ import { taskService } from "@/services/task-service";
 import { subtaskService } from "@/services/subtask-service";
 import type { ProjectMember } from "@/types/project";
 import type { TaskFileAttachment, TaskLinkAttachment, WorkTask } from "@/types/task";
-import { TASK_PRIORITY_OPTIONS } from "@/types/task";
+import { TASK_PRIORITY_OPTIONS, TASK_STATUS_OPTIONS } from "@/types/task";
 import type { Subtask, SubtaskReport } from "@/types/subtask";
 import { isSubtaskOverdue } from "@/types/subtask";
 import type { TaskActivityEvent } from "@/types/activity";
 import { AvatarStack } from "@/components/ui/Avatar";
 import { TaskActivityTimeline } from "@/components/timeline/TaskActivityTimeline";
-import { TaskStatusBadge } from "@/components/tasks/TaskBadges";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -211,7 +210,7 @@ export function SubtaskDetailView({
   }
 
   async function handleQuickUpdate(
-    patch: Partial<Pick<Subtask, "priority">> & {
+    patch: Partial<Pick<Subtask, "priority" | "status">> & {
       assigneeIds?: string[];
     }
   ) {
@@ -309,6 +308,11 @@ export function SubtaskDetailView({
     account?.role === "member" &&
     !subtask.acceptedAssigneeIds.includes(account.id)
   );
+  const statusLocked = subtask.status === "done";
+  const canUpdateStatus = account?.role === "admin" || account?.role === "member";
+  const statusOptions = account?.role === "member" && !statusLocked
+    ? TASK_STATUS_OPTIONS.filter((option) => option.value !== "done")
+    : TASK_STATUS_OPTIONS;
 
   return (
     <div className="min-h-full bg-white pb-2">
@@ -433,9 +437,20 @@ export function SubtaskDetailView({
                 icon={CircleAlert}
                 iconClassName="bg-teal-50 text-teal-600"
               >
-                <TaskStatusBadge status={subtask.status} />
+                <QuickSelect
+                  value={subtask.status}
+                  disabled={quickUpdating || statusLocked || !canUpdateStatus}
+                  options={statusOptions}
+                  onChange={(value) =>
+                    handleQuickUpdate({ status: value as Subtask["status"] })
+                  }
+                />
                 <p className="mt-2 text-[11px] text-gray-400">
-                  Tự động theo tiến độ; Hoàn thành cần quản trị viên duyệt.
+                  {statusLocked
+                    ? "Task đã hoàn thành nên trạng thái đã được khóa."
+                    : account?.role === "member"
+                      ? "Bạn có thể cập nhật đến Chờ duyệt; Hoàn thành cần quản trị viên duyệt."
+                      : "Thay đổi trạng thái sẽ tự động đồng bộ tiến độ Task."}
                 </p>
               </OverviewCard>
             </section>

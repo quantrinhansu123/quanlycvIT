@@ -356,7 +356,7 @@ export function ProjectFormModal({ mode, project, members, onClose, onSave, onSa
     setErrors((prev) => ({ ...prev, managerIds: undefined }));
   }
 
-  function handleImageSelection(files: FileList | null) {
+  function handleImageSelection(files: FileList | File[] | null) {
     if (!files?.length) return;
 
     const availableSlots =

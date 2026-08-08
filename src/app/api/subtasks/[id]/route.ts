@@ -8,6 +8,7 @@ import { parseSubtaskInput } from "@/lib/api/validation";
 import { createApiSupabaseClient } from "@/lib/supabase/api";
 import { assertSubtaskReadable, requireRequestAccount } from "@/lib/supabase/authorization";
 import {
+  acceptSubtaskAssignment,
   deleteSubtask,
   getSubtask,
   updateSubtask,
@@ -38,8 +39,21 @@ export async function PUT(request: Request, { params }: RouteParams) {
     const access = await requireRequestAccount(supabase);
     await assertSubtaskReadable(supabase, access, id);
     const input = parseSubtaskInput(await readJsonObject(request));
-    if (input.status !== undefined && access.role !== "admin") {
-      throw new ApiException("Chỉ quản trị viên mới được chỉnh sửa trạng thái task.", 403);
+    if (input.status !== undefined) {
+      const current = await getSubtask(supabase, id);
+      if (!current) throw new ApiException("Không tìm thấy task.", 404);
+      if (current.status === "done" && input.status !== "done") {
+        throw new ApiException("Task đã hoàn thành nên không thể thay đổi trạng thái.", 400);
+      }
+    }
+    if (input.status !== undefined && access.role === "manager") {
+      throw new ApiException("Chỉ người được giao Task hoặc quản trị viên mới được chỉnh sửa trạng thái.", 403);
+    }
+    if (input.status === "done" && access.role !== "admin") {
+      throw new ApiException("Chỉ quản trị viên mới được duyệt Task hoàn thành.", 403);
+    }
+    if (input.status === "inProgress" && access.role === "member") {
+      await acceptSubtaskAssignment(supabase, id, access.id);
     }
     const subtask = await updateSubtask(
       supabase,

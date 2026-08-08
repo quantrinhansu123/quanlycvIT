@@ -1738,8 +1738,18 @@ export async function updateSubtask(
   if (!currentRow) return null;
 
   const currentProgress = Number(currentRow.tien_do_thuc_te);
+  const currentStatus = normalizeSubtaskStatus(
+    String(currentRow.trang_thai),
+    currentProgress
+  );
+  if (currentStatus === "done" && input.status !== undefined && input.status !== "done") {
+    throw new ApiException(
+      "Task đã hoàn thành nên không thể thay đổi trạng thái.",
+      400
+    );
+  }
   const nextStatus =
-    input.status ?? normalizeSubtaskStatus(String(currentRow.trang_thai), currentProgress);
+    input.status ?? currentStatus;
   const nextProgress = input.status
     ? progressForSubtaskStatus(input.status, currentProgress)
     : currentProgress;

@@ -121,7 +121,7 @@ export function FinanceTransactionModal({ transaction, categories, defaultType =
     setForm((current) => ({ ...current, type, categoryId: firstCategory?.id ?? "" }));
   }
 
-  function selectImages(files: FileList | null) {
+  function selectImages(files: FileList | File[] | null) {
     if (!files?.length) return;
     const savedImages = form.receiptImages ?? [];
     const available = MAX_RECEIPT_ITEMS - savedImages.length - pendingImages.length;

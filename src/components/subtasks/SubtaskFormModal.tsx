@@ -441,7 +441,7 @@ export function SubtaskFormModal({
     }));
   }
 
-  function handleImageSelection(files: FileList | null) {
+  function handleImageSelection(files: FileList | File[] | null) {
     if (!files?.length) return;
 
     const availableSlots =
