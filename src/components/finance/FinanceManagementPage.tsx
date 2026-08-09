@@ -48,6 +48,7 @@ export function FinanceManagementPage() {
   const [end, setEnd] = useState(initial.end);
   const [preset, setPreset] = useState<DatePreset | "custom">("month");
   const [summary, setSummary] = useState<FinanceSummary>(EMPTY_SUMMARY);
+  const [currentBalance, setCurrentBalance] = useState(0);
   const [categories, setCategories] = useState<FinanceCategory[]>([]);
   const [transactions, setTransactions] = useState<FinanceTransaction[]>([]);
   const [total, setTotal] = useState(0);
@@ -59,6 +60,7 @@ export function FinanceManagementPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [loadingSummary, setLoadingSummary] = useState(true);
+  const [loadingCurrentBalance, setLoadingCurrentBalance] = useState(true);
   const [loadingTransactions, setLoadingTransactions] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [bootstrapped, setBootstrapped] = useState(false);
@@ -107,6 +109,16 @@ export function FinanceManagementPage() {
       if (showLoading) setLoadingTransactions(false);
     }
   }, [notify]);
+  const loadCurrentBalance = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoadingCurrentBalance(true);
+    try {
+      setCurrentBalance(await apiClient.get<number>("/thu-chi/so-du"));
+    } catch (error) {
+      notify({ type: "error", title: "Không thể tải ngân sách hiện tại", description: getErrorMessage(error, "Vui lòng thử lại.") });
+    } finally {
+      if (showLoading) setLoadingCurrentBalance(false);
+    }
+  }, [notify]);
 
   useEffect(() => { const timer = window.setTimeout(() => { setSearch(searchInput.trim()); setPage(1); }, 250); return () => window.clearTimeout(timer); }, [searchInput]);
   useEffect(() => {
@@ -116,6 +128,7 @@ export function FinanceManagementPage() {
     // Một request duy nhất lấy tổng quan, danh mục và giao dịch lần đầu.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadDashboard(query).finally(() => setBootstrapped(true));
+    void loadCurrentBalance();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!bootstrapped) return;
@@ -152,7 +165,7 @@ export function FinanceManagementPage() {
     setPreset(next); setStart(dateKey(rangeStart)); setEnd(dateKey(rangeEnd)); setPage(1);
   }
   function openNew(nextType: FinanceType) { setDefaultType(nextType); setEditing("new"); }
-  async function refreshAll() { setRefreshing(true); try { await loadDashboard(transactionQuery(), false); } finally { setRefreshing(false); } }
+  async function refreshAll() { setRefreshing(true); try { await Promise.all([loadDashboard(transactionQuery(), false), loadCurrentBalance(false)]); } finally { setRefreshing(false); } }
   function matchesCurrentFilters(item: FinanceTransaction) {
     const normalizedSearch = search.toLocaleLowerCase("vi");
     return item.date >= start && item.date <= end
@@ -174,6 +187,7 @@ export function FinanceManagementPage() {
     if (isNew && matchesCurrentFilters(saved)) setTotal((current) => current + 1);
     notify({ type: "success", title: isNew ? "Đã thêm giao dịch" : "Đã cập nhật giao dịch", description: `${input.type === "thu" ? "Thu" : "Chi"} ${money.format(input.amount)}` });
     void loadDashboard(transactionQuery(), false);
+    void loadCurrentBalance(false);
   }
   async function confirmTransfer(input: FinanceInput) {
     const saved = await apiClient.post<FinanceTransaction>("/thu-chi", input);
@@ -181,10 +195,11 @@ export function FinanceManagementPage() {
     if (matchesCurrentFilters(saved)) setTotal((current) => current + 1);
     notify({ type: "success", title: "Đã ghi nhận khoản chi chuyển khoản", description: money.format(input.amount) });
     void loadDashboard(transactionQuery(), false);
+    void loadCurrentBalance(false);
   }
   async function removeTransaction(item: FinanceTransaction) {
     if (!await confirm({ title: "Xóa giao dịch này?", description: `${item.description || item.category?.name || "Giao dịch"} · ${money.format(item.amount)}. Thao tác này không thể hoàn tác.`, confirmLabel: "Xóa giao dịch" })) return;
-    try { await apiClient.delete<boolean>(`/thu-chi/${item.id}`); setTransactions((current) => current.filter((transaction) => transaction.id !== item.id)); setTotal((current) => Math.max(0, current - 1)); notify({ type: "success", title: "Đã xóa giao dịch" }); void loadDashboard(transactionQuery(), false); }
+    try { await apiClient.delete<boolean>(`/thu-chi/${item.id}`); setTransactions((current) => current.filter((transaction) => transaction.id !== item.id)); setTotal((current) => Math.max(0, current - 1)); notify({ type: "success", title: "Đã xóa giao dịch" }); void loadDashboard(transactionQuery(), false); void loadCurrentBalance(false); }
     catch (error) { notify({ type: "error", title: "Không thể xóa", description: getErrorMessage(error, "Vui lòng thử lại.") }); }
   }
   async function saveCategory(input: FinanceCategoryInput, id?: string) {
@@ -243,10 +258,11 @@ export function FinanceManagementPage() {
           <button type="button" onClick={() => void refreshAll()} disabled={refreshing} className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition hover:bg-brand-50 hover:text-brand-600 disabled:opacity-50" title="Tải lại dữ liệu"><RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} /></button>
         </section>
 
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label="Tổng quan thu chi">
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Tổng quan thu chi">
           <SummaryCard loading={loadingSummary} icon={ArrowUpCircle} label="Tổng thu" value={summary.income} tone="income" note={`${chartData.filter((item) => item.income > 0).length} ngày có khoản thu`} />
           <SummaryCard loading={loadingSummary} icon={ArrowDownCircle} label="Tổng chi" value={summary.expense} tone="expense" note={`${chartData.filter((item) => item.expense > 0).length} ngày có khoản chi`} />
           <SummaryCard loading={loadingSummary} icon={Gauge} label="Chi trung bình/ngày" value={averageExpense} tone="neutral" note={`Tính trên ${days} ngày`} />
+          <SummaryCard loading={loadingCurrentBalance} icon={WalletCards} label="Ngân sách hiện tại" value={currentBalance} tone="balance" note="Số dư toàn thời gian · Không theo bộ lọc" />
         </section>
 
         <section className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,.75fr)]">
@@ -314,8 +330,8 @@ export function FinanceManagementPage() {
   );
 }
 
-function SummaryCard({ icon: Icon, label, value, note, tone, loading }: { icon: React.ElementType; label: string; value: number; note: string; tone: "income" | "expense" | "neutral"; loading: boolean }) {
-  const styles = { income: "bg-emerald-50 text-emerald-600", expense: "bg-rose-50 text-rose-600", neutral: "bg-amber-50 text-amber-600" }[tone];
+function SummaryCard({ icon: Icon, label, value, note, tone, loading }: { icon: React.ElementType; label: string; value: number; note: string; tone: "income" | "expense" | "neutral" | "balance"; loading: boolean }) {
+  const styles = { income: "bg-emerald-50 text-emerald-600", expense: "bg-rose-50 text-rose-600", neutral: "bg-amber-50 text-amber-600", balance: "bg-brand-50 text-brand-600" }[tone];
   return <div className="group rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-md"><div className="flex items-start justify-between"><span className={cn("flex h-10 w-10 items-center justify-center rounded-xl transition-transform duration-200 group-hover:scale-105", styles)}><Icon className="h-5 w-5" /></span><span className="text-[10px] font-medium uppercase tracking-wider text-gray-400">{label}</span></div>{loading ? <div className="mt-4 h-7 w-36 animate-pulse rounded bg-gray-100" /> : <p className={cn("mt-3 truncate text-xl font-bold tracking-tight text-gray-950", value < 0 && "text-rose-600")} title={money.format(value)}>{money.format(value)}</p>}<p className="mt-1 text-[11px] text-gray-400">{note}</p></div>;
 }
 
