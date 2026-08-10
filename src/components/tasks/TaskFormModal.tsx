@@ -13,7 +13,7 @@ import {
 } from "@/types/task";
 import type { ProjectDirectoryItem, ProjectMember } from "@/types/project";
 import { taskService } from "@/services/task-service";
-import { toDateInputValue, cn } from "@/lib/utils";
+import { toDateInputValue, getAppDateKey, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { MemberMultiSelect } from "@/components/ui/MemberMultiSelect";
 import { SingleSelectDropdown } from "@/components/ui/SingleSelectDropdown";
@@ -158,7 +158,7 @@ function buildInitialState(
     assigneeIds: [],
     status: defaultStatus ?? "todo",
     priority: "low",
-    startDate: selectedProject ? toDateInputValue(selectedProject.startDate) : "",
+    startDate: getAppDateKey(),
     dueDate: selectedProject ? toDateInputValue(selectedProject.endDate) : "",
     tagsText: "",
     dependsOnTaskId: "",
@@ -319,7 +319,7 @@ export function TaskFormModal({
       ...prev,
       projectId,
       assigneeIds: prev.assigneeIds.filter((id) => allowed.has(id)),
-      startDate: project ? toDateInputValue(project.startDate) : "",
+      startDate: getAppDateKey(),
       dueDate: project ? toDateInputValue(project.endDate) : "",
     }));
     setErrors((prev) => ({

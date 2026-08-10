@@ -25,7 +25,7 @@ import {
 } from "@/types/task";
 import type { ProjectMember } from "@/types/project";
 import { subtaskService } from "@/services/subtask-service";
-import { toDateInputValue, cn } from "@/lib/utils";
+import { toDateInputValue, getAppDateKey, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { MemberMultiSelect } from "@/components/ui/MemberMultiSelect";
 import { SingleSelectDropdown } from "@/components/ui/SingleSelectDropdown";
@@ -176,7 +176,7 @@ function buildInitialState(
     assigneeIds: [],
     status: "todo",
     priority: "low",
-    startDate: selectedWorkTask ? toDateInputValue(selectedWorkTask.startDate) : "",
+    startDate: getAppDateKey(),
     dueDate: selectedWorkTask ? toDateInputValue(selectedWorkTask.dueDate) : "",
     progress: 0,
     tagsText: "",
@@ -462,7 +462,7 @@ export function SubtaskFormModal({
       ...prev,
       workTaskId,
       assigneeIds: prev.assigneeIds.filter((id) => allowed.has(id)),
-      startDate: workTask ? toDateInputValue(workTask.startDate) : "",
+      startDate: getAppDateKey(),
       dueDate: workTask ? toDateInputValue(workTask.dueDate) : "",
     }));
     setErrors((prev) => ({
