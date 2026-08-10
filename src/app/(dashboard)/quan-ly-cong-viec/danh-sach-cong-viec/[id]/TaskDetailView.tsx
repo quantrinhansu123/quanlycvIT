@@ -16,6 +16,8 @@ import {
   History,
   Info,
   ListTodo,
+  Maximize2,
+  Minimize2,
   Pencil,
   RotateCcw,
   UsersRound,
@@ -49,6 +51,7 @@ import { InlineTaskAttachmentEditor } from "@/components/tasks/InlineTaskAttachm
 import { TaskPriorityBadge, TaskStatusBadge } from "@/components/tasks/TaskBadges";
 import { useSessionDataCache } from "@/components/providers/SessionDataCacheProvider";
 import { CACHE_RESOURCE } from "@/lib/client-cache/resources";
+import { useSplitView } from "@/components/layout/SplitViewShell";
 
 const TaskFormModal = dynamic(
   () => import("@/components/tasks/TaskFormModal").then((mod) => mod.TaskFormModal),
@@ -91,6 +94,7 @@ export function TaskDetailView({
   const router = useRouter();
   const { notify } = useFeedback();
   const cache = useSessionDataCache();
+  const splitView = useSplitView();
   const [task, setTask] = useState<WorkTask | null>(initialTask);
   const [projects, setProjects] = useState<Project[]>(initialProjects);
   const [allTasks, setAllTasks] = useState<WorkTask[]>(initialAllTasks);
@@ -287,13 +291,26 @@ export function TaskDetailView({
             </nav>
           </div>
 
-          {!readOnly && <Button
-            onClick={() => setEditing(true)}
-            className="shrink-0 rounded-full bg-brand-600 hover:bg-brand-700"
-          >
-            <Pencil className="h-4 w-4" />
-            <span className="hidden sm:inline">Chỉnh sửa công việc</span>
-          </Button>}
+          <div className="flex shrink-0 items-center gap-2">
+            {splitView && (
+              <button
+                type="button"
+                onClick={splitView.toggleMaximized}
+                className="hidden h-9 w-9 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 lg:flex"
+                aria-label={splitView.maximized ? "Thu nhỏ về chia đôi màn hình" : "Phóng to toàn màn hình"}
+                title={splitView.maximized ? "Thu nhỏ về chia đôi màn hình" : "Phóng to toàn màn hình"}
+              >
+                {splitView.maximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              </button>
+            )}
+            {!readOnly && <Button
+              onClick={() => setEditing(true)}
+              className="rounded-full bg-brand-600 hover:bg-brand-700"
+            >
+              <Pencil className="h-4 w-4" />
+              <span className="hidden sm:inline">Chỉnh sửa công việc</span>
+            </Button>}
+          </div>
         </div>
       </div>
 

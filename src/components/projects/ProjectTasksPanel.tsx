@@ -273,7 +273,7 @@ export function ProjectTasksPanel({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
-        <div className="min-h-0 flex-1 overflow-auto">
+        <div className="@container min-h-0 flex-1 overflow-auto">
         {loading ? (
           <TableSkeleton rows={5} />
         ) : error ? (

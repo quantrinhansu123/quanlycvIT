@@ -1,6 +1,6 @@
 /** Mẫu layout dùng chung cho bảng Công việc và Task. */
 export const WORK_ITEM_TABLE_CLASS =
-  "w-full table-fixed border-collapse text-xs xl:min-w-0";
+  "w-full table-fixed border-collapse text-xs @[1000px]:min-w-0";
 
 export const WORK_ITEM_TITLE_CLASS =
   "work-item-title text-left text-xs font-semibold text-gray-800 hover:text-brand-600";

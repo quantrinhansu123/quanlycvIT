@@ -479,7 +479,7 @@ export function SubtaskListClient({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
-        <div className="account-table-scroll min-h-0 flex-1 overflow-auto">
+        <div className="account-table-scroll @container min-h-0 flex-1 overflow-auto">
         {loading ? (
           <TableSkeleton rows={5} />
         ) : error ? (

@@ -16,6 +16,8 @@ import {
   History,
   Info,
   ListTodo,
+  Maximize2,
+  Minimize2,
   Pencil,
   Plus,
   RotateCcw,
@@ -46,6 +48,7 @@ import { InlineTaskAttachmentEditor } from "@/components/tasks/InlineTaskAttachm
 import { useCurrentAccount } from "@/hooks/useCurrentAccount";
 import { useSessionDataCache } from "@/components/providers/SessionDataCacheProvider";
 import { CACHE_RESOURCE } from "@/lib/client-cache/resources";
+import { useSplitView } from "@/components/layout/SplitViewShell";
 
 const SubtaskFormModal = dynamic(
   () => import("@/components/subtasks/SubtaskFormModal").then((mod) => mod.SubtaskFormModal),
@@ -93,6 +96,7 @@ export function SubtaskDetailView({
   const { notify } = useFeedback();
   const { account } = useCurrentAccount();
   const cache = useSessionDataCache();
+  const splitView = useSplitView();
   const [subtask, setSubtask] = useState<Subtask | null>(initialSubtask);
   const [workTasks, setWorkTasks] = useState<WorkTask[]>(initialWorkTasks);
   const [reports, setReports] = useState<SubtaskReport[]>(initialReports);
@@ -396,24 +400,37 @@ export function SubtaskDetailView({
             </nav>
           </div>
 
-          {needsAcceptance ? (
-            <Button
-              onClick={() => void handleAccept()}
-              disabled={accepting}
-              className="shrink-0 rounded-full bg-emerald-600 hover:bg-emerald-700"
-            >
-              <CircleCheck className="h-4 w-4" />
-              <span className="hidden sm:inline">{accepting ? "Đang xác nhận..." : "Xác nhận nhận Task"}</span>
-            </Button>
-          ) : (
-            <Button
-              onClick={() => setEditing(true)}
-              className="shrink-0 rounded-full bg-brand-600 hover:bg-brand-700"
-            >
-              <Pencil className="h-4 w-4" />
-              <span className="hidden sm:inline">Chỉnh sửa Task</span>
-            </Button>
-          )}
+          <div className="flex shrink-0 items-center gap-2">
+            {splitView && (
+              <button
+                type="button"
+                onClick={splitView.toggleMaximized}
+                className="hidden h-9 w-9 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 lg:flex"
+                aria-label={splitView.maximized ? "Thu nhỏ về chia đôi màn hình" : "Phóng to toàn màn hình"}
+                title={splitView.maximized ? "Thu nhỏ về chia đôi màn hình" : "Phóng to toàn màn hình"}
+              >
+                {splitView.maximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              </button>
+            )}
+            {needsAcceptance ? (
+              <Button
+                onClick={() => void handleAccept()}
+                disabled={accepting}
+                className="rounded-full bg-emerald-600 hover:bg-emerald-700"
+              >
+                <CircleCheck className="h-4 w-4" />
+                <span className="hidden sm:inline">{accepting ? "Đang xác nhận..." : "Xác nhận nhận Task"}</span>
+              </Button>
+            ) : (
+              <Button
+                onClick={() => setEditing(true)}
+                className="rounded-full bg-brand-600 hover:bg-brand-700"
+              >
+                <Pencil className="h-4 w-4" />
+                <span className="hidden sm:inline">Chỉnh sửa Task</span>
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
