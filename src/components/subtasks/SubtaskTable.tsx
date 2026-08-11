@@ -1,6 +1,7 @@
 "use client";
 
-import { CalendarDays, CheckCircle2, FilePenLine, History, Pencil, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { CalendarDays, CheckCircle2, Eye, FilePenLine, History, Pencil, Trash2 } from "lucide-react";
 import type { Subtask } from "@/types/subtask";
 import { isSubtaskOverdue } from "@/types/subtask";
 import type { WorkTaskDirectoryItem } from "@/types/task";
@@ -8,7 +9,7 @@ import type { ProjectDirectoryItem, ProjectMember } from "@/types/project";
 import { Avatar, AvatarStack } from "@/components/ui/Avatar";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { TaskPriorityBadge, TaskStatusBadge, OverdueTag } from "@/components/tasks/TaskBadges";
-import { ActionIconButton } from "@/components/ui/ActionIconButton";
+import { RowActionMenu, type RowActionMenuItem } from "@/components/ui/RowActionMenu";
 import { IntentPrefetchLink } from "@/components/navigation/IntentPrefetchLink";
 import {
   subtaskColumnWidths,
@@ -63,6 +64,7 @@ export function SubtaskTable({
   onAccept,
   canReport = true,
 }: SubtaskTableProps) {
+  const router = useRouter();
   const allSelected = subtasks.length > 0 && selectedIds.length === subtasks.length;
   const showProjectColumn = !hideWorkTaskColumn && Boolean(projectsById);
   const columnWidths = subtaskColumnWidths(hideWorkTaskColumn, showProjectColumn);
@@ -94,7 +96,7 @@ export function SubtaskTable({
             <th className="whitespace-nowrap px-2 py-3">Tiến độ</th>
             <th className="whitespace-nowrap px-2 py-3">Ưu tiên</th>
             <th className="whitespace-nowrap px-1.5 py-3">Trạng thái</th>
-            <th className="whitespace-nowrap px-3 py-3 text-left">Thao tác</th>
+            <th className="whitespace-nowrap px-1 py-3 text-center">Thao tác</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
@@ -107,6 +109,55 @@ export function SubtaskTable({
               currentAccountId &&
               !subtask.acceptedAssigneeIds.includes(currentAccountId)
             );
+            const actionItems: RowActionMenuItem[] = [
+              {
+                icon: Eye,
+                label: "Xem chi tiết",
+                onClick: () => router.push(`/quan-ly-cong-viec/danh-sach-task/${subtask.id}`),
+              },
+              ...(needsAcceptance && onAccept
+                ? [{
+                    icon: CheckCircle2,
+                    label: "Xác nhận nhận Task",
+                    tone: "success" as const,
+                    disabled: acceptingId === subtask.id,
+                    onClick: () => onAccept(subtask),
+                  }]
+                : [
+                    ...(canApprove && subtask.status === "review" && subtask.progress === 100 && onApprove
+                      ? [{
+                          icon: CheckCircle2,
+                          label: "Duyệt task",
+                          tone: "success" as const,
+                          onClick: () => onApprove(subtask),
+                        }]
+                      : []),
+                    ...(canReport && subtask.status !== "done"
+                      ? [{
+                          icon: FilePenLine,
+                          label: "Báo cáo tiến độ",
+                          onClick: () => onReport(subtask),
+                        }]
+                      : []),
+                    {
+                      icon: History,
+                      label: "Lịch sử báo cáo",
+                      onClick: () => onViewReports(subtask),
+                    },
+                    {
+                      icon: Pencil,
+                      label: "Chỉnh sửa",
+                      tone: "primary" as const,
+                      onClick: () => onEdit(subtask),
+                    },
+                    {
+                      icon: Trash2,
+                      label: "Xóa task",
+                      tone: "danger" as const,
+                      onClick: () => onDelete(subtask),
+                    },
+                  ]),
+            ];
 
             return (
               <tr key={subtask.id} className="data-table-row group">
@@ -176,55 +227,17 @@ export function SubtaskTable({
                   <ProgressBar value={subtask.progress} className={WORK_ITEM_PROGRESS_CLASS} />
                 </td>
                 <td className="px-2 py-3 align-top">
-                  <TaskPriorityBadge priority={subtask.priority} className="px-1.5 py-0.5 text-[11px]" />
+                  <TaskPriorityBadge priority={subtask.priority} className="px-1.5 py-0.5 text-[10px]" />
                 </td>
                 <td className="px-1.5 py-3 align-top">
                   <TaskStatusBadge status={subtask.status} className="px-1.5 py-0.5 text-[10px]" />
                 </td>
-                <td className="px-3 py-3 align-top">
-                  <div className="flex min-w-[152px] items-center justify-start gap-1.5">
-                    {needsAcceptance && onAccept ? (
-                      <ActionIconButton
-                        icon={CheckCircle2}
-                        label="Xác nhận nhận Task"
-                        tone="success"
-                        disabled={acceptingId === subtask.id}
-                        onClick={() => onAccept(subtask)}
-                      />
-                    ) : <>
-                    {canApprove && subtask.status === "review" && subtask.progress === 100 && onApprove && (
-                      <ActionIconButton
-                        icon={CheckCircle2}
-                        label="Duyệt task"
-                        tone="success"
-                        onClick={() => onApprove(subtask)}
-                      />
-                    )}
-                    {canReport && subtask.status !== "done" && (
-                      <ActionIconButton
-                        icon={FilePenLine}
-                        label="Báo cáo tiến độ"
-                        onClick={() => onReport(subtask)}
-                      />
-                    )}
-                    <ActionIconButton
-                      icon={History}
-                      label="Lịch sử báo cáo"
-                      onClick={() => onViewReports(subtask)}
+                <td className="px-1 py-3 text-center align-top">
+                  <div className="inline-flex">
+                    <RowActionMenu
+                      label={`Thao tác Task ${subtask.title}`}
+                      items={actionItems}
                     />
-                    <ActionIconButton
-                      icon={Pencil}
-                      label="Chỉnh sửa"
-                      tone="warning"
-                      onClick={() => onEdit(subtask)}
-                    />
-                    <ActionIconButton
-                      icon={Trash2}
-                      label="Xóa task"
-                      tone="danger"
-                      onClick={() => onDelete(subtask)}
-                    />
-                    </>}
                   </div>
                 </td>
               </tr>

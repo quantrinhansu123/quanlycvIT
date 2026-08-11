@@ -1,13 +1,14 @@
 "use client";
 
-import { CalendarDays, Pencil, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { CalendarDays, Eye, Pencil, Trash2 } from "lucide-react";
 import type { WorkTask } from "@/types/task";
 import { isTaskOverdue } from "@/types/task";
 import type { ProjectDirectoryItem, ProjectMember } from "@/types/project";
 import { Avatar, AvatarStack } from "@/components/ui/Avatar";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { TaskPriorityBadge, TaskStatusBadge, OverdueTag } from "@/components/tasks/TaskBadges";
-import { ActionIconButton } from "@/components/ui/ActionIconButton";
+import { RowActionMenu } from "@/components/ui/RowActionMenu";
 import { IntentPrefetchLink } from "@/components/navigation/IntentPrefetchLink";
 import {
   taskColumnWidths,
@@ -42,6 +43,7 @@ export function TaskTable({
   hideProjectColumn = false,
   readOnly = false,
 }: TaskTableProps) {
+  const router = useRouter();
   const allSelected = tasks.length > 0 && selectedIds.length === tasks.length;
   const columnWidths = taskColumnWidths(hideProjectColumn, readOnly);
 
@@ -145,26 +147,34 @@ export function TaskTable({
                   <ProgressBar value={task.progress} className={WORK_ITEM_PROGRESS_CLASS} />
                 </td>
                 <td className="px-2 py-3 align-top">
-                  <TaskPriorityBadge priority={task.priority} className="px-1.5 py-0.5 text-[11px]" />
+                  <TaskPriorityBadge priority={task.priority} className="px-1.5 py-0.5 text-[10px]" />
                 </td>
                 <td className="px-2 py-3 align-top">
                   <TaskStatusBadge status={task.status} className="px-1.5 py-0.5 text-[11px]" />
                 </td>
                 {!readOnly && <td className="px-2 py-3 align-top">
-                  <div className="flex items-center justify-start gap-1">
-                    <ActionIconButton
-                      icon={Pencil}
-                      label="Chỉnh sửa"
-                      tone="warning"
-                      onClick={() => onEdit(task)}
-                    />
-                    <ActionIconButton
-                      icon={Trash2}
-                      label="Xóa công việc"
-                      tone="danger"
-                      onClick={() => onDelete(task)}
-                    />
-                  </div>
+                  <RowActionMenu
+                    label={`Thao tác công việc ${task.title}`}
+                    items={[
+                      {
+                        icon: Eye,
+                        label: "Xem chi tiết",
+                        onClick: () => router.push(`/quan-ly-cong-viec/danh-sach-cong-viec/${task.id}`),
+                      },
+                      {
+                        icon: Pencil,
+                        label: "Chỉnh sửa",
+                        tone: "primary",
+                        onClick: () => onEdit(task),
+                      },
+                      {
+                        icon: Trash2,
+                        label: "Xóa công việc",
+                        tone: "danger",
+                        onClick: () => onDelete(task),
+                      },
+                    ]}
+                  />
                 </td>}
               </tr>
             );

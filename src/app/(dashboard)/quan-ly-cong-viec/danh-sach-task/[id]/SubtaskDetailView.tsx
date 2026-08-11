@@ -18,6 +18,7 @@ import {
   ListTodo,
   Maximize2,
   Minimize2,
+  PanelRightClose,
   Pencil,
   Plus,
   RotateCcw,
@@ -330,7 +331,7 @@ export function SubtaskDetailView({
 
   if (error) {
     return (
-      <div className="mx-auto max-w-[1080px] px-4 py-10 sm:px-6">
+      <div className="mx-auto max-w-[1080px] px-4 py-10 @sm/detail:px-6">
         <ErrorState onRetry={load} />
       </div>
     );
@@ -338,7 +339,7 @@ export function SubtaskDetailView({
 
   if (subtask === null) {
     return (
-      <div className="mx-auto max-w-[1080px] px-4 py-10 sm:px-6">
+      <div className="mx-auto max-w-[1080px] px-4 py-10 @sm/detail:px-6">
         <EmptyState
           icon={AlertCircle}
           title="Không tìm thấy Task"
@@ -365,37 +366,61 @@ export function SubtaskDetailView({
   return (
     <div className="min-h-full bg-white pb-2">
       <div className="border-b border-gray-100 bg-white">
-        <div className="mx-auto flex w-full max-w-none items-center justify-between gap-4 px-3 py-3 sm:px-5">
-          <div className="flex min-w-0 items-center gap-3">
-            <button
-              type="button"
-              onClick={() => router.back()}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50"
-              aria-label="Quay lại"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </button>
-            <nav className="flex min-w-0 items-center gap-2 text-sm text-gray-400">
+        <div className="mx-auto flex w-full max-w-none items-start justify-between gap-4 px-3 py-3 @sm/detail:px-5">
+          <div className="flex min-w-0 flex-1 items-start gap-3">
+            {splitView && !splitView.maximized ? (
+              <>
+                <button
+                  type="button"
+                  onClick={splitView.toggleDetailCollapsed}
+                  className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 lg:flex"
+                  aria-label="Thu panel chi tiết"
+                  title="Thu panel chi tiết"
+                >
+                  <PanelRightClose className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.back()}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 lg:hidden"
+                  aria-label="Quay lại"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => router.back()}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50"
+                aria-label="Quay lại"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+            )}
+            <nav className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 pt-0.5 text-xs leading-4 text-gray-400 @xl/detail:text-sm @xl/detail:leading-5">
               <Link
                 href="/quan-ly-cong-viec/danh-sach-task"
                 className="shrink-0 font-semibold text-gray-600 hover:text-brand-600"
               >
                 Quản lý công việc
               </Link>
-              <span>&gt;</span>
               {workTask && (
-                <>
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="shrink-0">&gt;</span>
                   <Link
                     href={`/quan-ly-cong-viec/danh-sach-cong-viec/${workTask.id}`}
-                    className="shrink-0 font-semibold text-gray-500 hover:text-brand-600"
+                    className="min-w-0 break-words font-semibold text-gray-500 hover:text-brand-600"
                   >
                     Công việc {workTask.title}
                   </Link>
-                  <span>&gt;</span>
-                </>
+                </span>
               )}
-              <span className="truncate font-semibold text-gray-500">
-                {subtask.title}
+              <span className="flex min-w-0 items-start gap-2">
+                <span className="shrink-0">&gt;</span>
+                <span className="min-w-0 break-words font-semibold text-gray-500">
+                  {subtask.title}
+                </span>
               </span>
             </nav>
           </div>
@@ -419,7 +444,7 @@ export function SubtaskDetailView({
                 className="rounded-full bg-emerald-600 hover:bg-emerald-700"
               >
                 <CircleCheck className="h-4 w-4" />
-                <span className="hidden sm:inline">{accepting ? "Đang xác nhận..." : "Xác nhận nhận Task"}</span>
+                <span className="hidden @xl/detail:inline">{accepting ? "Đang xác nhận..." : "Xác nhận nhận Task"}</span>
               </Button>
             ) : (
               <Button
@@ -427,17 +452,17 @@ export function SubtaskDetailView({
                 className="rounded-full bg-brand-600 hover:bg-brand-700"
               >
                 <Pencil className="h-4 w-4" />
-                <span className="hidden sm:inline">Chỉnh sửa Task</span>
+                <span className="hidden @xl/detail:inline">Chỉnh sửa Task</span>
               </Button>
             )}
           </div>
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-none px-3 pb-8 pt-4 sm:px-5">
+      <div className="mx-auto w-full max-w-none px-3 pb-8 pt-4 @sm/detail:px-5">
         {tab === "info" ? (
           <div className="space-y-5">
-            <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <section className="grid grid-cols-1 gap-4 @md/detail:grid-cols-2 @5xl/detail:grid-cols-4">
               <OverviewCard
                 label="Tiến độ thực tế"
                 icon={CircleCheck}
@@ -516,9 +541,9 @@ export function SubtaskDetailView({
               </OverviewCard>
             </section>
 
-            <section className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+            <section className="grid grid-cols-1 gap-5 @3xl/detail:grid-cols-3">
               <Panel
-                className="lg:col-span-2"
+                className="@3xl/detail:col-span-2"
                 accentClassName="bg-violet-600"
                 icon={Info}
                 iconClassName="text-violet-600"
@@ -576,7 +601,7 @@ export function SubtaskDetailView({
                     </div>
                   )}
                 </div>
-                <div className="mt-6 grid grid-cols-1 gap-5 border-t border-gray-100 pt-4 sm:grid-cols-2">
+                <div className="mt-6 grid grid-cols-1 gap-5 border-t border-gray-100 pt-4 @md/detail:grid-cols-2">
                   <DateInfo
                     label="Thời gian bắt đầu:"
                     value={formatDateVN(subtask.startDate)}
@@ -641,7 +666,7 @@ export function SubtaskDetailView({
               </Panel>
             </section>
 
-            <section className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+            <section className="grid grid-cols-1 gap-5 @3xl/detail:grid-cols-3">
               <Panel
                 accentClassName="bg-orange-500"
                 icon={ListTodo}
@@ -666,7 +691,7 @@ export function SubtaskDetailView({
               </Panel>
 
               <Panel
-                className="lg:col-span-2"
+                className="@3xl/detail:col-span-2"
                 accentClassName="bg-emerald-500"
                 icon={RotateCcw}
                 iconClassName="text-emerald-500"

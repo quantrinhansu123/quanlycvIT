@@ -21,3 +21,21 @@ export function TableSkeleton({ rows = 4 }: { rows?: number }) {
     </div>
   );
 }
+
+export function DetailPanelSkeleton() {
+  return (
+    <div className="h-full overflow-hidden bg-white px-3 py-3 @sm/detail:px-5">
+      <div className="flex items-center gap-3 border-b border-gray-100 pb-3">
+        <Skeleton className="h-9 w-9 shrink-0 rounded-xl" />
+        <Skeleton className="h-5 flex-1" />
+        <Skeleton className="h-9 w-9 shrink-0 rounded-xl" />
+      </div>
+      <div className="grid grid-cols-1 gap-4 pt-4 @md/detail:grid-cols-2">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <Skeleton key={index} className="h-32 rounded-2xl" />
+        ))}
+      </div>
+      <Skeleton className="mt-5 h-80 rounded-2xl" />
+    </div>
+  );
+}
