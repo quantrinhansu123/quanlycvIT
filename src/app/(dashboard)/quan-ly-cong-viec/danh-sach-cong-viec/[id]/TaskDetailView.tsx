@@ -163,8 +163,6 @@ export function TaskDetailView({
       });
       if (!updated) throw new Error("Công việc không tồn tại hoặc đã bị xóa.");
       setTask(updated);
-      cache.invalidate(CACHE_RESOURCE.tasksList);
-      cache.invalidate(CACHE_RESOURCE.directoryTasks);
     } catch (updateError) {
       notify({
         type: "error",
@@ -173,7 +171,7 @@ export function TaskDetailView({
       });
       throw updateError;
     }
-  }, [cache, notify, readOnly, task]);
+  }, [notify, readOnly, task]);
 
   async function handleQuickUpdate(
     patch: Partial<Pick<WorkTask, "priority">> & {
@@ -447,7 +445,7 @@ export function TaskDetailView({
                   />
                 ) : (
                   <InlineTaskAttachmentEditor
-                    key={`${task.id}:${JSON.stringify(task.files)}:${JSON.stringify(task.links)}`}
+                    key={task.id}
                     entityLabel="công việc"
                     files={task.files}
                     links={task.links}

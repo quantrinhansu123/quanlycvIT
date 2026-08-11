@@ -327,12 +327,12 @@ export function TaskAttachmentFields({
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
-              <input
-                type="text"
+              <textarea
                 value={link.description ?? ""}
                 onChange={(event) => onUpdateLink(index, { description: event.target.value })}
                 placeholder="Mô tả đường dẫn (không bắt buộc)"
-                className="h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+                rows={3}
+                className="min-h-20 w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
               />
             </div>
           ))}

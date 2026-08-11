@@ -179,8 +179,6 @@ export function SubtaskDetailView({
       });
       if (!updated) throw new Error("Task không tồn tại hoặc đã bị xóa.");
       setSubtask(updated);
-      cache.invalidate(CACHE_RESOURCE.subtasksList);
-      cache.invalidate(CACHE_RESOURCE.tasksList);
       void refreshActivity();
     } catch (updateError) {
       notify({
@@ -190,7 +188,7 @@ export function SubtaskDetailView({
       });
       throw updateError;
     }
-  }, [cache, notify, refreshActivity, subtask]);
+  }, [notify, refreshActivity, subtask]);
 
   const handleUpdateAttachmentSave = useCallback(async (
     updateId: string,
@@ -221,8 +219,6 @@ export function SubtaskDetailView({
       });
       if (!updated) throw new Error("Task không tồn tại hoặc đã bị xóa.");
       setSubtask(updated);
-      cache.invalidate(CACHE_RESOURCE.subtasksList);
-      cache.invalidate(CACHE_RESOURCE.tasksList);
       void refreshActivity();
     } catch (updateError) {
       notify({
@@ -232,7 +228,7 @@ export function SubtaskDetailView({
       });
       throw updateError;
     }
-  }, [cache, notify, refreshActivity, subtask]);
+  }, [notify, refreshActivity, subtask]);
 
   async function handleLoadMoreActivity() {
     if (activityLoadingMore || activity.length >= activityTotal) return;
@@ -565,7 +561,7 @@ export function SubtaskDetailView({
                       />
                     </div>
                     <InlineTaskAttachmentEditor
-                      key={`${subtask.id}:${JSON.stringify(subtask.files)}:${JSON.stringify(subtask.links)}`}
+                      key={subtask.id}
                       entityLabel="Task"
                       files={subtask.files}
                       links={subtask.links}
@@ -587,7 +583,7 @@ export function SubtaskDetailView({
                             <DetailDescription description={entry.description} emptyText="Lần này chưa có mô tả." />
                           </div>
                           <InlineTaskAttachmentEditor
-                            key={`${entry.id}:${JSON.stringify(entry.files)}:${JSON.stringify(entry.links)}`}
+                            key={entry.id}
                             entityLabel="Task"
                             files={entry.files}
                             links={entry.links}

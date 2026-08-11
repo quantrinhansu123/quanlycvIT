@@ -134,8 +134,6 @@ export function ProjectDetailView({
       });
       if (!updated) throw new Error("Dự án không tồn tại hoặc đã bị xóa.");
       setProject(updated);
-      cache.invalidate(CACHE_RESOURCE.projectsList);
-      cache.invalidate(CACHE_RESOURCE.directoryProjects);
     } catch (updateError) {
       notify({
         type: "error",
@@ -144,7 +142,7 @@ export function ProjectDetailView({
       });
       throw updateError;
     }
-  }, [cache, notify, project, readOnly]);
+  }, [notify, project, readOnly]);
 
   if (error) {
     return (
@@ -323,7 +321,7 @@ export function ProjectDetailView({
                   />
                 ) : (
                   <InlineTaskAttachmentEditor
-                    key={`${project.id}:${JSON.stringify(project.files)}:${JSON.stringify(project.links)}`}
+                    key={project.id}
                     entityLabel="dự án"
                     files={project.files}
                     links={project.links}

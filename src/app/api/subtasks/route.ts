@@ -89,7 +89,7 @@ export async function POST(request: Request) {
     const { status, body } = await withIdempotency<Subtask>(
       supabase,
       { accountId: access.id, idempotencyKey, scope: "create-subtask" },
-      async () => ({ status: 201, body: await createSubtask(supabase, input) })
+      async () => ({ status: 201, body: await createSubtask(supabase, input, access.id) })
     );
     return apiSuccess(body, status, "Tạo task thành công.");
   } catch (error) {

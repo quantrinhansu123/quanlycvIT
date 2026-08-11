@@ -72,7 +72,7 @@ export function SubtaskTable({
   return (
     <div className="min-w-0">
       <table
-        className={`${WORK_ITEM_TABLE_CLASS} ${hideWorkTaskColumn ? "min-w-[820px]" : showProjectColumn ? "min-w-[980px]" : "min-w-[900px]"}`}
+        className={`${WORK_ITEM_TABLE_CLASS} ${hideWorkTaskColumn ? "min-w-[760px]" : showProjectColumn ? "min-w-[920px]" : "min-w-[840px]"}`}
       >
         <colgroup>
           {columnWidths.map((width, index) => <col key={index} className={width} />)}
@@ -92,6 +92,7 @@ export function SubtaskTable({
             {!hideWorkTaskColumn && <th className="whitespace-nowrap px-2 py-3">Thuộc công việc</th>}
             {showProjectColumn && <th className="whitespace-nowrap px-2 py-3">Dự án</th>}
             <th className="whitespace-nowrap px-2 py-3">Người thực hiện</th>
+            <th className="whitespace-nowrap px-2 py-3">Người tạo</th>
             <th className="whitespace-nowrap px-2 py-3">Hạn hoàn thành</th>
             <th className="whitespace-nowrap px-2 py-3">Tiến độ</th>
             <th className="whitespace-nowrap px-2 py-3">Ưu tiên</th>
@@ -195,23 +196,34 @@ export function SubtaskTable({
                 )}
                 <td className="min-w-0 px-2 py-3 align-top">
                   {subtask.assignees.length > 1 ? (
-                    <div className="flex min-w-0 items-center gap-1.5">
+                    <div
+                      className="flex min-w-0 cursor-pointer items-center"
+                      title={subtask.assignees.map((member) => member.name).join(", ")}
+                      aria-label={`Người thực hiện: ${subtask.assignees.map((member) => member.name).join(", ")}`}
+                    >
                       <AvatarStack people={subtask.assignees} max={3} />
-                      <span className="truncate text-xs text-gray-600">
-                        {subtask.assignees.length} người
-                      </span>
                     </div>
                   ) : assignee ?? subtask.assignees[0] ? (
-                    <div className="flex min-w-0 items-center gap-1.5">
+                    <div className="flex min-w-0 items-center">
                       <Avatar
                         name={(assignee ?? subtask.assignees[0]).name}
                         color={(assignee ?? subtask.assignees[0]).avatarColor}
                         size="sm"
+                        className="cursor-pointer"
                       />
-                      <span className="truncate text-xs text-gray-600">
-                        {(assignee ?? subtask.assignees[0]).name}
-                      </span>
                     </div>
+                  ) : (
+                    "--"
+                  )}
+                </td>
+                <td className="px-2 py-3 align-top">
+                  {subtask.creator ? (
+                    <Avatar
+                      name={subtask.creator.name}
+                      color={subtask.creator.avatarColor}
+                      size="sm"
+                      className="cursor-pointer"
+                    />
                   ) : (
                     "--"
                   )}

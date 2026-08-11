@@ -135,10 +135,13 @@ interface SubtaskRow {
   cap_nhat_bo_sung: SubtaskUpdateEntry[] | null;
   task_tien_de_id: string | null;
   cong_viec_id: string;
+  nguoi_tao_id: string | null;
   /** Người phụ trách chính "cũ" (cột nguoi_phu_trach_id), lấy kèm qua embed. */
   legacy_assignee: AccountRow | null;
   /** Danh sách người phụ trách đầy đủ, lấy kèm qua embed thay vì round-trip riêng. */
   task_phu_trach: AssignmentEmbedRow[];
+  /** Người tạo Task, lấy kèm để hiển thị trong danh sách. */
+  creator: AccountRow | null;
 }
 
 interface TaskActivityRow {
@@ -237,8 +240,9 @@ const WORK_TASK_DIRECTORY_SELECT =
   `legacy_assignee:tai_khoan!nguoi_phu_trach_id(${ACCOUNT_SELECT}),` +
   `cong_viec_phu_trach(tai_khoan_id,la_chinh,tai_khoan(${ACCOUNT_SELECT}))`;
 const SUBTASK_SELECT =
-  "id,ten_task,mo_ta,created_at,updated_at,ngay_bat_dau,ngay_ket_thuc,nguoi_phu_trach_id,trang_thai,uu_tien,tien_do_thuc_te,nhan_tag,hinh_anh,tep_dinh_kem,lien_ket_dinh_kem,cap_nhat_bo_sung,task_tien_de_id,cong_viec_id," +
+  "id,ten_task,mo_ta,created_at,updated_at,ngay_bat_dau,ngay_ket_thuc,nguoi_phu_trach_id,nguoi_tao_id,trang_thai,uu_tien,tien_do_thuc_te,nhan_tag,hinh_anh,tep_dinh_kem,lien_ket_dinh_kem,cap_nhat_bo_sung,task_tien_de_id,cong_viec_id," +
   `legacy_assignee:tai_khoan!nguoi_phu_trach_id(${ACCOUNT_SELECT}),` +
+  `creator:tai_khoan!nguoi_tao_id(${ACCOUNT_SELECT}),` +
   `task_phu_trach(tai_khoan_id,la_chinh,xac_nhan_luc,tai_khoan(${ACCOUNT_SELECT}))`;
 const TASK_ACTIVITY_SELECT =
   "id,task_id,loai,tieu_de,chi_tiet,created_at," + `tac_gia:tai_khoan(${ACCOUNT_SELECT})`;
@@ -1502,6 +1506,7 @@ function hydrateSubtasks(rows: SubtaskRow[]): Subtask[] {
       workTaskId: row.cong_viec_id,
       assigneeId: primary?.id ?? "",
       assignees: assignees.length > 0 ? assignees : primary ? [primary] : [],
+      creator: row.creator ? toProjectMember(row.creator) : undefined,
       acceptedAssigneeIds: (row.task_phu_trach ?? [])
         .filter((assignment) => Boolean(assignment.xac_nhan_luc))
         .map((assignment) => assignment.tai_khoan_id),
@@ -1685,7 +1690,8 @@ function subtaskPayload(
 
 export async function createSubtask(
   supabase: ApiSupabaseClient,
-  input: SubtaskInput
+  input: SubtaskInput,
+  creatorAccountId: string
 ): Promise<Subtask> {
   const [{ ids: assigneeIds }] = await Promise.all([
     resolveAccounts(supabase, input.assigneeIds, "Người phụ trách"),
@@ -1700,7 +1706,10 @@ export async function createSubtask(
 
   const { data, error } = await supabase
     .from("task")
-    .insert(subtaskPayload(input, assigneeIds[0], 0, "todo"))
+    .insert({
+      ...subtaskPayload(input, assigneeIds[0], 0, "todo"),
+      nguoi_tao_id: creatorAccountId,
+    })
     .select(SUBTASK_SELECT)
     .single();
   throwDatabaseError(error);

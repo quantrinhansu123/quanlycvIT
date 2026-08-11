@@ -120,7 +120,7 @@ export function DetailAttachments({
                         <ExternalLink className="h-3 w-3 shrink-0 text-gray-400" />
                       </a>
                       {link.description && (
-                        <p className="mt-1 truncate px-2.5 text-[11px] text-gray-400">
+                        <p className="mt-1 whitespace-pre-wrap break-words px-2.5 text-[11px] text-gray-400">
                           {link.description}
                         </p>
                       )}

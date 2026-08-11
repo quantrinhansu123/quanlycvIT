@@ -93,6 +93,8 @@ export function InlineTaskAttachmentEditor({
     setSaving(true);
     try {
       await onSave(value);
+      setDraftFiles(value.files);
+      setDraftLinks(value.links);
       showSaved();
     } finally {
       setSaving(false);
@@ -182,7 +184,11 @@ export function InlineTaskAttachmentEditor({
         id: item.id,
         upload: async () => { uploaded.push(await onUploadFile(item.file)); },
       })));
-      if (uploaded.length) await onSave({ files: [...draftFiles, ...uploaded], links, images });
+      if (uploaded.length) {
+        const nextFiles = [...draftFiles, ...uploaded];
+        await onSave({ files: nextFiles, links, images });
+        setDraftFiles(nextFiles);
+      }
       if (result.failures.length) setFileError(`${result.failures.length} tệp tải lên thất bại. Vui lòng chọn lại.`);
       else showSaved();
     } catch {
