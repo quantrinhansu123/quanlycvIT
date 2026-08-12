@@ -44,7 +44,10 @@ export function TaskTable({
   readOnly = false,
 }: TaskTableProps) {
   const router = useRouter();
-  const allSelected = tasks.length > 0 && selectedIds.length === tasks.length;
+  const selectableTasks = tasks.filter((task) => task.status !== "done");
+  const allSelected =
+    selectableTasks.length > 0 &&
+    selectableTasks.every((task) => selectedIds.includes(task.id));
   const columnWidths = taskColumnWidths(hideProjectColumn, readOnly);
 
   return (
@@ -62,6 +65,7 @@ export function TaskTable({
                 type="checkbox"
                 checked={allSelected}
                 onChange={onToggleSelectAll}
+                disabled={selectableTasks.length === 0}
                 className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
                 aria-label="Chọn tất cả"
               />
@@ -89,6 +93,7 @@ export function TaskTable({
                     type="checkbox"
                     checked={selectedIds.includes(task.id)}
                     onChange={() => onToggleSelect(task.id)}
+                    disabled={task.status === "done"}
                     className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
                     aria-label={`Chọn công việc ${task.title}`}
                   />
@@ -161,18 +166,20 @@ export function TaskTable({
                         label: "Xem chi tiết",
                         onClick: () => router.push(`/quan-ly-cong-viec/danh-sach-cong-viec/${task.id}`),
                       },
-                      {
-                        icon: Pencil,
-                        label: "Chỉnh sửa",
-                        tone: "primary",
-                        onClick: () => onEdit(task),
-                      },
-                      {
-                        icon: Trash2,
-                        label: "Xóa công việc",
-                        tone: "danger",
-                        onClick: () => onDelete(task),
-                      },
+                      ...(task.status === "done" ? [] : [
+                        {
+                          icon: Pencil,
+                          label: "Chỉnh sửa",
+                          tone: "primary" as const,
+                          onClick: () => onEdit(task),
+                        },
+                        {
+                          icon: Trash2,
+                          label: "Xóa công việc",
+                          tone: "danger" as const,
+                          onClick: () => onDelete(task),
+                        },
+                      ]),
                     ]}
                   />
                 </td>}

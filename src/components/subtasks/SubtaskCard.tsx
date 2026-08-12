@@ -30,6 +30,7 @@ interface SubtaskCardProps {
   canTest?: boolean;
   onPassTest?: (subtask: Subtask) => void;
   onFailTest?: (subtask: Subtask) => void;
+  readOnly?: boolean;
 }
 
 export function SubtaskCard({
@@ -48,8 +49,10 @@ export function SubtaskCard({
   canTest = false,
   onPassTest,
   onFailTest,
+  readOnly = false,
 }: SubtaskCardProps) {
   const overdue = isSubtaskOverdue(subtask);
+  const viewOnly = readOnly || subtask.status === "done";
   const needsAcceptance = Boolean(
     isMember &&
     currentAccountId &&
@@ -65,7 +68,7 @@ export function SubtaskCard({
         ) : (
           <span />
         )}
-        {needsAcceptance && onAccept ? (
+        {viewOnly ? null : needsAcceptance && onAccept ? (
           <button
             type="button"
             onClick={() => onAccept(subtask)}

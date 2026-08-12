@@ -44,6 +44,7 @@ interface SubtaskTableProps {
   canTest?: boolean;
   onPassTest?: (subtask: Subtask) => void;
   onFailTest?: (subtask: Subtask) => void;
+  readOnly?: boolean;
 }
 
 export function SubtaskTable({
@@ -69,9 +70,15 @@ export function SubtaskTable({
   canTest = false,
   onPassTest,
   onFailTest,
+  readOnly = false,
 }: SubtaskTableProps) {
   const router = useRouter();
-  const allSelected = subtasks.length > 0 && selectedIds.length === subtasks.length;
+  const selectableSubtasks = readOnly
+    ? []
+    : subtasks.filter((subtask) => subtask.status !== "done");
+  const allSelected =
+    selectableSubtasks.length > 0 &&
+    selectableSubtasks.every((subtask) => selectedIds.includes(subtask.id));
   const showProjectColumn = !hideWorkTaskColumn && Boolean(projectsById);
   const columnWidths = subtaskColumnWidths(hideWorkTaskColumn, showProjectColumn);
 
@@ -90,6 +97,7 @@ export function SubtaskTable({
                 type="checkbox"
                 checked={allSelected}
                 onChange={onToggleSelectAll}
+                disabled={selectableSubtasks.length === 0}
                 className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
                 aria-label="Chọn tất cả"
               />
@@ -111,6 +119,7 @@ export function SubtaskTable({
             const workTask = workTasksById.get(subtask.workTaskId);
             const assignee = membersById.get(subtask.assigneeId);
             const overdue = isSubtaskOverdue(subtask);
+            const rowReadOnly = readOnly || subtask.status === "done";
             const needsAcceptance = Boolean(
               isMember &&
               currentAccountId &&
@@ -123,7 +132,13 @@ export function SubtaskTable({
                 label: "Xem chi tiết",
                 onClick: () => router.push(`/quan-ly-cong-viec/danh-sach-task/${subtask.id}`),
               },
-              ...(needsAcceptance && onAccept
+              ...(rowReadOnly
+                ? [{
+                    icon: History,
+                    label: "Lịch sử báo cáo",
+                    onClick: () => onViewReports(subtask),
+                  }]
+                : needsAcceptance && onAccept
                 ? [{
                     icon: CheckCircle2,
                     label: "Xác nhận nhận Task",
@@ -181,6 +196,7 @@ export function SubtaskTable({
                     type="checkbox"
                     checked={selectedIds.includes(subtask.id)}
                     onChange={() => onToggleSelect(subtask.id)}
+                    disabled={rowReadOnly}
                     className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
                     aria-label={`Chọn task ${subtask.title}`}
                   />

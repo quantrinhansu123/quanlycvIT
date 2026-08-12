@@ -249,11 +249,14 @@ export function TaskListClient({
   }, [searchInput]);
 
   function toggleSelect(id: string) {
+    if (optimisticTasks.some((task) => task.id === id && task.status === "done")) return;
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
   }
 
   function toggleSelectAll() {
-    const visibleIds = optimisticTasks.map((task) => task.id);
+    const visibleIds = optimisticTasks
+      .filter((task) => task.status !== "done")
+      .map((task) => task.id);
     const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
     setSelectedIds((current) =>
       allVisibleSelected
@@ -263,7 +266,7 @@ export function TaskListClient({
   }
 
   async function handleDelete(task: WorkTask) {
-    if (readOnly || deletingId) return;
+    if (readOnly || task.status === "done" || deletingId) return;
     const confirmed = await confirm({
       title: "Xóa công việc?",
       description: `Công việc “${task.title}” và các task trực thuộc sẽ bị xóa. Hành động này không thể hoàn tác.`,
@@ -300,6 +303,9 @@ export function TaskListClient({
       return Promise.reject(new Error("Tài khoản nhân viên không có quyền lưu công việc."));
     }
     const existing = formModal?.mode === "edit" ? formModal.task : undefined;
+    if (existing?.status === "done") {
+      return Promise.reject(new Error("Công việc đã hoàn thành nên chỉ có thể xem."));
+    }
     const filters = currentFilters();
     const optimisticTask = buildOptimisticTask(input, members, existing);
     const wasVisible = existing ? matchesTaskFilters(existing, filters) : false;

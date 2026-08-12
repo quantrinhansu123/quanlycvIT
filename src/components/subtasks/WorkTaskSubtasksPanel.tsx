@@ -54,18 +54,21 @@ interface WorkTaskSubtasksPanelProps {
   /** Toàn bộ nhân sự, dùng để hiển thị tên trong bảng. */
   members: ProjectMember[];
   onSubtasksChanged: () => void;
+  readOnly?: boolean;
 }
 
 export function WorkTaskSubtasksPanel({
   workTask,
   members,
   onSubtasksChanged,
+  readOnly = false,
 }: WorkTaskSubtasksPanelProps) {
   const { confirm, notify } = useFeedback();
   const { account } = useCurrentAccount();
   const cache = useSessionDataCache();
   const isAdmin = account?.role === "admin";
   const isMember = account?.role === "member";
+  const viewOnly = readOnly || workTask.status === "done";
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -152,13 +155,17 @@ export function WorkTaskSubtasksPanel({
   }
 
   function toggleSelect(id: string) {
+    if (viewOnly || subtasks.some((subtask) => subtask.id === id && subtask.status === "done")) return;
     setSelectedIds((current) =>
       current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
     );
   }
 
   function toggleSelectAll() {
-    const visibleIds = visibleSubtasks.map((subtask) => subtask.id);
+    if (viewOnly) return;
+    const visibleIds = visibleSubtasks
+      .filter((subtask) => subtask.status !== "done")
+      .map((subtask) => subtask.id);
     const allVisibleSelected =
       visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
     setSelectedIds((current) =>
@@ -169,7 +176,7 @@ export function WorkTaskSubtasksPanel({
   }
 
   async function handleDelete(subtask: Subtask) {
-    if (deletingId) return;
+    if (viewOnly || deletingId) return;
     const confirmed = await confirm({
       title: "Xóa task?",
       description: `Task “${subtask.title}” sẽ bị xóa vĩnh viễn. Hành động này không thể hoàn tác.`,
@@ -203,6 +210,7 @@ export function WorkTaskSubtasksPanel({
   }
 
   async function handleApprove(subtask: Subtask) {
+    if (viewOnly) return;
     try {
       const approved = await subtaskService.approveSubtask(subtask.id);
       if (!approved) throw new Error("Không tìm thấy task.");
@@ -224,6 +232,7 @@ export function WorkTaskSubtasksPanel({
   }
 
   async function handleTest(subtask: Subtask, passed: boolean) {
+    if (viewOnly) return;
     const note = passed ? undefined : window.prompt("Mô tả lỗi cần người thực hiện sửa:")?.trim();
     if (!passed && !note) return;
     try {
@@ -243,7 +252,7 @@ export function WorkTaskSubtasksPanel({
   }
 
   async function handleAccept(subtask: Subtask) {
-    if (acceptingId) return;
+    if (viewOnly || acceptingId) return;
     setAcceptingId(subtask.id);
     try {
       const accepted = await subtaskService.acceptSubtask(subtask.id);
@@ -345,10 +354,10 @@ export function WorkTaskSubtasksPanel({
           }))}
         />
         <div className="ml-auto flex items-center gap-2">
-          <Button size="sm" onClick={() => setFormModal({ mode: "create" })}>
+          {!viewOnly && <Button size="sm" onClick={() => setFormModal({ mode: "create" })}>
             <Plus className="h-4 w-4" />
             Thêm mới
-          </Button>
+          </Button>}
           <div className="flex overflow-hidden rounded-lg border border-gray-200 bg-white">
             <button
               type="button"
@@ -397,7 +406,7 @@ export function WorkTaskSubtasksPanel({
             icon={ListTodo}
             title="Chưa có task nào"
             description="Chia nhỏ công việc này thành các task để phân công cho từng thành viên."
-            action={
+            action={viewOnly ? undefined :
               <Button size="sm" onClick={() => setFormModal({ mode: "create" })}>
                 <Plus className="h-4 w-4" />
                 Thêm task
@@ -427,6 +436,7 @@ export function WorkTaskSubtasksPanel({
             canTest
             onPassTest={(subtask) => void handleTest(subtask, true)}
             onFailTest={(subtask) => void handleTest(subtask, false)}
+            readOnly={viewOnly}
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3">
@@ -449,6 +459,7 @@ export function WorkTaskSubtasksPanel({
                 canTest
                 onPassTest={(subtask) => void handleTest(subtask, true)}
                 onFailTest={(subtask) => void handleTest(subtask, false)}
+                readOnly={viewOnly}
               />
             ))}
           </div>
@@ -469,7 +480,7 @@ export function WorkTaskSubtasksPanel({
         )}
       </div>
 
-      {formModal && (
+      {formModal && !viewOnly && (
         <SubtaskFormModal
           mode={formModal.mode}
           subtask={formModal.mode === "edit" ? formModal.subtask : undefined}
@@ -507,7 +518,7 @@ export function WorkTaskSubtasksPanel({
         />
       )}
 
-      {reportDrawer && !isAdmin && (
+      {reportDrawer && !isAdmin && !viewOnly && (
         <TaskReportDrawer
           task={{
             id: reportDrawer.id,

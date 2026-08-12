@@ -30,7 +30,7 @@ import { taskService } from "@/services/task-service";
 import { subtaskService } from "@/services/subtask-service";
 import type { ProjectMember } from "@/types/project";
 import type { TaskFileAttachment, TaskLinkAttachment, WorkTask } from "@/types/task";
-import { TASK_PRIORITY_OPTIONS, TASK_STATUS_OPTIONS } from "@/types/task";
+import { SUBTASK_STATUS_OPTIONS, TASK_PRIORITY_OPTIONS } from "@/types/task";
 import type { Subtask, SubtaskReport } from "@/types/subtask";
 import { isSubtaskOverdue } from "@/types/subtask";
 import type { TaskActivityEvent } from "@/types/activity";
@@ -46,6 +46,7 @@ import { cn, formatDateVN } from "@/lib/utils";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 import { InlineTaskAttachmentEditor } from "@/components/tasks/InlineTaskAttachmentEditor";
+import { DetailAttachments } from "@/components/tasks/DetailAttachments";
 import { useCurrentAccount } from "@/hooks/useCurrentAccount";
 import { useSessionDataCache } from "@/components/providers/SessionDataCacheProvider";
 import { CACHE_RESOURCE } from "@/lib/client-cache/resources";
@@ -109,6 +110,7 @@ export function SubtaskDetailView({
   const [tab, setTab] = useState<Tab>("info");
   const [editing, setEditing] = useState(false);
   const [reportDrawerOpen, setReportDrawerOpen] = useState(false);
+  const [reportAtCompletion, setReportAtCompletion] = useState(false);
   const [quickUpdating, setQuickUpdating] = useState(false);
   const [accepting, setAccepting] = useState(false);
   const load = useCallback(async () => {
@@ -387,8 +389,8 @@ export function SubtaskDetailView({
   const statusLocked = subtask.status === "done";
   const canUpdateStatus = account?.role === "admin" || (account?.role === "member" && !isTester);
   const statusOptions = account?.role === "member" && !statusLocked
-    ? TASK_STATUS_OPTIONS.filter((option) => option.value !== "done")
-    : TASK_STATUS_OPTIONS;
+    ? SUBTASK_STATUS_OPTIONS.filter((option) => option.value !== "done")
+    : SUBTASK_STATUS_OPTIONS;
 
   return (
     <div className="min-h-full bg-white pb-2">
@@ -453,6 +455,12 @@ export function SubtaskDetailView({
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
+            {statusLocked && (
+              <span className="inline-flex h-9 items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700">
+                <CircleCheck className="h-4 w-4" />
+                Chỉ xem
+              </span>
+            )}
             {splitView && (
               <button
                 type="button"
@@ -482,7 +490,7 @@ export function SubtaskDetailView({
                 <CircleCheck className="h-4 w-4" />
                 <span className="hidden @xl/detail:inline">{accepting ? "Đang xác nhận..." : "Xác nhận nhận Task"}</span>
               </Button>
-            ) : !isTester ? (
+            ) : !isTester && !statusLocked ? (
               <Button
                 onClick={() => setEditing(true)}
                 className="rounded-full bg-brand-600 hover:bg-brand-700"
@@ -544,7 +552,7 @@ export function SubtaskDetailView({
               >
                 <QuickSelect
                   value={subtask.priority}
-                  disabled={quickUpdating}
+                  disabled={quickUpdating || statusLocked}
                   options={TASK_PRIORITY_OPTIONS}
                   onChange={(value) =>
                     handleQuickUpdate({
@@ -563,15 +571,20 @@ export function SubtaskDetailView({
                   value={subtask.status}
                   disabled={quickUpdating || statusLocked || !canUpdateStatus}
                   options={statusOptions}
-                  onChange={(value) =>
-                    handleQuickUpdate({ status: value as Subtask["status"] })
-                  }
+                  onChange={(value) => {
+                    if (value === "testing" && subtask.status !== "testing" && account?.role === "member") {
+                      setReportAtCompletion(true);
+                      setReportDrawerOpen(true);
+                      return;
+                    }
+                    handleQuickUpdate({ status: value as Subtask["status"] });
+                  }}
                 />
                 <p className="mt-2 text-[11px] text-gray-400">
                   {statusLocked
                     ? "Task đã hoàn thành nên trạng thái đã được khóa."
                     : account?.role === "member"
-                      ? "Bạn có thể cập nhật đến Chờ duyệt; Hoàn thành cần quản trị viên duyệt."
+                      ? "Báo cáo tiến độ 100% và gửi cho Tester để chuyển Task sang Chờ test."
                       : "Thay đổi trạng thái sẽ tự động đồng bộ tiến độ Task."}
                 </p>
               </OverviewCard>
@@ -600,16 +613,25 @@ export function SubtaskDetailView({
                         emptyText="Chưa có mô tả cho Task này."
                       />
                     </div>
-                    <InlineTaskAttachmentEditor
-                      key={subtask.id}
-                      entityLabel="Task"
-                      files={subtask.files}
-                      links={subtask.links}
-                      images={subtask.images}
-                      onUploadFile={subtaskService.uploadFile}
-                      onUploadImage={subtaskService.uploadImage}
-                      onSave={handleAttachmentSave}
-                    />
+                    {statusLocked ? (
+                      <DetailAttachments
+                        entityLabel="Task"
+                        files={subtask.files}
+                        links={subtask.links}
+                        images={subtask.images}
+                      />
+                    ) : (
+                      <InlineTaskAttachmentEditor
+                        key={subtask.id}
+                        entityLabel="Task"
+                        files={subtask.files}
+                        links={subtask.links}
+                        images={subtask.images}
+                        onUploadFile={subtaskService.uploadFile}
+                        onUploadImage={subtaskService.uploadImage}
+                        onSave={handleAttachmentSave}
+                      />
+                    )}
                   </div>
                   {subtask.updates.length > 0 && (
                     <div className="space-y-3">
@@ -622,16 +644,25 @@ export function SubtaskDetailView({
                           <div className="max-w-full overflow-x-auto text-sm leading-6 text-gray-700">
                             <DetailDescription description={entry.description} emptyText="Lần này chưa có mô tả." />
                           </div>
-                          <InlineTaskAttachmentEditor
-                            key={entry.id}
-                            entityLabel="Task"
-                            files={entry.files}
-                            links={entry.links}
-                            images={entry.images}
-                            onUploadFile={subtaskService.uploadFile}
-                            onUploadImage={subtaskService.uploadImage}
-                            onSave={(value) => handleUpdateAttachmentSave(entry.id, value)}
-                          />
+                          {statusLocked ? (
+                            <DetailAttachments
+                              entityLabel="Task"
+                              files={entry.files}
+                              links={entry.links}
+                              images={entry.images}
+                            />
+                          ) : (
+                            <InlineTaskAttachmentEditor
+                              key={entry.id}
+                              entityLabel="Task"
+                              files={entry.files}
+                              links={entry.links}
+                              images={entry.images}
+                              onUploadFile={subtaskService.uploadFile}
+                              onUploadImage={subtaskService.uploadImage}
+                              onSave={(value) => handleUpdateAttachmentSave(entry.id, value)}
+                            />
+                          )}
                         </div>
                       ))}
                     </div>
@@ -668,7 +699,7 @@ export function SubtaskDetailView({
                     if (ids.length > 0) handleQuickUpdate({ assigneeIds: ids });
                   }}
                   emptyHint="Công việc chưa có người phụ trách"
-                  disabled={quickUpdating}
+                  disabled={quickUpdating || statusLocked}
                 />
 
                 <p className="mb-2 mt-5 text-xs font-medium text-gray-400">
@@ -755,7 +786,10 @@ export function SubtaskDetailView({
                   Các báo cáo tiến độ đã gửi cho Task
                 </p>
               </div>
-              {account?.role !== "admin" && !isTester && (subtask.status === "todo" || subtask.status === "inProgress") && <Button onClick={() => setReportDrawerOpen(true)}>
+              {account?.role !== "admin" && !isTester && (subtask.status === "todo" || subtask.status === "inProgress") && <Button onClick={() => {
+                setReportAtCompletion(false);
+                setReportDrawerOpen(true);
+              }}>
                 <Plus className="h-4 w-4" />
                 Báo cáo tiến độ
               </Button>}
@@ -795,7 +829,7 @@ export function SubtaskDetailView({
         </div>
       </div>
 
-      {editing && (
+      {editing && !statusLocked && (
         <SubtaskFormModal
           mode="edit"
           subtask={subtask}
@@ -819,6 +853,7 @@ export function SubtaskDetailView({
             progress: subtask.progress,
             assigneeId: subtask.assigneeId,
           }}
+          initialProgress={reportAtCompletion ? 100 : undefined}
           assignee={assignee}
           tester={subtask.tester}
           testerOptions={members}
@@ -826,7 +861,10 @@ export function SubtaskDetailView({
           submitReport={(input) =>
             subtaskService.addSubtaskReport(subtask.id, input)
           }
-          onClose={() => setReportDrawerOpen(false)}
+          onClose={() => {
+            setReportDrawerOpen(false);
+            setReportAtCompletion(false);
+          }}
           onSubmitted={() => {
             setTab("reports");
             load();

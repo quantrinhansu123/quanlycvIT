@@ -20,6 +20,7 @@ import { SingleSelectDropdown } from "@/components/ui/SingleSelectDropdown";
 
 interface TaskReportDrawerProps {
   task: Pick<WorkTask, "id" | "title" | "progress" | "assigneeId">;
+  initialProgress?: number;
   assignee?: ProjectMember;
   tester?: ProjectMember;
   testerOptions?: ProjectMember[];
@@ -53,6 +54,7 @@ function formatFileSize(bytes: number): string {
 
 export function TaskReportDrawer({
   task,
+  initialProgress,
   assignee,
   tester,
   testerOptions,
@@ -65,7 +67,7 @@ export function TaskReportDrawer({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [progress, setProgress] = useState(task.progress);
+  const [progress, setProgress] = useState(initialProgress ?? task.progress);
   const [testerId, setTesterId] = useState(tester?.id ?? "");
   const [content, setContent] = useState("");
   const [images, setImages] = useState<PendingImage[]>([]);

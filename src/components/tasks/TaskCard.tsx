@@ -39,7 +39,7 @@ export function TaskCard({
             {project.name}
           </Badge>
         ) : <span />}
-        {!readOnly && <TaskActionMenu
+        {!readOnly && task.status !== "done" && <TaskActionMenu
           onEdit={() => onEdit(task)}
           onDelete={() => onDelete(task)}
         />}

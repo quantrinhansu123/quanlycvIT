@@ -231,11 +231,14 @@ export function SubtaskListClient({
   }, [searchInput]);
 
   function toggleSelect(id: string) {
+    if (subtasks.some((subtask) => subtask.id === id && subtask.status === "done")) return;
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
   }
 
   function toggleSelectAll() {
-    const visibleIds = subtasks.map((subtask) => subtask.id);
+    const visibleIds = subtasks
+      .filter((subtask) => subtask.status !== "done")
+      .map((subtask) => subtask.id);
     const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
     setSelectedIds((current) =>
       allVisibleSelected

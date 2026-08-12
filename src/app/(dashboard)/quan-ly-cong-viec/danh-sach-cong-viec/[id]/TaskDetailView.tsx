@@ -143,7 +143,7 @@ export function TaskDetailView({
     links: TaskLinkAttachment[];
     images: string[];
   }) => {
-    if (!task || readOnly) return;
+    if (!task || readOnly || task.status === "done") return;
     try {
       const updated = await taskService.updateTask(task.id, {
         title: task.title,
@@ -178,7 +178,7 @@ export function TaskDetailView({
       assigneeIds?: string[];
     }
   ) {
-    if (!task || readOnly || quickUpdating) return;
+    if (!task || readOnly || task.status === "done" || quickUpdating) return;
     setQuickUpdating(true);
     try {
       const updated = await taskService.updateTask(task.id, {
@@ -253,6 +253,7 @@ export function TaskDetailView({
     : undefined;
   const dueDistance = getDayDistance(task.dueDate);
   const overdue = isTaskOverdue(task);
+  const viewOnly = readOnly || task.status === "done";
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white">
@@ -317,6 +318,12 @@ export function TaskDetailView({
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
+            {task.status === "done" && (
+              <span className="inline-flex h-9 items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700">
+                <CircleCheck className="h-4 w-4" />
+                Chỉ xem
+              </span>
+            )}
             {splitView && (
               <button
                 type="button"
@@ -328,7 +335,7 @@ export function TaskDetailView({
                 {splitView.maximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </button>
             )}
-            {!readOnly && <Button
+            {!viewOnly && <Button
               onClick={() => setEditing(true)}
               className="rounded-full bg-brand-600 hover:bg-brand-700"
             >
@@ -395,7 +402,7 @@ export function TaskDetailView({
                 icon={Flag}
                 iconClassName="bg-orange-50 text-orange-500"
               >
-                {readOnly ? (
+                {viewOnly ? (
                   <TaskPriorityBadge priority={task.priority} />
                 ) : (
                   <QuickSelect
@@ -436,7 +443,7 @@ export function TaskDetailView({
                     emptyText="Chưa có mô tả cho công việc này."
                   />
                 </div>
-                {readOnly ? (
+                {viewOnly ? (
                   <DetailAttachments
                     entityLabel="công việc"
                     files={task.files}
@@ -486,7 +493,7 @@ export function TaskDetailView({
                     if (ids.length > 0) handleQuickUpdate({ assigneeIds: ids });
                   }}
                   emptyHint="Dự án chưa có thành viên"
-                  disabled={readOnly || quickUpdating}
+                  disabled={viewOnly || quickUpdating}
                 />
 
                 <p className="mb-2 mt-5 text-xs font-medium text-gray-400">
@@ -579,6 +586,7 @@ export function TaskDetailView({
             workTask={task}
             members={members}
             onSubtasksChanged={load}
+            readOnly={viewOnly}
           />
         ) : (
           <section className="min-h-[520px] rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
@@ -635,7 +643,7 @@ export function TaskDetailView({
         </div>
       </div>
 
-      {editing && !readOnly && (
+      {editing && !viewOnly && (
         <TaskFormModal
           mode="edit"
           task={task}

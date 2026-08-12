@@ -1378,6 +1378,12 @@ export async function updateWorkTask(
 ): Promise<WorkTask | null> {
   const current = await getWorkTask(supabase, id);
   if (!current) return null;
+  if (current.status === "done") {
+    throw new ApiException(
+      "Công việc đã hoàn thành nên chỉ có thể xem, không thể chỉnh sửa.",
+      409
+    );
+  }
 
   const [{ ids: assigneeIds, accountsById }] = await Promise.all([
     resolveAccounts(supabase, input.assigneeIds, "Người phụ trách"),
@@ -1397,6 +1403,7 @@ export async function updateWorkTask(
     .from("cong_viec")
     .update(payload)
     .eq("id", id)
+    .neq("trang_thai", "done")
     .select(WORK_TASK_SELECT)
     .maybeSingle();
   throwDatabaseError(error);
@@ -1458,10 +1465,20 @@ export async function deleteWorkTask(
   supabase: ApiSupabaseClient,
   id: string
 ): Promise<boolean> {
+  const current = await getWorkTask(supabase, id);
+  if (!current) return false;
+  if (current.status === "done") {
+    throw new ApiException(
+      "Công việc đã hoàn thành nên chỉ có thể xem, không thể xóa.",
+      409
+    );
+  }
+
   const { data, error } = await supabase
     .from("cong_viec")
     .delete()
     .eq("id", id)
+    .neq("trang_thai", "done")
     .select("id")
     .maybeSingle();
   throwDatabaseError(error);
@@ -1709,6 +1726,15 @@ export async function createSubtask(
   input: SubtaskInput,
   creatorAccountId: string
 ): Promise<Subtask> {
+  const parentWorkTask = await getWorkTask(supabase, input.workTaskId);
+  if (!parentWorkTask) throw new ApiException("Không tìm thấy công việc.", 404);
+  if (parentWorkTask.status === "done") {
+    throw new ApiException(
+      "Công việc đã hoàn thành nên chỉ có thể xem, không thể thêm Task mới.",
+      409
+    );
+  }
+
   const [{ ids: assigneeIds }, testerAccountId] = await Promise.all([
     resolveAccounts(supabase, input.assigneeIds, "Người phụ trách"),
     input.testerId
@@ -1774,10 +1800,10 @@ export async function updateSubtask(
     String(currentRow.trang_thai),
     currentProgress
   );
-  if (currentStatus === "done" && input.status !== undefined && input.status !== "done") {
+  if (currentStatus === "done") {
     throw new ApiException(
-      "Task đã hoàn thành nên không thể thay đổi trạng thái.",
-      400
+      "Task đã hoàn thành nên chỉ có thể xem, không thể chỉnh sửa.",
+      409
     );
   }
   const nextStatus =
@@ -1884,10 +1910,20 @@ export async function deleteSubtask(
   supabase: ApiSupabaseClient,
   id: string
 ): Promise<boolean> {
+  const current = await getSubtask(supabase, id);
+  if (!current) return false;
+  if (current.status === "done") {
+    throw new ApiException(
+      "Task đã hoàn thành nên chỉ có thể xem, không thể xóa.",
+      409
+    );
+  }
+
   const { data, error } = await supabase
     .from("task")
     .delete()
     .eq("id", id)
+    .neq("trang_thai", "done")
     .select("id")
     .maybeSingle();
   throwDatabaseError(error);
@@ -2323,6 +2359,12 @@ export async function createSubtaskReport(
 ): Promise<SubtaskReport> {
   const subtask = await getSubtask(supabase, subtaskId);
   if (!subtask) throw new ApiException("Không tìm thấy task.", 404);
+  if (subtask.status === "done") {
+    throw new ApiException(
+      "Task đã hoàn thành nên chỉ có thể xem, không thể gửi thêm báo cáo.",
+      409
+    );
+  }
 
   const testerAccountId = input.testerId
     ? await resolveAccountId(supabase, input.testerId, "Người test")
@@ -2383,11 +2425,7 @@ export async function createSubtaskReport(
       .update({
         tien_do_thuc_te: input.progress,
         ...(testerAccountId ? { nguoi_test_id: testerAccountId } : {}),
-        trang_thai: toDatabaseStatus(
-          subtask.status === "done" && input.progress === 100
-            ? "done"
-            : deriveSubtaskStatus(input.progress)
-        ),
+        trang_thai: toDatabaseStatus(deriveSubtaskStatus(input.progress)),
       })
       .eq("id", subtaskId);
     throwDatabaseError(progressError);
