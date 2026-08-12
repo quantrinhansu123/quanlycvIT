@@ -22,6 +22,7 @@ import {
   Pencil,
   Plus,
   RotateCcw,
+  TestTube2,
   UsersRound,
   type LucideIcon,
 } from "lucide-react";
@@ -31,7 +32,7 @@ import { subtaskService } from "@/services/subtask-service";
 import type { ProjectMember } from "@/types/project";
 import type { TaskFileAttachment, TaskLinkAttachment, WorkTask } from "@/types/task";
 import { SUBTASK_STATUS_OPTIONS, TASK_PRIORITY_OPTIONS } from "@/types/task";
-import type { Subtask, SubtaskReport } from "@/types/subtask";
+import type { Subtask, SubtaskReport, SubtaskTestHistoryEntry } from "@/types/subtask";
 import { isSubtaskOverdue } from "@/types/subtask";
 import type { TaskActivityEvent } from "@/types/activity";
 import { AvatarStack } from "@/components/ui/Avatar";
@@ -81,6 +82,7 @@ interface SubtaskDetailViewProps {
   initialMembers: ProjectMember[];
   initialActivity: TaskActivityEvent[];
   initialActivityTotal: number;
+  initialTestHistory: SubtaskTestHistoryEntry[];
 }
 
 const ACTIVITY_PAGE_SIZE = 20;
@@ -93,6 +95,7 @@ export function SubtaskDetailView({
   initialMembers,
   initialActivity,
   initialActivityTotal,
+  initialTestHistory,
 }: SubtaskDetailViewProps) {
   const router = useRouter();
   const { notify } = useFeedback();
@@ -105,6 +108,7 @@ export function SubtaskDetailView({
   const [members, setMembers] = useState<ProjectMember[]>(initialMembers);
   const [activity, setActivity] = useState<TaskActivityEvent[]>(initialActivity);
   const [activityTotal, setActivityTotal] = useState(initialActivityTotal);
+  const [testHistory, setTestHistory] = useState<SubtaskTestHistoryEntry[]>(initialTestHistory);
   const [activityLoadingMore, setActivityLoadingMore] = useState(false);
   const [error, setError] = useState(false);
   const [tab, setTab] = useState<Tab>("info");
@@ -115,13 +119,14 @@ export function SubtaskDetailView({
   const [accepting, setAccepting] = useState(false);
   const load = useCallback(async () => {
     try {
-      const [subtaskData, workTaskList, reportData, memberData, activityPage] =
+      const [subtaskData, workTaskList, reportData, memberData, activityPage, historyData] =
         await Promise.all([
           subtaskService.getSubtaskById(subtaskId),
           taskService.getTasks(),
           subtaskService.getSubtaskReports(subtaskId),
           projectService.getDirectory(),
           subtaskService.getSubtaskActivity(subtaskId, 1, ACTIVITY_PAGE_SIZE),
+          subtaskService.getSubtaskTestHistory(subtaskId),
         ]);
       setSubtask(subtaskData);
       setWorkTasks(workTaskList);
@@ -129,6 +134,7 @@ export function SubtaskDetailView({
       setMembers(memberData);
       setActivity(activityPage.items);
       setActivityTotal(activityPage.total);
+      setTestHistory(historyData);
       setError(false);
     } catch (loadError) {
       setError(true);
@@ -337,6 +343,8 @@ export function SubtaskDetailView({
     try {
       const updated = await subtaskService.submitTestResult(subtask.id, { passed, note });
       setSubtask(updated);
+      const history = await subtaskService.getSubtaskTestHistory(subtask.id);
+      setTestHistory(history);
       window.dispatchEvent(new CustomEvent("app:notifications-changed"));
       cache.invalidate(CACHE_RESOURCE.subtasksList);
       cache.invalidate(CACHE_RESOURCE.tasksList);
@@ -702,6 +710,31 @@ export function SubtaskDetailView({
                   disabled={quickUpdating || statusLocked}
                 />
 
+                <div className="mt-5 border-t border-gray-100 pt-4">
+                  <p className="mb-2 text-xs font-medium text-gray-400">
+                    Người test:
+                  </p>
+                  {subtask.tester ? (
+                    <div className="flex items-center gap-3 rounded-xl border border-violet-100 bg-violet-50/60 p-3">
+                      <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-600">
+                        <TestTube2 className="h-4 w-4" />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-bold text-gray-900">
+                          {subtask.tester.name}
+                        </span>
+                        <span className="block truncate text-xs text-gray-500">
+                          {subtask.tester.role ?? "Tester được phân công"}
+                        </span>
+                      </span>
+                    </div>
+                  ) : (
+                    <p className="rounded-xl border border-dashed border-gray-200 px-3 py-3 text-sm text-gray-400">
+                      Chưa phân công người test.
+                    </p>
+                  )}
+                </div>
+
                 <p className="mb-2 mt-5 text-xs font-medium text-gray-400">
                   Thuộc công việc:
                 </p>
@@ -730,6 +763,51 @@ export function SubtaskDetailView({
                     {subtask.assignees.length} người thực hiện
                   </div>
                 )}
+
+                <div className="mt-5 border-t border-gray-100 pt-4">
+                  <p className="mb-3 text-xs font-medium text-gray-400">
+                    Lịch sử kiểm thử:
+                  </p>
+                  {testHistory.length === 0 ? (
+                    <p className="rounded-xl border border-dashed border-gray-200 px-3 py-3 text-sm text-gray-400">
+                      Chưa có kết quả kiểm thử.
+                    </p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {testHistory.map((entry) => {
+                        const passed = entry.result === "passed";
+                        return (
+                          <li
+                            key={entry.id}
+                            className={cn(
+                              "rounded-xl border px-3 py-3",
+                              passed
+                                ? "border-emerald-100 bg-emerald-50/60"
+                                : "border-rose-100 bg-rose-50/60"
+                            )}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <span className={cn("text-sm font-bold", passed ? "text-emerald-700" : "text-rose-700")}>
+                                {passed ? "Pass kiểm thử" : "Fail kiểm thử"}
+                              </span>
+                              <span className="shrink-0 text-[11px] text-gray-400">
+                                {formatDateVN(entry.createdAt)}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-xs text-gray-600">
+                              Tester: {entry.tester?.name ?? "Không xác định"}
+                            </p>
+                            {entry.note && (
+                              <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-gray-700">
+                                {entry.note}
+                              </p>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
               </Panel>
             </section>
 

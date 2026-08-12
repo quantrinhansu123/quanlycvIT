@@ -14,6 +14,7 @@ import type {
   Subtask,
   SubtaskInput,
   SubtaskReport,
+  SubtaskTestHistoryEntry,
   SubtaskTestResult,
   SubtaskUpdateEntry,
   TaskFileAttachment,
@@ -158,6 +159,15 @@ interface TaskActivityRow {
   tac_gia: AccountRow | null;
 }
 
+interface SubtaskTestHistoryRow {
+  id: string;
+  task_id: string;
+  ket_qua: "passed" | "failed";
+  ghi_chu: string | null;
+  created_at: string;
+  tester: AccountRow | null;
+}
+
 export interface WorkTaskFilters {
   search?: string;
   projectId?: string;
@@ -254,6 +264,8 @@ const SUBTASK_SELECT =
   `task_phu_trach(tai_khoan_id,la_chinh,xac_nhan_luc,tai_khoan(${ACCOUNT_SELECT}))`;
 const TASK_ACTIVITY_SELECT =
   "id,task_id,loai,tieu_de,chi_tiet,created_at," + `tac_gia:tai_khoan(${ACCOUNT_SELECT})`;
+const SUBTASK_TEST_HISTORY_SELECT =
+  "id,task_id,ket_qua,ghi_chu,created_at," + `tester:tai_khoan!nguoi_test_id(${ACCOUNT_SELECT})`;
 /** Trang mặc định cho timeline hoạt động — panel nhỏ, không cần tải nhiều mỗi lần. */
 const TASK_ACTIVITY_PAGE_SIZE = 20;
 
@@ -1965,6 +1977,27 @@ export async function listSubtaskActivity(
   throwDatabaseError(error);
   const items = hydrateTaskActivity((data ?? []) as unknown as TaskActivityRow[]);
   return { items, total: count ?? 0 };
+}
+
+/** Lấy các lần Pass/Fail theo thứ tự mới nhất trước. */
+export async function listSubtaskTestHistory(
+  supabase: ApiSupabaseClient,
+  subtaskId: string
+): Promise<SubtaskTestHistoryEntry[]> {
+  const { data, error } = await supabase
+    .from("task_lich_su_test")
+    .select(SUBTASK_TEST_HISTORY_SELECT)
+    .eq("task_id", subtaskId)
+    .order("created_at", { ascending: false });
+  throwDatabaseError(error);
+  return ((data ?? []) as unknown as SubtaskTestHistoryRow[]).map((row) => ({
+    id: row.id,
+    subtaskId: row.task_id,
+    tester: row.tester ? toProjectMember(row.tester) : undefined,
+    result: row.ket_qua,
+    note: row.ghi_chu ?? undefined,
+    createdAt: row.created_at,
+  }));
 }
 
 const TASK_REPORT_SELECT =

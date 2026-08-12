@@ -1,5 +1,5 @@
 import { apiClient } from "@/services/api-client";
-import type { Subtask, SubtaskInput, SubtaskReport, SubtaskTestResult } from "@/types/subtask";
+import type { Subtask, SubtaskInput, SubtaskReport, SubtaskTestHistoryEntry, SubtaskTestResult } from "@/types/subtask";
 import type {
   ProgressReportSubmission,
   TaskPriority,
@@ -152,6 +152,10 @@ export const subtaskService = {
 
   async getSubtaskReports(subtaskId: string): Promise<SubtaskReport[]> {
     return apiClient.get<SubtaskReport[]>(`/subtasks/${subtaskId}/reports`);
+  },
+
+  async getSubtaskTestHistory(subtaskId: string): Promise<SubtaskTestHistoryEntry[]> {
+    return apiClient.get<SubtaskTestHistoryEntry[]>(`/subtasks/${subtaskId}/test-history`);
   },
 
   async getSubtaskActivity(

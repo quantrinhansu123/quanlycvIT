@@ -91,6 +91,16 @@ export interface SubtaskTestResult {
   note?: string;
 }
 
+/** Một lần Tester ghi kết quả Pass/Fail cho Task. */
+export interface SubtaskTestHistoryEntry {
+  id: string;
+  subtaskId: string;
+  tester?: ProjectMember;
+  result: "passed" | "failed";
+  note?: string;
+  createdAt: string;
+}
+
 export function isSubtaskOverdue(subtask: Subtask, referenceDate: Date = new Date()): boolean {
   if (subtask.status === "done") return false;
   const dueDate = subtask.dueDate.slice(0, 10);

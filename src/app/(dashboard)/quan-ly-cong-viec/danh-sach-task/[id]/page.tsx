@@ -2,6 +2,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/api";
 import { assertSubtaskReadable, requireRequestAccount } from "@/lib/supabase/authorization";
 import {
   getSubtask,
+  listSubtaskTestHistory,
   listDirectory,
   listSubtaskActivity,
   listSubtaskReports,
@@ -20,12 +21,13 @@ export default async function SubtaskDetailPage({ params }: SubtaskDetailPagePro
   await assertSubtaskReadable(supabase, access, id);
   const memberAssigneeIds = access.role === "member" ? [access.id] : undefined;
 
-  const [subtask, workTasks, reports, members, activity] = await Promise.all([
+  const [subtask, workTasks, reports, members, activity, testHistory] = await Promise.all([
     getSubtask(supabase, id),
     listWorkTasks(supabase, { assigneeIds: memberAssigneeIds }),
     listSubtaskReports(supabase, id),
     listDirectory(supabase),
     listSubtaskActivity(supabase, id),
+    listSubtaskTestHistory(supabase, id),
   ]);
 
   return (
@@ -37,6 +39,7 @@ export default async function SubtaskDetailPage({ params }: SubtaskDetailPagePro
       initialMembers={members}
       initialActivity={activity.items}
       initialActivityTotal={activity.total}
+      initialTestHistory={testHistory}
     />
   );
 }
