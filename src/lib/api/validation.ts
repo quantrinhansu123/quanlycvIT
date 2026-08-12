@@ -4,7 +4,8 @@ import type { SubtaskInput, SubtaskUpdateEntry, TaskFileAttachment, TaskLinkAtta
 import type { TaskPriority, TaskStatus, WorkTaskInput } from "@/types/task";
 
 const PROJECT_COLORS = new Set<ProjectColor>(["purple", "green", "orange", "red", "blue"]);
-const TASK_STATUSES = new Set<TaskStatus>(["todo", "inProgress", "review", "done"]);
+const TASK_STATUSES = new Set<TaskStatus>(["todo", "inProgress", "testing", "review", "done"]);
+const WORK_TASK_STATUSES = new Set<TaskStatus>(["todo", "inProgress", "review", "done"]);
 const TASK_PRIORITIES = new Set<TaskPriority>(["low", "medium", "high", "urgent"]);
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -276,12 +277,16 @@ export function parseWorkTaskInput(body: Record<string, unknown>): WorkTaskInput
   const dueDate = requiredDate(body, "dueDate", "Ngày hoàn thành");
   validateDateRange(startDate, dueDate);
 
+  const status = taskStatus(body);
+  if (!WORK_TASK_STATUSES.has(status)) {
+    throw new ApiException("Công việc không hỗ trợ trạng thái Chờ test.", 400);
+  }
   return {
     title: requiredString(body, "title", "Tên công việc"),
     description: optionalString(body, "description"),
     projectId: requiredString(body, "projectId", "Dự án"),
     assigneeIds: assigneeIds(body),
-    status: taskStatus(body),
+    status,
     priority: taskPriority(body),
     startDate,
     dueDate,
@@ -350,6 +355,7 @@ export interface TaskReportFields {
   content: string;
   progress: number;
   links: TaskReportLinkInput[];
+  testerId?: string;
 }
 
 export function parseTaskReportFields(fields: {
@@ -357,6 +363,7 @@ export function parseTaskReportFields(fields: {
   progress: FormDataEntryValue | null;
   authorId: FormDataEntryValue | null;
   links: FormDataEntryValue | null;
+  testerId?: FormDataEntryValue | null;
 }): TaskReportFields {
   if (typeof fields.content !== "string" || !fields.content.trim()) {
     throw new ApiException("Nội dung báo cáo là bắt buộc.", 400);
@@ -377,6 +384,10 @@ export function parseTaskReportFields(fields: {
     content: fields.content.trim(),
     progress: Math.round(progress),
     links: reportLinks(fields.links),
+    testerId:
+      typeof fields.testerId === "string" && fields.testerId.trim()
+        ? fields.testerId.trim()
+        : undefined,
   };
 }
 
@@ -390,6 +401,7 @@ export function parseSubtaskInput(body: Record<string, unknown>): SubtaskInput {
     description: optionalString(body, "description"),
     workTaskId: requiredString(body, "workTaskId", "Công việc"),
     assigneeIds: assigneeIds(body),
+    testerId: optionalString(body, "testerId"),
     status: optionalTaskStatus(body),
     priority: taskPriority(body),
     startDate,

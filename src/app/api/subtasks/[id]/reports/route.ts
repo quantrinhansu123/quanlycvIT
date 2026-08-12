@@ -17,6 +17,7 @@ import {
   TASK_REPORT_MAX_FILE_SIZE,
 } from "@/types/task";
 import { runUploadBatch } from "@/lib/upload-concurrency";
+import { requireRequestAccount } from "@/lib/supabase/authorization";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -65,6 +66,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       progress: formData.get("progress"),
       authorId: formData.get("authorId"),
       links: formData.get("links"),
+      testerId: formData.get("testerId"),
     });
     const images = formData
       .getAll("images")
@@ -79,6 +81,17 @@ export async function POST(request: Request, { params }: RouteParams) {
     for (const file of files) assertFileValid(file, false);
 
     const supabase = createApiSupabaseClient(request);
+    const access = await requireRequestAccount(supabase);
+    if (access.role === "member") {
+      const { data: assignment, error: assignmentError } = await supabase
+        .from("task_phu_trach")
+        .select("task_id")
+        .eq("task_id", id)
+        .eq("tai_khoan_id", access.id)
+        .maybeSingle();
+      if (assignmentError) throw assignmentError;
+      if (!assignment) throw new ApiException("Bạn không phải người thực hiện Task này.", 403);
+    }
     const attachments: TaskReportAttachmentInput[] = [];
     const uploadResult = await runUploadBatch([
       ...images.map((file, index) => ({

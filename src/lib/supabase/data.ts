@@ -14,6 +14,7 @@ import type {
   Subtask,
   SubtaskInput,
   SubtaskReport,
+  SubtaskTestResult,
   SubtaskUpdateEntry,
   TaskFileAttachment,
   TaskLinkAttachment,
@@ -125,6 +126,8 @@ interface SubtaskRow {
   ngay_bat_dau: string | null;
   ngay_ket_thuc: string | null;
   nguoi_phu_trach_id: string | null;
+  nguoi_test_id: string | null;
+  ghi_chu_test: string | null;
   trang_thai: string;
   uu_tien: string;
   tien_do_thuc_te: number;
@@ -142,6 +145,7 @@ interface SubtaskRow {
   task_phu_trach: AssignmentEmbedRow[];
   /** Người tạo Task, lấy kèm để hiển thị trong danh sách. */
   creator: AccountRow | null;
+  tester: AccountRow | null;
 }
 
 interface TaskActivityRow {
@@ -180,6 +184,7 @@ export interface TaskReportInput {
   progress: number;
   attachments: TaskReportAttachmentInput[];
   links: Omit<TaskReportLink, "id">[];
+  testerId?: string;
 }
 
 export interface SubtaskFilters {
@@ -194,6 +199,8 @@ export interface SubtaskFilters {
   /** Lọc đồng thời nhiều trạng thái; `status` được giữ cho các nơi gọi cũ. */
   statuses?: TaskStatus[];
   overdueOnly?: boolean;
+  /** UUID tài khoản tester; chỉ API nội bộ gán sau khi xác thực request. */
+  testerId?: string;
 }
 
 /** Bộ lọc cho trang danh sách task: thêm lọc theo dự án và nhiều người thực hiện, có phân trang. */
@@ -240,9 +247,10 @@ const WORK_TASK_DIRECTORY_SELECT =
   `legacy_assignee:tai_khoan!nguoi_phu_trach_id(${ACCOUNT_SELECT}),` +
   `cong_viec_phu_trach(tai_khoan_id,la_chinh,tai_khoan(${ACCOUNT_SELECT}))`;
 const SUBTASK_SELECT =
-  "id,ten_task,mo_ta,created_at,updated_at,ngay_bat_dau,ngay_ket_thuc,nguoi_phu_trach_id,nguoi_tao_id,trang_thai,uu_tien,tien_do_thuc_te,nhan_tag,hinh_anh,tep_dinh_kem,lien_ket_dinh_kem,cap_nhat_bo_sung,task_tien_de_id,cong_viec_id," +
+  "id,ten_task,mo_ta,created_at,updated_at,ngay_bat_dau,ngay_ket_thuc,nguoi_phu_trach_id,nguoi_tao_id,nguoi_test_id,ghi_chu_test,trang_thai,uu_tien,tien_do_thuc_te,nhan_tag,hinh_anh,tep_dinh_kem,lien_ket_dinh_kem,cap_nhat_bo_sung,task_tien_de_id,cong_viec_id," +
   `legacy_assignee:tai_khoan!nguoi_phu_trach_id(${ACCOUNT_SELECT}),` +
   `creator:tai_khoan!nguoi_tao_id(${ACCOUNT_SELECT}),` +
+  `tester:tai_khoan!nguoi_test_id(${ACCOUNT_SELECT}),` +
   `task_phu_trach(tai_khoan_id,la_chinh,xac_nhan_luc,tai_khoan(${ACCOUNT_SELECT}))`;
 const TASK_ACTIVITY_SELECT =
   "id,task_id,loai,tieu_de,chi_tiet,created_at," + `tac_gia:tai_khoan(${ACCOUNT_SELECT})`;
@@ -287,7 +295,7 @@ function toDatabaseStatus(status: TaskStatus): string {
 
 /** Trạng thái mặc định khi nhân viên gửi báo cáo tiến độ. */
 function deriveSubtaskStatus(progress: number): TaskStatus {
-  if (progress >= 100) return "review";
+  if (progress >= 100) return "testing";
   if (progress > 0) return "inProgress";
   return "todo";
 }
@@ -300,7 +308,7 @@ function deriveSubtaskStatus(progress: number): TaskStatus {
  */
 function progressForSubtaskStatus(status: TaskStatus, currentProgress: number): number {
   if (status === "todo") return 0;
-  if (status === "review" || status === "done") return 100;
+  if (status === "testing" || status === "review" || status === "done") return 100;
   return currentProgress > 0 && currentProgress < 100 ? currentProgress : 1;
 }
 
@@ -309,6 +317,7 @@ function normalizeSubtaskStatus(status: string, progress: number): TaskStatus {
   if (
     normalized === "todo" ||
     normalized === "inProgress" ||
+    normalized === "testing" ||
     normalized === "review" ||
     normalized === "done"
   ) {
@@ -1507,6 +1516,9 @@ function hydrateSubtasks(rows: SubtaskRow[]): Subtask[] {
       assigneeId: primary?.id ?? "",
       assignees: assignees.length > 0 ? assignees : primary ? [primary] : [],
       creator: row.creator ? toProjectMember(row.creator) : undefined,
+      testerId: row.nguoi_test_id ?? undefined,
+      tester: row.tester ? toProjectMember(row.tester) : undefined,
+      testNote: row.ghi_chu_test ?? undefined,
       acceptedAssigneeIds: (row.task_phu_trach ?? [])
         .filter((assignment) => Boolean(assignment.xac_nhan_luc))
         .map((assignment) => assignment.tai_khoan_id),
@@ -1558,6 +1570,7 @@ export async function listSubtasks(
     );
     query = query.eq("nguoi_phu_trach_id", accountId);
   }
+  if (filters.testerId) query = query.eq("nguoi_test_id", filters.testerId);
   if (filters.priorities?.length) query = query.in("uu_tien", filters.priorities);
   else if (filters.priority) query = query.eq("uu_tien", filters.priority);
   if (filters.statuses?.length) query = query.in("trang_thai", filters.statuses.map(toDatabaseStatus));
@@ -1632,6 +1645,7 @@ export async function listSubtasksPage(
     );
     query = query.eq("nguoi_phu_trach_id", accountId);
   }
+  if (filters.testerId) query = query.eq("nguoi_test_id", filters.testerId);
   if (filters.priorities?.length) query = query.in("uu_tien", filters.priorities);
   else if (filters.priority) query = query.eq("uu_tien", filters.priority);
   if (filters.statuses?.length) query = query.in("trang_thai", filters.statuses.map(toDatabaseStatus));
@@ -1667,6 +1681,7 @@ export async function getSubtask(
 function subtaskPayload(
   input: SubtaskInput,
   primaryAccountId: string,
+  testerAccountId: string | null,
   progress: number,
   status: TaskStatus
 ) {
@@ -1676,6 +1691,7 @@ function subtaskPayload(
     ngay_bat_dau: input.startDate,
     ngay_ket_thuc: input.dueDate,
     nguoi_phu_trach_id: primaryAccountId,
+    nguoi_test_id: testerAccountId,
     trang_thai: toDatabaseStatus(status),
     uu_tien: input.priority,
     tien_do_thuc_te: progress,
@@ -1693,8 +1709,11 @@ export async function createSubtask(
   input: SubtaskInput,
   creatorAccountId: string
 ): Promise<Subtask> {
-  const [{ ids: assigneeIds }] = await Promise.all([
+  const [{ ids: assigneeIds }, testerAccountId] = await Promise.all([
     resolveAccounts(supabase, input.assigneeIds, "Người phụ trách"),
+    input.testerId
+      ? resolveAccountId(supabase, input.testerId, "Người test")
+      : Promise.resolve(null),
     assertSubtaskScheduleWithinWorkTask(
       supabase,
       input.workTaskId,
@@ -1707,7 +1726,7 @@ export async function createSubtask(
   const { data, error } = await supabase
     .from("task")
     .insert({
-      ...subtaskPayload(input, assigneeIds[0], 0, "todo"),
+      ...subtaskPayload(input, assigneeIds[0], testerAccountId, 0, "todo"),
       nguoi_tao_id: creatorAccountId,
     })
     .select(SUBTASK_SELECT)
@@ -1767,8 +1786,11 @@ export async function updateSubtask(
     ? progressForSubtaskStatus(input.status, currentProgress)
     : currentProgress;
 
-  const [{ ids: assigneeIds }] = await Promise.all([
+  const [{ ids: assigneeIds }, testerAccountId] = await Promise.all([
     resolveAccounts(supabase, input.assigneeIds, "Người phụ trách"),
+    input.testerId
+      ? resolveAccountId(supabase, input.testerId, "Người test")
+      : Promise.resolve(null),
     assertSubtaskScheduleWithinWorkTask(
       supabase,
       input.workTaskId,
@@ -1776,6 +1798,9 @@ export async function updateSubtask(
       input.dueDate
     ),
   ]);
+  if (nextStatus === "testing" && !testerAccountId) {
+    throw new ApiException("Task ở trạng thái Chờ test phải có người test.", 400);
+  }
   await assertWorkTaskAssignees(supabase, input.workTaskId, assigneeIds);
 
   const { data, error } = await supabase
@@ -1784,6 +1809,7 @@ export async function updateSubtask(
       subtaskPayload(
         input,
         assigneeIds[0],
+        testerAccountId,
         nextProgress,
         nextStatus
       )
@@ -2298,6 +2324,13 @@ export async function createSubtaskReport(
   const subtask = await getSubtask(supabase, subtaskId);
   if (!subtask) throw new ApiException("Không tìm thấy task.", 404);
 
+  const testerAccountId = input.testerId
+    ? await resolveAccountId(supabase, input.testerId, "Người test")
+    : subtask.testerId;
+  if (input.progress === 100 && !testerAccountId) {
+    throw new ApiException("Vui lòng chọn người test trước khi gửi báo cáo 100%.", 400);
+  }
+
   const authorId = input.authorId
     ? await resolveAccountId(supabase, input.authorId, "Người báo cáo")
     : null;
@@ -2344,12 +2377,12 @@ export async function createSubtaskReport(
     throwDatabaseError(linkError);
   }
 
-  if (input.progress !== subtask.progress) {
-    // Báo cáo đạt 100% chuyển sang "Chờ duyệt"; chỉ approveSubtask mới đưa về "Hoàn thành".
+  if (input.progress === 100 || input.progress !== subtask.progress) {
     const { error: progressError } = await supabase
       .from("task")
       .update({
         tien_do_thuc_te: input.progress,
+        ...(testerAccountId ? { nguoi_test_id: testerAccountId } : {}),
         trang_thai: toDatabaseStatus(
           subtask.status === "done" && input.progress === 100
             ? "done"
@@ -2363,6 +2396,62 @@ export async function createSubtaskReport(
   const report = await getSubtaskReport(supabase, reportId);
   if (!report) throw new ApiException("Không thể đọc lại báo cáo vừa tạo.", 500);
   return report;
+}
+
+/** Chỉ tester được gán hoặc admin được ghi kết quả kiểm thử. */
+export async function assertTesterOfSubtask(
+  supabase: ApiSupabaseClient,
+  taskId: string
+): Promise<void> {
+  const authUserId = await resolveAuthUserId(supabase);
+  if (!authUserId) throw new ApiException("Bạn cần đăng nhập để thực hiện thao tác này.", 401);
+  const { data: account, error: accountError } = await supabase
+    .from("tai_khoan")
+    .select("id,role")
+    .eq("auth_user_id", authUserId)
+    .maybeSingle();
+  throwDatabaseError(accountError);
+  if (!account) throw new ApiException("Không tìm thấy tài khoản.", 403);
+  if (account.role === "admin") return;
+  const { data: task, error: taskError } = await supabase
+    .from("task")
+    .select("nguoi_test_id")
+    .eq("id", taskId)
+    .maybeSingle();
+  throwDatabaseError(taskError);
+  if (!task || task.nguoi_test_id !== account.id) {
+    throw new ApiException("Chỉ người được gán test Task này mới được thao tác.", 403);
+  }
+}
+
+export async function submitSubtaskTestResult(
+  supabase: ApiSupabaseClient,
+  id: string,
+  result: SubtaskTestResult
+): Promise<Subtask | null> {
+  const subtask = await getSubtask(supabase, id);
+  if (!subtask) return null;
+  if (subtask.status !== "testing") {
+    throw new ApiException("Chỉ có thể ghi kết quả khi Task đang Chờ test.", 400);
+  }
+  const note = result.note?.trim();
+  if (!result.passed && !note) {
+    throw new ApiException("Cần ghi rõ lỗi khi báo Fail.", 400);
+  }
+  const update = result.passed
+    ? { trang_thai: toDatabaseStatus("review"), ghi_chu_test: null }
+    : { trang_thai: toDatabaseStatus("inProgress"), tien_do_thuc_te: 99, ghi_chu_test: note };
+  const { data, error } = await supabase
+    .from("task")
+    .update(update)
+    .eq("id", id)
+    .eq("trang_thai", "testing")
+    .select(SUBTASK_SELECT)
+    .maybeSingle();
+  throwDatabaseError(error);
+  if (!data) throw new ApiException("Task đã được xử lý bởi một người khác.", 409);
+  const [updated] = hydrateSubtasks([data as unknown as SubtaskRow]);
+  return updated;
 }
 
 /** Xác thực người gọi API hiện tại có role admin trong bảng tài khoản. */

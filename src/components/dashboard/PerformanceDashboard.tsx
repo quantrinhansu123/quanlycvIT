@@ -43,6 +43,7 @@ const STATUS_ORDER: TaskStatus[] = ["todo", "inProgress", "review", "done"];
 const STATUS_COLORS: Record<TaskStatus, string> = {
   todo: "#94A3B8",
   inProgress: "#3B82F6",
+  testing: "#8B5CF6",
   review: "#F59E0B",
   done: "#10B981",
 };

@@ -1,6 +1,8 @@
+export type AppNotificationType = "taskAssigned" | "taskNeedsTesting" | "taskTestFailed";
+
 export interface AppNotification {
   id: string;
-  type: "taskAssigned";
+  type: AppNotificationType;
   title: string;
   content: string;
   taskId?: string;

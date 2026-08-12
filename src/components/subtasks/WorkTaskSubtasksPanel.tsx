@@ -13,7 +13,7 @@ import {
 import type { ProjectMember } from "@/types/project";
 import type { Subtask } from "@/types/subtask";
 import type { TaskPriority, TaskStatus, WorkTask } from "@/types/task";
-import { TASK_PRIORITY_OPTIONS, TASK_STATUS_OPTIONS } from "@/types/task";
+import { TASK_PRIORITY_OPTIONS, SUBTASK_STATUS_OPTIONS } from "@/types/task";
 import { useCurrentAccount } from "@/hooks/useCurrentAccount";
 import { subtaskService, type SubtaskFilters } from "@/services/subtask-service";
 import { Button } from "@/components/ui/Button";
@@ -223,6 +223,25 @@ export function WorkTaskSubtasksPanel({
     }
   }
 
+  async function handleTest(subtask: Subtask, passed: boolean) {
+    const note = passed ? undefined : window.prompt("Mô tả lỗi cần người thực hiện sửa:")?.trim();
+    if (!passed && !note) return;
+    try {
+      const updated = await subtaskService.submitTestResult(subtask.id, { passed, note });
+      setSubtasks((current) => current.map((item) => item.id === updated.id ? updated : item));
+      window.dispatchEvent(new CustomEvent("app:notifications-changed"));
+      notify({
+        type: "success",
+        title: passed ? "Task đã Pass kiểm thử" : "Đã trả Task về người thực hiện",
+        description: passed ? "Task đã chuyển sang Chờ duyệt." : "Tiến độ Task đã được đặt về 99%.",
+      });
+      invalidateSharedCaches();
+      onSubtasksChanged();
+    } catch (testError) {
+      notify({ type: "error", title: "Không thể ghi kết quả test", description: getErrorMessage(testError, "Vui lòng thử lại.") });
+    }
+  }
+
   async function handleAccept(subtask: Subtask) {
     if (acceptingId) return;
     setAcceptingId(subtask.id);
@@ -256,7 +275,7 @@ export function WorkTaskSubtasksPanel({
         formatDateVN(subtask.dueDate),
         `${subtask.progress}%`,
         TASK_PRIORITY_OPTIONS.find((option) => option.value === subtask.priority)?.label ?? "",
-        TASK_STATUS_OPTIONS.find((option) => option.value === subtask.status)?.label ?? "",
+        SUBTASK_STATUS_OPTIONS.find((option) => option.value === subtask.status)?.label ?? "",
       ]);
       await exportTablePdf({
         title: `Task của công việc ${workTask.title}`,
@@ -320,7 +339,7 @@ export function WorkTaskSubtasksPanel({
           label="Trạng thái"
           value={status}
           onChange={(value) => setStatus(value as TaskStatus | "")}
-          options={TASK_STATUS_OPTIONS.map((option) => ({
+          options={SUBTASK_STATUS_OPTIONS.map((option) => ({
             value: option.value,
             label: option.label,
           }))}
@@ -405,6 +424,9 @@ export function WorkTaskSubtasksPanel({
             acceptingId={acceptingId}
             onAccept={handleAccept}
             canReport={!isAdmin}
+            canTest
+            onPassTest={(subtask) => void handleTest(subtask, true)}
+            onFailTest={(subtask) => void handleTest(subtask, false)}
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3">
@@ -424,6 +446,9 @@ export function WorkTaskSubtasksPanel({
                 currentAccountId={account?.id}
                 acceptingId={acceptingId}
                 onAccept={handleAccept}
+                canTest
+                onPassTest={(subtask) => void handleTest(subtask, true)}
+                onFailTest={(subtask) => void handleTest(subtask, false)}
               />
             ))}
           </div>
@@ -471,6 +496,7 @@ export function WorkTaskSubtasksPanel({
           subtask={quickView.subtask}
           workTask={workTask}
           assignee={membersById.get(quickView.subtask.assigneeId)}
+          testerOptions={members}
           initialTab={quickView.tab}
           onClose={() => setQuickView(null)}
           onReportAdded={() => {
@@ -490,6 +516,8 @@ export function WorkTaskSubtasksPanel({
             assigneeId: reportDrawer.assigneeId,
           }}
           assignee={membersById.get(reportDrawer.assigneeId)}
+          tester={reportDrawer.tester}
+          testerOptions={members}
           entityLabel="task"
           submitReport={(input) =>
             subtaskService.addSubtaskReport(reportDrawer.id, input)

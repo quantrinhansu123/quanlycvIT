@@ -38,7 +38,14 @@ export async function GET(request: NextRequest) {
     const supabase = createApiSupabaseClient(request);
     const access = await requireRequestAccount(supabase);
     const filters = filtersFromRequest(request);
-    if (access.role === "member") {
+    const needsTesting = request.nextUrl.searchParams.get("needsTesting") === "true";
+    if (needsTesting) {
+      filters.testerId = access.id;
+      filters.status = "testing";
+      filters.statuses = undefined;
+      filters.assigneeId = undefined;
+      filters.assigneeIds = undefined;
+    } else if (access.role === "member") {
       filters.assigneeId = undefined;
       filters.assigneeIds = [access.id];
     }
@@ -56,13 +63,14 @@ export async function GET(request: NextRequest) {
       let assigneeIds = assigneeIdsParam
         ? assigneeIdsParam.split(",").filter(Boolean)
         : undefined;
-      if (access.role === "member") assigneeIds = [access.id];
+      if (access.role === "member" && !needsTesting) assigneeIds = [access.id];
 
       const result = await listSubtasksPage(supabase, {
         ...filters,
         projectId,
         workTaskIds,
         assigneeIds,
+        testerId: needsTesting ? access.id : undefined,
         page: Number(page),
         pageSize: Number(pageSize),
       });

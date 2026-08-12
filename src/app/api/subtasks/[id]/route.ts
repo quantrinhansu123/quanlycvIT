@@ -38,6 +38,18 @@ export async function PUT(request: Request, { params }: RouteParams) {
     const supabase = createApiSupabaseClient(request);
     const access = await requireRequestAccount(supabase);
     await assertSubtaskReadable(supabase, access, id);
+    if (access.role === "member") {
+      const { data: assignment, error: assignmentError } = await supabase
+        .from("task_phu_trach")
+        .select("task_id")
+        .eq("task_id", id)
+        .eq("tai_khoan_id", access.id)
+        .maybeSingle();
+      if (assignmentError) throw assignmentError;
+      if (!assignment) {
+        throw new ApiException("Tester chỉ được ghi kết quả test, không được chỉnh sửa Task.", 403);
+      }
+    }
     const input = parseSubtaskInput(await readJsonObject(request));
     if (input.status !== undefined) {
       const current = await getSubtask(supabase, id);

@@ -167,6 +167,7 @@ export function SubtaskDetailView({
         description: subtask.description,
         workTaskId: subtask.workTaskId,
         assigneeIds: subtask.assignees.map((member) => member.id),
+        testerId: subtask.tester?.id,
         priority: subtask.priority,
         startDate: subtask.startDate,
         dueDate: subtask.dueDate,
@@ -205,6 +206,7 @@ export function SubtaskDetailView({
         description: subtask.description,
         workTaskId: subtask.workTaskId,
         assigneeIds: subtask.assignees.map((member) => member.id),
+        testerId: subtask.tester?.id,
         priority: subtask.priority,
         startDate: subtask.startDate,
         dueDate: subtask.dueDate,
@@ -266,6 +268,7 @@ export function SubtaskDetailView({
         description: subtask.description,
         workTaskId: subtask.workTaskId,
         assigneeIds: subtask.assignees.map((member) => member.id),
+        testerId: subtask.tester?.id,
         priority: subtask.priority,
         startDate: subtask.startDate,
         dueDate: subtask.dueDate,
@@ -325,6 +328,31 @@ export function SubtaskDetailView({
     }
   }
 
+  async function handleTest(passed: boolean) {
+    if (!subtask) return;
+    const note = passed ? undefined : window.prompt("Mô tả lỗi cần người thực hiện sửa:")?.trim();
+    if (!passed && !note) return;
+    try {
+      const updated = await subtaskService.submitTestResult(subtask.id, { passed, note });
+      setSubtask(updated);
+      window.dispatchEvent(new CustomEvent("app:notifications-changed"));
+      cache.invalidate(CACHE_RESOURCE.subtasksList);
+      cache.invalidate(CACHE_RESOURCE.tasksList);
+      void refreshActivity();
+      notify({
+        type: "success",
+        title: passed ? "Task đã Pass kiểm thử" : "Đã trả Task về người thực hiện",
+        description: passed ? "Task đã chuyển sang Chờ duyệt." : "Tiến độ Task đã được đặt về 99%.",
+      });
+    } catch (testError) {
+      notify({
+        type: "error",
+        title: "Không thể ghi kết quả test",
+        description: getErrorMessage(testError, "Vui lòng thử lại."),
+      });
+    }
+  }
+
   if (error) {
     return (
       <div className="mx-auto max-w-[1080px] px-4 py-10 @sm/detail:px-6">
@@ -351,10 +379,13 @@ export function SubtaskDetailView({
   const overdue = isSubtaskOverdue(subtask);
   const needsAcceptance = Boolean(
     account?.role === "member" &&
+    account.id !== subtask.testerId &&
     !subtask.acceptedAssigneeIds.includes(account.id)
   );
+  const isTester = Boolean(account && account.id === subtask.testerId);
+  const canTest = subtask.status === "testing" && (isTester || account?.role === "admin");
   const statusLocked = subtask.status === "done";
-  const canUpdateStatus = account?.role === "admin" || account?.role === "member";
+  const canUpdateStatus = account?.role === "admin" || (account?.role === "member" && !isTester);
   const statusOptions = account?.role === "member" && !statusLocked
     ? TASK_STATUS_OPTIONS.filter((option) => option.value !== "done")
     : TASK_STATUS_OPTIONS;
@@ -433,7 +464,16 @@ export function SubtaskDetailView({
                 {splitView.maximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </button>
             )}
-            {needsAcceptance ? (
+            {canTest ? (
+              <>
+                <Button onClick={() => void handleTest(false)} variant="secondary" className="rounded-full border-rose-200 text-rose-600 hover:bg-rose-50">
+                  Fail
+                </Button>
+                <Button onClick={() => void handleTest(true)} className="rounded-full bg-emerald-600 hover:bg-emerald-700">
+                  <CircleCheck className="h-4 w-4" /> Pass
+                </Button>
+              </>
+            ) : needsAcceptance ? (
               <Button
                 onClick={() => void handleAccept()}
                 disabled={accepting}
@@ -442,7 +482,7 @@ export function SubtaskDetailView({
                 <CircleCheck className="h-4 w-4" />
                 <span className="hidden @xl/detail:inline">{accepting ? "Đang xác nhận..." : "Xác nhận nhận Task"}</span>
               </Button>
-            ) : (
+            ) : !isTester ? (
               <Button
                 onClick={() => setEditing(true)}
                 className="rounded-full bg-brand-600 hover:bg-brand-700"
@@ -450,7 +490,7 @@ export function SubtaskDetailView({
                 <Pencil className="h-4 w-4" />
                 <span className="hidden @xl/detail:inline">Chỉnh sửa Task</span>
               </Button>
-            )}
+            ) : null}
           </div>
         </div>
       </div>
@@ -715,7 +755,7 @@ export function SubtaskDetailView({
                   Các báo cáo tiến độ đã gửi cho Task
                 </p>
               </div>
-              {account?.role !== "admin" && <Button onClick={() => setReportDrawerOpen(true)}>
+              {account?.role !== "admin" && !isTester && (subtask.status === "todo" || subtask.status === "inProgress") && <Button onClick={() => setReportDrawerOpen(true)}>
                 <Plus className="h-4 w-4" />
                 Báo cáo tiến độ
               </Button>}
@@ -780,6 +820,8 @@ export function SubtaskDetailView({
             assigneeId: subtask.assigneeId,
           }}
           assignee={assignee}
+          tester={subtask.tester}
+          testerOptions={members}
           entityLabel="task"
           submitReport={(input) =>
             subtaskService.addSubtaskReport(subtask.id, input)

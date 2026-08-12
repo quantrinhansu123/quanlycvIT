@@ -16,10 +16,13 @@ import { Button } from "@/components/ui/Button";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
+import { SingleSelectDropdown } from "@/components/ui/SingleSelectDropdown";
 
 interface TaskReportDrawerProps {
   task: Pick<WorkTask, "id" | "title" | "progress" | "assigneeId">;
   assignee?: ProjectMember;
+  tester?: ProjectMember;
+  testerOptions?: ProjectMember[];
   entityLabel?: string;
   submitReport: (input: ProgressReportSubmission) => Promise<ProgressReport>;
   onClose: () => void;
@@ -51,6 +54,8 @@ function formatFileSize(bytes: number): string {
 export function TaskReportDrawer({
   task,
   assignee,
+  tester,
+  testerOptions,
   entityLabel = "công việc",
   submitReport,
   onClose,
@@ -61,6 +66,7 @@ export function TaskReportDrawer({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [progress, setProgress] = useState(task.progress);
+  const [testerId, setTesterId] = useState(tester?.id ?? "");
   const [content, setContent] = useState("");
   const [images, setImages] = useState<PendingImage[]>([]);
   const [files, setFiles] = useState<File[]>([]);
@@ -244,7 +250,8 @@ export function TaskReportDrawer({
     [trimmedLinks]
   );
 
-  const canSubmit = Boolean(content.trim()) && !submitting;
+  const testerRequired = progress === 100 && Boolean(testerOptions);
+  const canSubmit = Boolean(content.trim()) && !submitting && (!testerRequired || Boolean(testerId));
 
   async function handleSubmit() {
     if (!content.trim()) {
@@ -263,6 +270,14 @@ export function TaskReportDrawer({
       });
       return;
     }
+    if (testerRequired && !testerId) {
+      notify({
+        type: "error",
+        title: "Chưa chọn người test",
+        description: "Vui lòng chọn người test trước khi gửi tiến độ 100%.",
+      });
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -276,6 +291,7 @@ export function TaskReportDrawer({
           label: link.label || undefined,
           url: link.url,
         })),
+        testerId: progress === 100 ? testerId || undefined : undefined,
       };
       const report = await submitReport(submission);
       notify({
@@ -324,6 +340,7 @@ export function TaskReportDrawer({
               <span className="font-semibold text-gray-700">{task.title}</span>
             </p>
           </div>
+
           <button
             type="button"
             onClick={onClose}
@@ -362,6 +379,30 @@ export function TaskReportDrawer({
               <span>100% (Hoàn thành)</span>
             </div>
           </div>
+
+          {testerRequired && (
+            <div className="mt-5 rounded-xl border border-violet-200 bg-violet-50/60 p-4">
+              <label className="mb-1.5 block text-sm font-semibold text-gray-700">
+                Người test <span className="text-rose-500">*</span>
+              </label>
+              <SingleSelectDropdown
+                options={(testerOptions ?? []).map((member) => ({
+                  value: member.id,
+                  label: member.name,
+                  sublabel: member.role,
+                }))}
+                value={testerId}
+                onChange={setTesterId}
+                placeholder="Chọn người test..."
+                searchable
+                searchPlaceholder="Tìm người test..."
+                invalid={!testerId}
+              />
+              <p className="mt-2 text-xs text-violet-700">
+                Báo cáo 100% sẽ chuyển Task sang Chờ test.
+              </p>
+            </div>
+          )}
 
           <div className="mt-5">
             <label htmlFor="report-content" className="text-sm font-semibold text-gray-700">
@@ -591,7 +632,11 @@ export function TaskReportDrawer({
             Hủy bỏ
           </Button>
           <Button onClick={handleSubmit} disabled={!canSubmit}>
-            {submitting ? "Đang gửi..." : "Gửi báo cáo"}
+            {submitting
+              ? "Đang gửi..."
+              : progress === 100 && testerOptions
+                ? `Gửi cho Tester${testerId ? ` ${testerOptions.find((item) => item.id === testerId)?.name ?? ""}` : ""}`
+                : "Gửi báo cáo"}
           </Button>
         </div>
       </div>

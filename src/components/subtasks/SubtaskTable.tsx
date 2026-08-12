@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { CalendarDays, CheckCircle2, Eye, FilePenLine, History, Pencil, Trash2 } from "lucide-react";
+import { CalendarDays, CheckCircle2, Eye, FilePenLine, History, Pencil, Trash2, XCircle } from "lucide-react";
 import type { Subtask } from "@/types/subtask";
 import { isSubtaskOverdue } from "@/types/subtask";
 import type { WorkTaskDirectoryItem } from "@/types/task";
@@ -41,6 +41,9 @@ interface SubtaskTableProps {
   acceptingId?: string | null;
   onAccept?: (subtask: Subtask) => void;
   canReport?: boolean;
+  canTest?: boolean;
+  onPassTest?: (subtask: Subtask) => void;
+  onFailTest?: (subtask: Subtask) => void;
 }
 
 export function SubtaskTable({
@@ -63,6 +66,9 @@ export function SubtaskTable({
   acceptingId,
   onAccept,
   canReport = true,
+  canTest = false,
+  onPassTest,
+  onFailTest,
 }: SubtaskTableProps) {
   const router = useRouter();
   const allSelected = subtasks.length > 0 && selectedIds.length === subtasks.length;
@@ -108,6 +114,7 @@ export function SubtaskTable({
             const needsAcceptance = Boolean(
               isMember &&
               currentAccountId &&
+              currentAccountId !== subtask.testerId &&
               !subtask.acceptedAssigneeIds.includes(currentAccountId)
             );
             const actionItems: RowActionMenuItem[] = [
@@ -125,6 +132,13 @@ export function SubtaskTable({
                     onClick: () => onAccept(subtask),
                   }]
                 : [
+                    ...(canTest && subtask.status === "testing" &&
+                    (canApprove || currentAccountId === subtask.testerId)
+                      ? [
+                          ...(onPassTest ? [{ icon: CheckCircle2, label: "Pass kiểm thử", tone: "success" as const, onClick: () => onPassTest(subtask) }] : []),
+                          ...(onFailTest ? [{ icon: XCircle, label: "Fail kiểm thử", tone: "danger" as const, onClick: () => onFailTest(subtask) }] : []),
+                        ]
+                      : []),
                     ...(canApprove && subtask.status === "review" && subtask.progress === 100 && onApprove
                       ? [{
                           icon: CheckCircle2,
@@ -133,7 +147,7 @@ export function SubtaskTable({
                           onClick: () => onApprove(subtask),
                         }]
                       : []),
-                    ...(canReport && subtask.status !== "done"
+                    ...(canReport && (subtask.status === "todo" || subtask.status === "inProgress")
                       ? [{
                           icon: FilePenLine,
                           label: "Báo cáo tiến độ",

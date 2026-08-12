@@ -1,5 +1,5 @@
 import { apiClient } from "@/services/api-client";
-import type { Subtask, SubtaskInput, SubtaskReport } from "@/types/subtask";
+import type { Subtask, SubtaskInput, SubtaskReport, SubtaskTestResult } from "@/types/subtask";
 import type {
   ProgressReportSubmission,
   TaskPriority,
@@ -18,6 +18,7 @@ export interface SubtaskFilters {
   /** Lọc đồng thời nhiều trạng thái; `status` được giữ cho các màn hình cũ. */
   statuses?: TaskStatus[];
   overdueOnly?: boolean;
+  needsTesting?: boolean;
 }
 
 function buildQuery(filters: SubtaskFilters): string {
@@ -30,6 +31,7 @@ function buildQuery(filters: SubtaskFilters): string {
   if (filters.status) params.set("status", filters.status);
   if (filters.statuses && filters.statuses.length > 0) params.set("statuses", filters.statuses.join(","));
   if (filters.overdueOnly) params.set("overdueOnly", "true");
+  if (filters.needsTesting) params.set("needsTesting", "true");
   const query = params.toString();
   return query ? `?${query}` : "";
 }
@@ -102,6 +104,7 @@ export const subtaskService = {
       params.set("statuses", filters.statuses.join(","));
     }
     if (filters.overdueOnly) params.set("overdueOnly", "true");
+    if (filters.needsTesting) params.set("needsTesting", "true");
     params.set("page", String(filters.page));
     params.set("pageSize", String(filters.pageSize));
     return apiClient.get<SubtaskPage>(`/subtasks?${params.toString()}`, {
@@ -139,6 +142,10 @@ export const subtaskService = {
     return apiClient.post<Subtask>(`/subtasks/${id}/approve`);
   },
 
+  async submitTestResult(id: string, result: SubtaskTestResult): Promise<Subtask> {
+    return apiClient.post<Subtask>(`/subtasks/${id}/test-result`, result);
+  },
+
   async acceptSubtask(id: string): Promise<Subtask> {
     return apiClient.post<Subtask>(`/subtasks/${id}/accept`);
   },
@@ -165,6 +172,7 @@ export const subtaskService = {
     formData.set("content", input.content);
     formData.set("progress", String(input.progress));
     if (input.authorId) formData.set("authorId", input.authorId);
+    if (input.testerId) formData.set("testerId", input.testerId);
     if (input.links.length > 0) {
       formData.set("links", JSON.stringify(input.links));
     }

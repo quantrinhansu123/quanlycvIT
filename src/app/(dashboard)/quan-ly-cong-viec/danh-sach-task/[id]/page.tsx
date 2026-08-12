@@ -24,9 +24,7 @@ export default async function SubtaskDetailPage({ params }: SubtaskDetailPagePro
     getSubtask(supabase, id),
     listWorkTasks(supabase, { assigneeIds: memberAssigneeIds }),
     listSubtaskReports(supabase, id),
-    listDirectory(supabase).then((items) => access.role === "member"
-      ? items.filter((item) => item.id === access.employeeCode)
-      : items),
+    listDirectory(supabase),
     listSubtaskActivity(supabase, id),
   ]);
 

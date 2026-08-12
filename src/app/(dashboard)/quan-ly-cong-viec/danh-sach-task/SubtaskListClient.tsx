@@ -19,7 +19,7 @@ import { projectService } from "@/services/project-service";
 import type { ProjectDirectoryItem, ProjectMember } from "@/types/project";
 import type { AccountRole } from "@/types/account";
 import type { WorkTaskDirectoryItem, TaskPriority, TaskStatus } from "@/types/task";
-import { TASK_PRIORITY_OPTIONS, TASK_STATUS_OPTIONS } from "@/types/task";
+import { TASK_PRIORITY_OPTIONS, SUBTASK_STATUS_OPTIONS } from "@/types/task";
 import type { Subtask } from "@/types/subtask";
 import { Button } from "@/components/ui/Button";
 import { MemberFilterMultiSelect } from "@/components/ui/MemberFilterMultiSelect";
@@ -95,6 +95,7 @@ export function SubtaskListClient({
   const [priorities, setPriorities] = useState<TaskPriority[]>([]);
   const [statuses, setStatuses] = useState<TaskStatus[]>([]);
   const [overdueOnly, setOverdueOnly] = useState(false);
+  const [needsTesting, setNeedsTesting] = useState(false);
 
   const [viewMode, setViewMode] = useState<ViewMode>("table");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -115,6 +116,7 @@ export function SubtaskListClient({
       priorities: priorities.length > 0 ? priorities : undefined,
       statuses: statuses.length > 0 ? statuses : undefined,
       overdueOnly,
+      needsTesting,
     };
   }
 
@@ -122,7 +124,7 @@ export function SubtaskListClient({
     accountId,
     role: accountRole,
     resource: CACHE_RESOURCE.subtasksList,
-    filters: { search, projectId, workTaskIds, assigneeIds, priorities, statuses, overdueOnly },
+    filters: { search, projectId, workTaskIds, assigneeIds, priorities, statuses, overdueOnly, needsTesting },
     page,
     pageSize,
   });
@@ -219,7 +221,7 @@ export function SubtaskListClient({
     // Bộ lọc thay đổi thì quay về trang đầu để không rơi vào trang trống.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(1);
-  }, [search, projectId, workTaskIds, assigneeIds, priorities, statuses, overdueOnly]);
+  }, [search, projectId, workTaskIds, assigneeIds, priorities, statuses, overdueOnly, needsTesting]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -296,6 +298,25 @@ export function SubtaskListClient({
     }
   }
 
+  async function handleTest(subtask: Subtask, passed: boolean) {
+    const note = passed ? undefined : window.prompt("Mô tả lỗi cần người thực hiện sửa:")?.trim();
+    if (!passed && !note) return;
+    try {
+      await subtaskService.submitTestResult(subtask.id, { passed, note });
+      notify({
+        type: "success",
+        title: passed ? "Task đã Pass kiểm thử" : "Đã trả Task về người thực hiện",
+        description: passed ? "Task đã chuyển sang Chờ duyệt." : "Tiến độ Task đã được đặt về 99%.",
+      });
+      window.dispatchEvent(new CustomEvent("app:notifications-changed"));
+      cache.invalidate(CACHE_RESOURCE.subtasksList);
+      cache.invalidate(CACHE_RESOURCE.tasksList);
+      refreshSubtasks();
+    } catch (testError) {
+      notify({ type: "error", title: "Không thể ghi kết quả test", description: getErrorMessage(testError, "Vui lòng thử lại.") });
+    }
+  }
+
   async function handleAccept(subtask: Subtask) {
     if (acceptingId) return;
     setAcceptingId(subtask.id);
@@ -341,7 +362,7 @@ export function SubtaskListClient({
           formatDateVN(subtask.dueDate),
           `${subtask.progress}%`,
           TASK_PRIORITY_OPTIONS.find((o) => o.value === subtask.priority)?.label ?? "",
-          TASK_STATUS_OPTIONS.find((o) => o.value === subtask.status)?.label ?? "",
+          SUBTASK_STATUS_OPTIONS.find((o) => o.value === subtask.status)?.label ?? "",
         ];
       });
       await exportTablePdf({
@@ -428,8 +449,18 @@ export function SubtaskListClient({
           searchPlaceholder="Tìm trạng thái..."
           value={statuses}
           onChange={(values) => setStatuses(values as TaskStatus[])}
-          options={TASK_STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+          options={SUBTASK_STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
         />
+        <button
+          type="button"
+          onClick={() => setNeedsTesting((current) => !current)}
+          className={cn(
+            "flex h-9 shrink-0 items-center whitespace-nowrap rounded-lg border px-2.5 text-xs font-medium",
+            needsTesting ? "border-violet-300 bg-violet-50 text-violet-700" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+          )}
+        >
+          Cần tôi test
+        </button>
         <button
           type="button"
           onClick={() => setOverdueOnly((prev) => !prev)}
@@ -516,6 +547,9 @@ export function SubtaskListClient({
             acceptingId={acceptingId}
             onAccept={handleAccept}
             canReport={!isAdmin}
+            canTest
+            onPassTest={(subtask) => void handleTest(subtask, true)}
+            onFailTest={(subtask) => void handleTest(subtask, false)}
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3">
@@ -535,6 +569,9 @@ export function SubtaskListClient({
                 currentAccountId={accountId}
                 acceptingId={acceptingId}
                 onAccept={handleAccept}
+                canTest
+                onPassTest={(subtask) => void handleTest(subtask, true)}
+                onFailTest={(subtask) => void handleTest(subtask, false)}
               />
             ))}
           </div>
@@ -577,6 +614,7 @@ export function SubtaskListClient({
           subtask={quickView.subtask}
           workTask={workTasksById.get(quickView.subtask.workTaskId)}
           assignee={membersById.get(quickView.subtask.assigneeId)}
+          testerOptions={members}
           initialTab={quickView.tab}
           onClose={() => setQuickView(null)}
           onReportAdded={() => {
@@ -596,6 +634,8 @@ export function SubtaskListClient({
             assigneeId: reportDrawer.assigneeId,
           }}
           assignee={membersById.get(reportDrawer.assigneeId)}
+          tester={reportDrawer.tester}
+          testerOptions={members}
           entityLabel="task"
           submitReport={(input) =>
             subtaskService.addSubtaskReport(reportDrawer.id, input)

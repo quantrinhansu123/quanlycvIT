@@ -19,7 +19,7 @@ import type {
 import {
   TASK_PRIORITY_OPTIONS,
   TASK_STATUS_META,
-  TASK_STATUS_OPTIONS,
+  SUBTASK_STATUS_OPTIONS,
   type TaskStatus,
   type WorkTaskDirectoryItem,
 } from "@/types/task";
@@ -61,6 +61,7 @@ interface FormState {
   description: string;
   workTaskId: string;
   assigneeIds: string[];
+  testerId: string;
   status: TaskStatus;
   priority: SubtaskInput["priority"];
   startDate: string;
@@ -76,7 +77,7 @@ interface FormState {
 /** Phần của FormState lưu được vào bản nháp (GĐ7) — loại `files`/`links`/`images`. */
 type SubtaskDraftData = Pick<
   FormState,
-  "title" | "description" | "workTaskId" | "assigneeIds" | "status" | "priority" | "startDate" | "dueDate" | "progress" | "tagsText"
+  "title" | "description" | "workTaskId" | "assigneeIds" | "testerId" | "status" | "priority" | "startDate" | "dueDate" | "progress" | "tagsText"
 >;
 
 interface PendingTaskImage {
@@ -117,7 +118,7 @@ const PRIORITY_SELECT_OPTIONS = TASK_PRIORITY_OPTIONS.map((option) => ({
   dotClassName: PRIORITY_DOT_CLASS[option.value],
 }));
 
-const STATUS_SELECT_OPTIONS = TASK_STATUS_OPTIONS.map((option) => ({
+const STATUS_SELECT_OPTIONS = SUBTASK_STATUS_OPTIONS.map((option) => ({
   value: option.value,
   label: option.label,
   dotClassName: TASK_STATUS_META[option.value].dot,
@@ -152,6 +153,7 @@ function buildInitialState(
       description: subtask.description ?? "",
       workTaskId: subtask.workTaskId,
       assigneeIds: subtask.assignees.map((member) => member.id),
+      testerId: subtask.tester?.id ?? "",
       status: subtask.status,
       priority: subtask.priority,
       startDate: toDateInputValue(subtask.startDate),
@@ -174,6 +176,7 @@ function buildInitialState(
     description: "",
     workTaskId,
     assigneeIds: [],
+    testerId: "",
     status: "todo",
     priority: "low",
     startDate: getAppDateKey(),
@@ -393,6 +396,7 @@ export function SubtaskFormModal({
       description: form.description,
       workTaskId: form.workTaskId,
       assigneeIds: form.assigneeIds,
+      testerId: form.testerId,
       status: form.status,
       priority: form.priority,
       startDate: form.startDate,
@@ -405,6 +409,7 @@ export function SubtaskFormModal({
     form.description,
     form.workTaskId,
     form.assigneeIds,
+    form.testerId,
     form.status,
     form.priority,
     form.startDate,
@@ -856,6 +861,7 @@ export function SubtaskFormModal({
         description: form.description || undefined,
         workTaskId: form.workTaskId,
         assigneeIds: form.assigneeIds,
+        testerId: form.testerId || undefined,
         ...(mode === "edit" && account?.role === "admin" ? { status: form.status } : {}),
         priority: form.priority,
         startDate: form.startDate,
@@ -1147,6 +1153,30 @@ export function SubtaskFormModal({
             {errors.assigneeIds && (
               <p className="mt-1 text-xs text-rose-500">{errors.assigneeIds}</p>
             )}
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">
+              Người test
+            </label>
+            <SingleSelectDropdown
+              options={[
+                { value: "", label: "Chưa gán người test" },
+                ...members.map((member) => ({
+                  value: member.id,
+                  label: member.name,
+                  sublabel: member.role,
+                })),
+              ]}
+              value={form.testerId}
+              onChange={(testerId) => setForm((prev) => ({ ...prev, testerId }))}
+              placeholder="Chọn người test..."
+              searchable
+              searchPlaceholder="Tìm người test..."
+            />
+            <p className="mt-1 text-xs text-gray-400">
+              Có thể gán trước hoặc chọn khi gửi báo cáo đạt 100%.
+            </p>
           </div>
 
           <div className="flex gap-4">

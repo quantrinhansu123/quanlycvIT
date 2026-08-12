@@ -27,6 +27,9 @@ interface SubtaskCardProps {
   currentAccountId?: string;
   acceptingId?: string | null;
   onAccept?: (subtask: Subtask) => void;
+  canTest?: boolean;
+  onPassTest?: (subtask: Subtask) => void;
+  onFailTest?: (subtask: Subtask) => void;
 }
 
 export function SubtaskCard({
@@ -42,11 +45,15 @@ export function SubtaskCard({
   currentAccountId,
   acceptingId,
   onAccept,
+  canTest = false,
+  onPassTest,
+  onFailTest,
 }: SubtaskCardProps) {
   const overdue = isSubtaskOverdue(subtask);
   const needsAcceptance = Boolean(
     isMember &&
     currentAccountId &&
+    currentAccountId !== subtask.testerId &&
     !subtask.acceptedAssigneeIds.includes(currentAccountId)
   );
 
@@ -77,6 +84,18 @@ export function SubtaskCard({
           onApprove={
             canApprove && subtask.status === "review" && subtask.progress === 100 && onApprove
               ? () => onApprove(subtask)
+              : undefined
+          }
+          onPassTest={
+            canTest && subtask.status === "testing" &&
+            (canApprove || currentAccountId === subtask.testerId) && onPassTest
+              ? () => onPassTest(subtask)
+              : undefined
+          }
+          onFailTest={
+            canTest && subtask.status === "testing" &&
+            (canApprove || currentAccountId === subtask.testerId) && onFailTest
+              ? () => onFailTest(subtask)
               : undefined
           }
           onEdit={() => onEdit(subtask)}

@@ -43,7 +43,7 @@ export interface ProjectTask {
   id: string;
   title: string;
   description?: string;
-  status: "todo" | "inProgress" | "review" | "done";
+  status: "todo" | "inProgress" | "testing" | "review" | "done";
   assignee: ProjectMember;
   assignees?: ProjectMember[];
   priority?: "low" | "medium" | "high" | "urgent";
@@ -57,6 +57,7 @@ export interface ProjectTask {
 export const TASK_STATUS_LABEL: Record<ProjectTask["status"], string> = {
   todo: "Cần làm",
   inProgress: "Đang làm",
+  testing: "Chờ test",
   review: "Chờ đánh giá",
   done: "Hoàn thành",
 };

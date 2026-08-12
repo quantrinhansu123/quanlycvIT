@@ -34,6 +34,11 @@ export interface Subtask {
   assignees: ProjectMember[];
   /** Người đã tạo Task; có thể trống với dữ liệu cũ chưa xác định được người tạo. */
   creator?: ProjectMember;
+  /** UUID tài khoản được giao kiểm thử Task. */
+  testerId?: string;
+  tester?: ProjectMember;
+  /** Ghi chú của lần test fail gần nhất. */
+  testNote?: string;
   /** UUID tài khoản của những người đã xác nhận nhận Task. */
   acceptedAssigneeIds: string[];
   status: TaskStatus;
@@ -58,6 +63,8 @@ export interface SubtaskInput {
   workTaskId: string;
   /** Danh sách người phụ trách; phần tử đầu tiên là người phụ trách chính. */
   assigneeIds: string[];
+  /** Mã nhân viên hoặc UUID tài khoản được giao kiểm thử. */
+  testerId?: string;
   /** Chỉ quản trị viên được phép gửi trạng thái khi chỉnh sửa Task. */
   status?: TaskStatus;
   priority: TaskPriority;
@@ -77,6 +84,11 @@ export interface SubtaskInput {
 
 export interface SubtaskReport extends ProgressReport {
   subtaskId: string;
+}
+
+export interface SubtaskTestResult {
+  passed: boolean;
+  note?: string;
 }
 
 export function isSubtaskOverdue(subtask: Subtask, referenceDate: Date = new Date()): boolean {

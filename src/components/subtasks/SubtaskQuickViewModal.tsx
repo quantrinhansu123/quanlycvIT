@@ -33,6 +33,7 @@ interface SubtaskQuickViewModalProps {
   subtask: Subtask;
   workTask?: WorkTaskDirectoryItem;
   assignee?: ProjectMember;
+  testerOptions?: ProjectMember[];
   initialTab?: QuickViewTab;
   onClose: () => void;
   onReportAdded?: () => void;
@@ -42,6 +43,7 @@ export function SubtaskQuickViewModal({
   subtask,
   workTask,
   assignee,
+  testerOptions,
   initialTab = "info",
   onClose,
   onReportAdded,
@@ -298,6 +300,8 @@ export function SubtaskQuickViewModal({
             assigneeId: subtask.assigneeId,
           }}
           assignee={assignee}
+          tester={subtask.tester}
+          testerOptions={testerOptions}
           entityLabel="task"
           submitReport={(input) => subtaskService.addSubtaskReport(subtask.id, input)}
           onClose={() => setReportDrawerOpen(false)}

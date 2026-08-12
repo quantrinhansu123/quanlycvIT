@@ -156,12 +156,14 @@ export async function assertSubtaskReadable(
   subtaskId: string
 ): Promise<void> {
   if (access.role !== "member") return;
-  const [assigned, legacy] = await Promise.all([
+  const [assigned, legacy, testing] = await Promise.all([
     hasRelation(supabase, "task_phu_trach", "task_id", subtaskId, access.id),
     supabase.from("task").select("id").eq("id", subtaskId).eq("nguoi_phu_trach_id", access.id).maybeSingle(),
+    supabase.from("task").select("id").eq("id", subtaskId).eq("nguoi_test_id", access.id).maybeSingle(),
   ]);
   throwDatabaseError(legacy.error);
-  if (!assigned && !legacy.data) {
+  throwDatabaseError(testing.error);
+  if (!assigned && !legacy.data && !testing.data) {
     throw new ApiException("Không tìm thấy task hoặc bạn chưa được phân công task này.", 404);
   }
 }
