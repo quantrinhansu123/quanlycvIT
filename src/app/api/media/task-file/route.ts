@@ -5,7 +5,7 @@ export const runtime = "nodejs";
 
 /** Google Apps Script Web App giới hạn payload; giữ dư an toàn dưới ngưỡng đó. */
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
-const UPLOAD_TIMEOUT_MS = 30_000;
+const UPLOAD_TIMEOUT_MS = 60_000;
 
 function configuration() {
   const uploadUrl = process.env.GOOGLE_APPS_SCRIPT_UPLOAD_URL;

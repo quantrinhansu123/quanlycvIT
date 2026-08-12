@@ -27,7 +27,7 @@ export interface ApiRequestOptions extends RequestInit {
 // GET/HEAD tải danh sách nên timeout ngắn hơn mutation; upload cần nhiều thời gian nhất.
 const LIST_TIMEOUT_MS = 15_000;
 const MUTATION_TIMEOUT_MS = 20_000;
-const UPLOAD_TIMEOUT_MS = 30_000;
+const UPLOAD_TIMEOUT_MS = 60_000;
 
 const RETRY_BACKOFF_MS = [300, 800];
 const MAX_RETRIES = RETRY_BACKOFF_MS.length;
