@@ -1740,12 +1740,6 @@ export async function createSubtask(
 ): Promise<Subtask> {
   const parentWorkTask = await getWorkTask(supabase, input.workTaskId);
   if (!parentWorkTask) throw new ApiException("Không tìm thấy công việc.", 404);
-  if (parentWorkTask.status === "done") {
-    throw new ApiException(
-      "Công việc đã hoàn thành nên chỉ có thể xem, không thể thêm Task mới.",
-      409
-    );
-  }
 
   const [{ ids: assigneeIds }, testerAccountId] = await Promise.all([
     resolveAccounts(supabase, input.assigneeIds, "Người phụ trách"),
