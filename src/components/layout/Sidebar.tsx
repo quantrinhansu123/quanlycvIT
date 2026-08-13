@@ -133,7 +133,12 @@ export function Sidebar({ collapsed }: SidebarProps) {
                 </button>
                 {isOpen && !collapsed && !forbiddenForMember && (
                   <ul className="relative mt-1 flex flex-col gap-1 pl-4 before:absolute before:bottom-1 before:left-1 before:top-0 before:w-px before:bg-gray-200">
-                    {item.children.map((child) => {
+                    {item.children
+                      .filter(
+                        (child) =>
+                          !(child.href === "/truc-nhat/cau-hinh" && account?.role === "member")
+                      )
+                      .map((child) => {
                       const isChildActive = activeChildHref === child.href;
                       return (
                         <li key={child.href}>

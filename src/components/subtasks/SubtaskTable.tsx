@@ -11,6 +11,7 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { TaskPriorityBadge, TaskStatusBadge, OverdueTag } from "@/components/tasks/TaskBadges";
 import { RowActionMenu, type RowActionMenuItem } from "@/components/ui/RowActionMenu";
 import { IntentPrefetchLink } from "@/components/navigation/IntentPrefetchLink";
+import { useSplitView } from "@/components/layout/SplitViewShell";
 import {
   subtaskColumnWidths,
   WORK_ITEM_PROGRESS_CLASS,
@@ -73,6 +74,7 @@ export function SubtaskTable({
   readOnly = false,
 }: SubtaskTableProps) {
   const router = useRouter();
+  const splitView = useSplitView();
   const selectableSubtasks = readOnly
     ? []
     : subtasks.filter((subtask) => subtask.status !== "done");
@@ -130,7 +132,10 @@ export function SubtaskTable({
               {
                 icon: Eye,
                 label: "Xem chi tiết",
-                onClick: () => router.push(`/quan-ly-cong-viec/danh-sach-task/${subtask.id}`),
+                onClick: () => {
+                  splitView?.openDetail();
+                  router.push(`/quan-ly-cong-viec/danh-sach-task/${subtask.id}`);
+                },
               },
               ...(rowReadOnly
                 ? [{
@@ -205,6 +210,7 @@ export function SubtaskTable({
                   <IntentPrefetchLink
                     href={`/quan-ly-cong-viec/danh-sach-task/${subtask.id}`}
                     className={WORK_ITEM_TITLE_CLASS}
+                    onClick={() => splitView?.openDetail()}
                   >
                     {subtask.title}
                   </IntentPrefetchLink>

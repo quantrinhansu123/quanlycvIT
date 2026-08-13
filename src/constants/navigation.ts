@@ -10,6 +10,9 @@ import {
   ListChecks,
   ListTodo,
   WalletCards,
+  CalendarCheck,
+  CalendarDays,
+  Settings2,
 } from "lucide-react";
 
 export interface NavChild {
@@ -73,6 +76,23 @@ export const NAV_ITEMS: NavItem[] = [
     ],
   },
   { label: "Quản lý thu chi", href: "/quan-ly-thu-chi", icon: WalletCards },
+  {
+    label: "Trực nhật",
+    href: "/truc-nhat",
+    icon: CalendarCheck,
+    children: [
+      {
+        label: "Lịch trực",
+        href: "/truc-nhat/lich-truc",
+        icon: CalendarDays,
+      },
+      {
+        label: "Cấu hình trực nhật",
+        href: "/truc-nhat/cau-hinh",
+        icon: Settings2,
+      },
+    ],
+  },
 ];
 
 export const BREADCRUMB_LABELS: Record<string, string> = {
@@ -85,4 +105,7 @@ export const BREADCRUMB_LABELS: Record<string, string> = {
   "phong-ban-chuc-vu": "Phòng Ban & Chức Vụ",
   "thong-ke-nhan-su": "Thống kê nhân sự",
   "quan-ly-thu-chi": "Quản lý thu chi",
+  "truc-nhat": "Trực nhật",
+  "lich-truc": "Lịch trực",
+  "cau-hinh": "Cấu hình trực nhật",
 };

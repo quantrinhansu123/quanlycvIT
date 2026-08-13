@@ -19,7 +19,7 @@ export function ListDetailRouteShell({
   const detailOpen = pathname.startsWith(`${basePath}/`);
 
   return (
-    <SplitViewShell listSlot={listSlot} detailOpen={detailOpen}>
+    <SplitViewShell listSlot={listSlot} detailOpen={detailOpen} detailKey={pathname}>
       {children}
     </SplitViewShell>
   );

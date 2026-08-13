@@ -2,12 +2,19 @@ import { ApiException } from "@/lib/api/response";
 import type { ProjectColor, ProjectInput, ProjectStepConfig } from "@/types/project";
 import type { SubtaskInput, SubtaskUpdateEntry, TaskFileAttachment, TaskLinkAttachment } from "@/types/subtask";
 import type { TaskPriority, TaskStatus, WorkTaskInput } from "@/types/task";
+import type {
+  DutyChecklistTemplateInput,
+  DutyRecurringRuleInput,
+  DutyShiftInput,
+  DutyShiftStatus,
+} from "@/types/duty";
 
 const PROJECT_COLORS = new Set<ProjectColor>(["purple", "green", "orange", "red", "blue"]);
 const TASK_STATUSES = new Set<TaskStatus>(["todo", "inProgress", "testing", "review", "done"]);
 const WORK_TASK_STATUSES = new Set<TaskStatus>(["todo", "inProgress", "review", "done"]);
 const TASK_PRIORITIES = new Set<TaskPriority>(["low", "medium", "high", "urgent"]);
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const DUTY_SHIFT_STATUSES = new Set<DutyShiftStatus>(["chua_thuc_hien", "dang_thuc_hien", "hoan_thanh"]);
 
 function requiredString(body: Record<string, unknown>, key: string, label: string): string {
   const value = body[key];
@@ -388,6 +395,82 @@ export function parseTaskReportFields(fields: {
       typeof fields.testerId === "string" && fields.testerId.trim()
         ? fields.testerId.trim()
         : undefined,
+  };
+}
+
+function orderValue(body: Record<string, unknown>): number {
+  const value = body.order;
+  if (value === undefined || value === null || value === "") return 0;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new ApiException("Thứ tự phải là số.", 400);
+  }
+  return Math.round(value);
+}
+
+function activeFlag(body: Record<string, unknown>, defaultValue = true): boolean {
+  const value = body.active;
+  if (value === undefined || value === null) return defaultValue;
+  if (typeof value !== "boolean") {
+    throw new ApiException("Trạng thái hoạt động phải là true/false.", 400);
+  }
+  return value;
+}
+
+function dutyWeekday(body: Record<string, unknown>): number {
+  const value = body.weekday;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 7) {
+    throw new ApiException("Thứ trong tuần phải từ 1 (Thứ 2) đến 7 (Chủ nhật).", 400);
+  }
+  return value;
+}
+
+export function parseDutyChecklistTemplateInput(
+  body: Record<string, unknown>
+): DutyChecklistTemplateInput {
+  return {
+    name: requiredString(body, "name", "Tên đầu việc"),
+    description: optionalString(body, "description"),
+    order: orderValue(body),
+    active: activeFlag(body),
+  };
+}
+
+export function parseDutyRecurringRuleInput(body: Record<string, unknown>): DutyRecurringRuleInput {
+  const startDate = requiredDate(body, "startDate", "Ngày bắt đầu hiệu lực");
+  const endDate = optionalString(body, "endDate");
+  if (endDate) validateDateRange(startDate, endDate);
+
+  const assigneeIdsValue = stringArray(body, "assigneeIds");
+  if (assigneeIdsValue.length === 0) {
+    throw new ApiException("Vui lòng chọn ít nhất một người trực.", 400);
+  }
+
+  return {
+    weekday: dutyWeekday(body),
+    assigneeIds: assigneeIdsValue,
+    startDate,
+    endDate,
+    note: optionalString(body, "note"),
+    active: activeFlag(body),
+  };
+}
+
+export function parseDutyShiftInput(body: Record<string, unknown>): DutyShiftInput {
+  const assigneeIdsValue = stringArray(body, "assigneeIds");
+  if (assigneeIdsValue.length === 0) {
+    throw new ApiException("Vui lòng chọn ít nhất một người trực.", 400);
+  }
+
+  const status = optionalString(body, "status") as DutyShiftStatus | undefined;
+  if (status && !DUTY_SHIFT_STATUSES.has(status)) {
+    throw new ApiException("Trạng thái ca trực không hợp lệ.", 400);
+  }
+
+  return {
+    date: requiredDate(body, "date", "Ngày trực"),
+    assigneeIds: assigneeIdsValue,
+    note: optionalString(body, "note"),
+    status,
   };
 }
 

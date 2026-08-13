@@ -99,8 +99,13 @@ export async function requireRequestAccount(
 
 async function hasRelation(
   supabase: ApiSupabaseClient,
-  table: "du_an_thanh_vien" | "du_an_quan_ly" | "cong_viec_phu_trach" | "task_phu_trach",
-  ownerColumn: "du_an_id" | "cong_viec_id" | "task_id",
+  table:
+    | "du_an_thanh_vien"
+    | "du_an_quan_ly"
+    | "cong_viec_phu_trach"
+    | "task_phu_trach"
+    | "truc_nhat_ca_phu_trach",
+  ownerColumn: "du_an_id" | "cong_viec_id" | "task_id" | "ca_id",
   ownerId: string,
   accountId: string
 ): Promise<boolean> {
@@ -165,5 +170,18 @@ export async function assertSubtaskReadable(
   throwDatabaseError(testing.error);
   if (!assigned && !legacy.data && !testing.data) {
     throw new ApiException("Không tìm thấy task hoặc bạn chưa được phân công task này.", 404);
+  }
+}
+
+/** Thành viên chỉ được đánh dấu checklist của ca trực mà mình được phân công. */
+export async function assertDutyShiftAssignee(
+  supabase: ApiSupabaseClient,
+  access: RequestAccountAccess,
+  caId: string
+): Promise<void> {
+  if (access.role !== "member") return;
+  const assigned = await hasRelation(supabase, "truc_nhat_ca_phu_trach", "ca_id", caId, access.id);
+  if (!assigned) {
+    throw new ApiException("Bạn chưa được phân công ca trực này.", 403);
   }
 }

@@ -1,6 +1,6 @@
 import type { ApiSupabaseClient } from "@/lib/supabase/api";
 import { ApiException, throwDatabaseError } from "@/lib/api/response";
-import { resolveAuthUserId } from "@/lib/supabase/authorization";
+import { resolveAuthUserId, type RequestAccountAccess } from "@/lib/supabase/authorization";
 import {
   DEFAULT_PROJECT_STEPS,
   type Project,
@@ -32,6 +32,17 @@ import type {
   WorkTaskInput,
 } from "@/types/task";
 import { deriveWorkTaskStatus } from "@/types/task";
+import type {
+  DutyChecklistItem,
+  DutyChecklistTemplate,
+  DutyChecklistTemplateInput,
+  DutyRecurringRule,
+  DutyRecurringRuleInput,
+  DutyShift,
+  DutyShiftInput,
+  DutyShiftStatus,
+  DutySource,
+} from "@/types/duty";
 import type { ProjectTask } from "@/services/mock-data";
 import { getAppDateKey } from "@/lib/utils";
 import { measureApiTiming } from "@/lib/api/observability";
@@ -1143,8 +1154,8 @@ export async function getWorkTask(
 /** Đồng bộ bảng nối người phụ trách; phần tử đầu của `accountIds` là người chính. */
 async function syncAssignments(
   supabase: ApiSupabaseClient,
-  table: "cong_viec_phu_trach" | "task_phu_trach",
-  ownerColumn: "cong_viec_id" | "task_id",
+  table: "cong_viec_phu_trach" | "task_phu_trach" | "truc_nhat_lich_lap_phu_trach" | "truc_nhat_ca_phu_trach",
+  ownerColumn: "cong_viec_id" | "task_id" | "lich_lap_id" | "ca_id",
   ownerId: string,
   accountIds: string[]
 ): Promise<void> {
@@ -2566,4 +2577,670 @@ export async function approveSubtask(
 
   const [approved] = hydrateSubtasks([data as unknown as SubtaskRow]);
   return approved;
+}
+
+// ---- Trực nhật ----
+// Cơ chế "lịch ảo + chốt cụ thể": truc_nhat_lich_lap là quy tắc lặp theo thứ
+// trong tuần; truc_nhat_ca là bản ghi đã "chốt" cho 1 ngày cụ thể. Ngày nào
+// chưa chốt sẽ được tính "ảo" từ quy tắc lặp khi đọc theo khoảng ngày, và chỉ
+// được ghi xuống DB khi có thao tác ghi (chỉnh sửa riêng ngày đó, hoặc mở chi
+// tiết 1 ngày có quy tắc áp dụng, hoặc tick 1 đầu việc).
+
+/** Số ngày mặc định sinh trước lịch trực khi tạo/sửa 1 quy tắc lặp. */
+const DUTY_AUTO_GENERATE_DAYS = 56;
+
+const DUTY_TEMPLATE_SELECT = "id,ten,mo_ta,thu_tu,dang_hoat_dong,created_at,updated_at";
+const DUTY_RULE_SELECT =
+  "id,thu_trong_tuan,ngay_bat_dau,ngay_ket_thuc,ghi_chu,dang_hoat_dong,created_at,updated_at," +
+  `truc_nhat_lich_lap_phu_trach(tai_khoan_id,la_chinh,tai_khoan(${ACCOUNT_SELECT}))`;
+const DUTY_SHIFT_SELECT =
+  "id,ngay_truc,nguon,lich_lap_id,trang_thai,ghi_chu,created_at,updated_at," +
+  `truc_nhat_ca_phu_trach(tai_khoan_id,la_chinh,tai_khoan(${ACCOUNT_SELECT})),` +
+  "truc_nhat_ca_dau_viec(id,dau_viec_mau_id,ten,thu_tu,hoan_thanh,hoan_thanh_luc,hoan_thanh_boi," +
+  `nguoi_hoan_thanh:tai_khoan!hoan_thanh_boi(${ACCOUNT_SELECT}))`;
+const DUTY_CHECKLIST_ITEM_SELECT =
+  "id,dau_viec_mau_id,ten,thu_tu,hoan_thanh,hoan_thanh_luc,hoan_thanh_boi," +
+  `nguoi_hoan_thanh:tai_khoan!hoan_thanh_boi(${ACCOUNT_SELECT})`;
+
+interface DutyTemplateRow {
+  id: string;
+  ten: string;
+  mo_ta: string | null;
+  thu_tu: number;
+  dang_hoat_dong: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+interface DutyAssignmentEmbedRow {
+  tai_khoan_id: string;
+  la_chinh: boolean;
+  tai_khoan: AccountRow | null;
+}
+
+interface DutyRuleRow {
+  id: string;
+  thu_trong_tuan: number;
+  ngay_bat_dau: string;
+  ngay_ket_thuc: string | null;
+  ghi_chu: string | null;
+  dang_hoat_dong: boolean;
+  created_at: string;
+  updated_at: string;
+  truc_nhat_lich_lap_phu_trach: DutyAssignmentEmbedRow[] | null;
+}
+
+interface DutyChecklistItemRow {
+  id: string;
+  dau_viec_mau_id: string | null;
+  ten: string;
+  thu_tu: number;
+  hoan_thanh: boolean;
+  hoan_thanh_luc: string | null;
+  hoan_thanh_boi: string | null;
+  nguoi_hoan_thanh: AccountRow | null;
+}
+
+interface DutyShiftRow {
+  id: string;
+  ngay_truc: string;
+  nguon: DutySource;
+  lich_lap_id: string | null;
+  trang_thai: DutyShiftStatus;
+  ghi_chu: string | null;
+  created_at: string;
+  updated_at: string;
+  truc_nhat_ca_phu_trach: DutyAssignmentEmbedRow[] | null;
+  truc_nhat_ca_dau_viec: DutyChecklistItemRow[] | null;
+}
+
+/** Quy tắc lặp ở dạng "thô" (id tài khoản thật) dùng nội bộ để chốt lịch. */
+interface DutyRuleRawRow {
+  id: string;
+  thu_trong_tuan: number;
+  ngay_bat_dau: string;
+  ngay_ket_thuc: string | null;
+  assigneeIds: string[];
+}
+
+function toDutyChecklistTemplate(row: DutyTemplateRow): DutyChecklistTemplate {
+  return {
+    id: row.id,
+    name: row.ten,
+    description: row.mo_ta ?? undefined,
+    order: row.thu_tu,
+    active: row.dang_hoat_dong,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function toDutyAssignees(rows: DutyAssignmentEmbedRow[] | null): ProjectMember[] {
+  return (rows ?? [])
+    .slice()
+    .sort((a, b) => Number(b.la_chinh) - Number(a.la_chinh))
+    .map((row) => row.tai_khoan)
+    .filter((account): account is AccountRow => Boolean(account))
+    .map(toProjectMember);
+}
+
+function toDutyRecurringRule(row: DutyRuleRow): DutyRecurringRule {
+  return {
+    id: row.id,
+    weekday: row.thu_trong_tuan,
+    assignees: toDutyAssignees(row.truc_nhat_lich_lap_phu_trach),
+    startDate: row.ngay_bat_dau,
+    endDate: row.ngay_ket_thuc ?? undefined,
+    note: row.ghi_chu ?? undefined,
+    active: row.dang_hoat_dong,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function toDutyChecklistItem(row: DutyChecklistItemRow): DutyChecklistItem {
+  return {
+    id: row.id,
+    templateId: row.dau_viec_mau_id ?? undefined,
+    name: row.ten,
+    order: row.thu_tu,
+    done: row.hoan_thanh,
+    doneAt: row.hoan_thanh_luc ?? undefined,
+    doneBy: row.nguoi_hoan_thanh ? toProjectMember(row.nguoi_hoan_thanh) : undefined,
+  };
+}
+
+function toDutyShift(row: DutyShiftRow): DutyShift {
+  return {
+    id: row.id,
+    date: row.ngay_truc,
+    status: row.trang_thai,
+    source: row.nguon,
+    ruleId: row.lich_lap_id ?? undefined,
+    assignees: toDutyAssignees(row.truc_nhat_ca_phu_trach),
+    note: row.ghi_chu ?? undefined,
+    checklist: (row.truc_nhat_ca_dau_viec ?? [])
+      .slice()
+      .sort((a, b) => a.thu_tu - b.thu_tu)
+      .map(toDutyChecklistItem),
+  };
+}
+
+function emptyDutyShift(date: string): DutyShift {
+  return { id: null, date, status: "chua_thuc_hien", source: "thu_cong", assignees: [], checklist: [] };
+}
+
+function virtualDutyShiftFromRule(
+  date: string,
+  rule: DutyRuleRawRow,
+  accountsById: Map<string, AccountRow>,
+  templates: DutyChecklistTemplate[]
+): DutyShift {
+  return {
+    id: null,
+    date,
+    status: "chua_thuc_hien",
+    source: "lap_lich",
+    ruleId: rule.id,
+    assignees: rule.assigneeIds
+      .map((accountId) => accountsById.get(accountId))
+      .filter((account): account is AccountRow => Boolean(account))
+      .map(toProjectMember),
+    checklist: templates.map((template) => ({
+      id: template.id,
+      templateId: template.id,
+      name: template.name,
+      order: template.order,
+      done: false,
+    })),
+  };
+}
+
+/** YYYY-MM-DD → 1 (Thứ 2) .. 7 (Chủ nhật), tính theo UTC vì date-key không mang giờ. */
+function isoWeekday(dateKey: string): number {
+  const day = new Date(`${dateKey}T00:00:00Z`).getUTCDay();
+  return day === 0 ? 7 : day;
+}
+
+function enumerateDateKeys(from: string, to: string): string[] {
+  const keys: string[] = [];
+  let cursor = new Date(`${from}T00:00:00Z`).getTime();
+  const end = new Date(`${to}T00:00:00Z`).getTime();
+  while (cursor <= end) {
+    keys.push(new Date(cursor).toISOString().slice(0, 10));
+    cursor += 86_400_000;
+  }
+  return keys;
+}
+
+function findRuleForDate(rules: DutyRuleRawRow[], dateKey: string): DutyRuleRawRow | undefined {
+  const weekday = isoWeekday(dateKey);
+  return rules.find(
+    (rule) =>
+      rule.thu_trong_tuan === weekday &&
+      rule.ngay_bat_dau <= dateKey &&
+      (!rule.ngay_ket_thuc || rule.ngay_ket_thuc >= dateKey)
+  );
+}
+
+/** Quy tắc lặp đang hoạt động, có hiệu lực chồng lấn khoảng [from, to]. */
+async function listActiveDutyRulesRaw(
+  supabase: ApiSupabaseClient,
+  from: string,
+  to: string
+): Promise<DutyRuleRawRow[]> {
+  const { data, error } = await supabase
+    .from("truc_nhat_lich_lap")
+    .select("id,thu_trong_tuan,ngay_bat_dau,ngay_ket_thuc,truc_nhat_lich_lap_phu_trach(tai_khoan_id,la_chinh)")
+    .eq("dang_hoat_dong", true)
+    .lte("ngay_bat_dau", to)
+    .or(`ngay_ket_thuc.is.null,ngay_ket_thuc.gte.${from}`);
+  throwDatabaseError(error);
+
+  return ((data ?? []) as unknown as Array<{
+    id: string;
+    thu_trong_tuan: number;
+    ngay_bat_dau: string;
+    ngay_ket_thuc: string | null;
+    truc_nhat_lich_lap_phu_trach: { tai_khoan_id: string; la_chinh: boolean }[] | null;
+  }>).map((row) => ({
+    id: row.id,
+    thu_trong_tuan: row.thu_trong_tuan,
+    ngay_bat_dau: row.ngay_bat_dau,
+    ngay_ket_thuc: row.ngay_ket_thuc,
+    assigneeIds: (row.truc_nhat_lich_lap_phu_trach ?? [])
+      .slice()
+      .sort((a, b) => Number(b.la_chinh) - Number(a.la_chinh))
+      .map((assignment) => assignment.tai_khoan_id),
+  }));
+}
+
+async function copyChecklistTemplatesToShift(
+  supabase: ApiSupabaseClient,
+  caId: string,
+  templates: DutyChecklistTemplate[]
+): Promise<void> {
+  if (templates.length === 0) return;
+  const { error } = await supabase.from("truc_nhat_ca_dau_viec").insert(
+    templates.map((template) => ({
+      ca_id: caId,
+      dau_viec_mau_id: template.id,
+      ten: template.name,
+      thu_tu: template.order,
+    }))
+  );
+  throwDatabaseError(error);
+}
+
+/** Chốt các ngày trong `dateKeys` chưa có `truc_nhat_ca` nhưng có quy tắc lặp áp dụng. */
+async function materializeMissingShifts(
+  supabase: ApiSupabaseClient,
+  dateKeys: string[],
+  rules: DutyRuleRawRow[],
+  templates: DutyChecklistTemplate[]
+): Promise<void> {
+  const toCreate = dateKeys
+    .map((date) => ({ date, rule: findRuleForDate(rules, date) }))
+    .filter((entry): entry is { date: string; rule: DutyRuleRawRow } => Boolean(entry.rule));
+  if (toCreate.length === 0) return;
+
+  const { data, error } = await supabase
+    .from("truc_nhat_ca")
+    .insert(
+      toCreate.map(({ date, rule }) => ({
+        ngay_truc: date,
+        nguon: "lap_lich",
+        lich_lap_id: rule.id,
+      }))
+    )
+    .select("id,ngay_truc");
+  throwDatabaseError(error);
+
+  const createdIdByDate = new Map(
+    ((data ?? []) as { id: string; ngay_truc: string }[]).map((row) => [row.ngay_truc, row.id])
+  );
+
+  const phuTrachRows: { ca_id: string; tai_khoan_id: string; la_chinh: boolean }[] = [];
+  const checklistRows: { ca_id: string; dau_viec_mau_id: string; ten: string; thu_tu: number }[] = [];
+  for (const { date, rule } of toCreate) {
+    const caId = createdIdByDate.get(date);
+    if (!caId) continue;
+    rule.assigneeIds.forEach((accountId, index) => {
+      phuTrachRows.push({ ca_id: caId, tai_khoan_id: accountId, la_chinh: index === 0 });
+    });
+    for (const template of templates) {
+      checklistRows.push({ ca_id: caId, dau_viec_mau_id: template.id, ten: template.name, thu_tu: template.order });
+    }
+  }
+
+  if (phuTrachRows.length > 0) {
+    const { error: assignError } = await supabase.from("truc_nhat_ca_phu_trach").insert(phuTrachRows);
+    throwDatabaseError(assignError);
+  }
+  if (checklistRows.length > 0) {
+    const { error: checklistError } = await supabase.from("truc_nhat_ca_dau_viec").insert(checklistRows);
+    throwDatabaseError(checklistError);
+  }
+}
+
+async function generateShiftsForRules(
+  supabase: ApiSupabaseClient,
+  rules: DutyRuleRawRow[],
+  from: string,
+  to: string
+): Promise<void> {
+  if (rules.length === 0 || to < from) return;
+
+  const { data: existing, error } = await supabase
+    .from("truc_nhat_ca")
+    .select("ngay_truc")
+    .gte("ngay_truc", from)
+    .lte("ngay_truc", to);
+  throwDatabaseError(error);
+
+  const existingDates = new Set((existing ?? []).map((row) => row.ngay_truc as string));
+  const missingDates = enumerateDateKeys(from, to).filter((date) => !existingDates.has(date));
+  if (missingDates.length === 0) return;
+
+  const templates = await listDutyChecklistTemplates(supabase, true);
+  await materializeMissingShifts(supabase, missingDates, rules, templates);
+}
+
+/** Sinh lịch trực từ 1 quy tắc lặp tới ngày `toDate` (bỏ qua ngày đã chốt). */
+export async function generateDutyShiftsForRule(
+  supabase: ApiSupabaseClient,
+  ruleId: string,
+  toDate: string
+): Promise<void> {
+  const from = getAppDateKey();
+  const rules = await listActiveDutyRulesRaw(supabase, from, toDate);
+  const rule = rules.find((item) => item.id === ruleId);
+  if (!rule) return;
+  await generateShiftsForRules(supabase, [rule], from, toDate);
+}
+
+/** Sinh lịch trực cho tất cả quy tắc đang hoạt động tới ngày `toDate`. */
+export async function generateDutySchedule(supabase: ApiSupabaseClient, toDate: string): Promise<void> {
+  const from = getAppDateKey();
+  const rules = await listActiveDutyRulesRaw(supabase, from, toDate);
+  await generateShiftsForRules(supabase, rules, from, toDate);
+}
+
+function defaultDutyGenerateToDate(ruleEndDate?: string): string {
+  const from = new Date(`${getAppDateKey()}T00:00:00Z`).getTime();
+  const defaultTo = new Date(from + DUTY_AUTO_GENERATE_DAYS * 86_400_000).toISOString().slice(0, 10);
+  return ruleEndDate && ruleEndDate < defaultTo ? ruleEndDate : defaultTo;
+}
+
+export async function listDutyChecklistTemplates(
+  supabase: ApiSupabaseClient,
+  activeOnly = false
+): Promise<DutyChecklistTemplate[]> {
+  let query = supabase.from("truc_nhat_dau_viec_mau").select(DUTY_TEMPLATE_SELECT).order("thu_tu");
+  if (activeOnly) query = query.eq("dang_hoat_dong", true);
+  const { data, error } = await query;
+  throwDatabaseError(error);
+  return ((data ?? []) as DutyTemplateRow[]).map(toDutyChecklistTemplate);
+}
+
+export async function createDutyChecklistTemplate(
+  supabase: ApiSupabaseClient,
+  input: DutyChecklistTemplateInput
+): Promise<DutyChecklistTemplate> {
+  const { data, error } = await supabase
+    .from("truc_nhat_dau_viec_mau")
+    .insert({
+      ten: input.name,
+      mo_ta: input.description ?? null,
+      thu_tu: input.order,
+      dang_hoat_dong: input.active,
+    })
+    .select(DUTY_TEMPLATE_SELECT)
+    .single();
+  throwDatabaseError(error);
+  if (!data) throw new ApiException("Supabase không trả về đầu việc mẫu vừa tạo.", 500);
+  return toDutyChecklistTemplate(data as DutyTemplateRow);
+}
+
+export async function updateDutyChecklistTemplate(
+  supabase: ApiSupabaseClient,
+  id: string,
+  input: DutyChecklistTemplateInput
+): Promise<DutyChecklistTemplate | null> {
+  const { data, error } = await supabase
+    .from("truc_nhat_dau_viec_mau")
+    .update({
+      ten: input.name,
+      mo_ta: input.description ?? null,
+      thu_tu: input.order,
+      dang_hoat_dong: input.active,
+    })
+    .eq("id", id)
+    .select(DUTY_TEMPLATE_SELECT)
+    .maybeSingle();
+  throwDatabaseError(error);
+  return data ? toDutyChecklistTemplate(data as DutyTemplateRow) : null;
+}
+
+export async function deleteDutyChecklistTemplate(supabase: ApiSupabaseClient, id: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("truc_nhat_dau_viec_mau")
+    .delete()
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
+  throwDatabaseError(error);
+  return Boolean(data);
+}
+
+async function getDutyRecurringRule(supabase: ApiSupabaseClient, id: string): Promise<DutyRecurringRule | null> {
+  const { data, error } = await supabase
+    .from("truc_nhat_lich_lap")
+    .select(DUTY_RULE_SELECT)
+    .eq("id", id)
+    .maybeSingle();
+  throwDatabaseError(error);
+  return data ? toDutyRecurringRule(data as unknown as DutyRuleRow) : null;
+}
+
+export async function listDutyRecurringRules(supabase: ApiSupabaseClient): Promise<DutyRecurringRule[]> {
+  const { data, error } = await supabase
+    .from("truc_nhat_lich_lap")
+    .select(DUTY_RULE_SELECT)
+    .order("thu_trong_tuan");
+  throwDatabaseError(error);
+  return ((data ?? []) as unknown as DutyRuleRow[]).map(toDutyRecurringRule);
+}
+
+export async function createDutyRecurringRule(
+  supabase: ApiSupabaseClient,
+  input: DutyRecurringRuleInput,
+  access: RequestAccountAccess
+): Promise<DutyRecurringRule> {
+  const { ids: assigneeIds } = await resolveAccounts(supabase, input.assigneeIds, "Người trực");
+
+  const { data, error } = await supabase
+    .from("truc_nhat_lich_lap")
+    .insert({
+      thu_trong_tuan: input.weekday,
+      ngay_bat_dau: input.startDate,
+      ngay_ket_thuc: input.endDate ?? null,
+      ghi_chu: input.note ?? null,
+      dang_hoat_dong: input.active,
+      created_by: access.id,
+    })
+    .select("id")
+    .single();
+  throwDatabaseError(error);
+  if (!data) throw new ApiException("Supabase không trả về quy tắc lịch trực vừa tạo.", 500);
+  const ruleId = data.id as string;
+
+  const { error: assignError } = await supabase.from("truc_nhat_lich_lap_phu_trach").insert(
+    assigneeIds.map((accountId, index) => ({
+      lich_lap_id: ruleId,
+      tai_khoan_id: accountId,
+      la_chinh: index === 0,
+    }))
+  );
+  throwDatabaseError(assignError);
+
+  if (input.active) {
+    await generateDutyShiftsForRule(supabase, ruleId, defaultDutyGenerateToDate(input.endDate));
+  }
+
+  const rule = await getDutyRecurringRule(supabase, ruleId);
+  if (!rule) throw new ApiException("Không tìm thấy quy tắc lịch trực vừa tạo.", 500);
+  return rule;
+}
+
+export async function updateDutyRecurringRule(
+  supabase: ApiSupabaseClient,
+  id: string,
+  input: DutyRecurringRuleInput
+): Promise<DutyRecurringRule | null> {
+  const { ids: assigneeIds } = await resolveAccounts(supabase, input.assigneeIds, "Người trực");
+
+  const { data, error } = await supabase
+    .from("truc_nhat_lich_lap")
+    .update({
+      thu_trong_tuan: input.weekday,
+      ngay_bat_dau: input.startDate,
+      ngay_ket_thuc: input.endDate ?? null,
+      ghi_chu: input.note ?? null,
+      dang_hoat_dong: input.active,
+    })
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
+  throwDatabaseError(error);
+  if (!data) return null;
+
+  await syncAssignments(supabase, "truc_nhat_lich_lap_phu_trach", "lich_lap_id", id, assigneeIds);
+
+  if (input.active) {
+    await generateDutyShiftsForRule(supabase, id, defaultDutyGenerateToDate(input.endDate));
+  }
+
+  return getDutyRecurringRule(supabase, id);
+}
+
+export async function deleteDutyRecurringRule(supabase: ApiSupabaseClient, id: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("truc_nhat_lich_lap")
+    .delete()
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
+  throwDatabaseError(error);
+  return Boolean(data);
+}
+
+async function getDutyShiftById(supabase: ApiSupabaseClient, id: string): Promise<DutyShift | null> {
+  const { data, error } = await supabase.from("truc_nhat_ca").select(DUTY_SHIFT_SELECT).eq("id", id).maybeSingle();
+  throwDatabaseError(error);
+  return data ? toDutyShift(data as unknown as DutyShiftRow) : null;
+}
+
+/** Lịch trực cho 1 khoảng ngày, merge giữa ca đã chốt và ca "ảo" tính từ quy tắc lặp. Không ghi DB. */
+export async function getDutyRosterRange(
+  supabase: ApiSupabaseClient,
+  from: string,
+  to: string
+): Promise<DutyShift[]> {
+  const [{ data: shiftData, error: shiftError }, rules, templates] = await Promise.all([
+    supabase.from("truc_nhat_ca").select(DUTY_SHIFT_SELECT).gte("ngay_truc", from).lte("ngay_truc", to).order("ngay_truc"),
+    listActiveDutyRulesRaw(supabase, from, to),
+    listDutyChecklistTemplates(supabase, true),
+  ]);
+  throwDatabaseError(shiftError);
+
+  const shiftsByDate = new Map<string, DutyShift>();
+  for (const row of (shiftData ?? []) as unknown as DutyShiftRow[]) {
+    shiftsByDate.set(row.ngay_truc, toDutyShift(row));
+  }
+
+  const accountsById = await loadAccounts(supabase, uniqueValues(rules.flatMap((rule) => rule.assigneeIds)));
+
+  return enumerateDateKeys(from, to).map((date) => {
+    const existing = shiftsByDate.get(date);
+    if (existing) return existing;
+    const rule = findRuleForDate(rules, date);
+    return rule ? virtualDutyShiftFromRule(date, rule, accountsById, templates) : emptyDutyShift(date);
+  });
+}
+
+/**
+ * Ca trực của 1 ngày cụ thể. Nếu ngày đó chưa chốt nhưng có quy tắc lặp áp
+ * dụng, sẽ chốt luôn (khác `getDutyRosterRange` — trang xem theo tháng chỉ
+ * hiển thị "ảo", không ghi DB) vì người dùng đang thực sự mở ngày đó ra để
+ * quản lý/tick checklist.
+ */
+export async function getDutyShiftByDate(supabase: ApiSupabaseClient, date: string): Promise<DutyShift> {
+  const { data, error } = await supabase
+    .from("truc_nhat_ca")
+    .select(DUTY_SHIFT_SELECT)
+    .eq("ngay_truc", date)
+    .maybeSingle();
+  throwDatabaseError(error);
+  if (data) return toDutyShift(data as unknown as DutyShiftRow);
+
+  const rules = await listActiveDutyRulesRaw(supabase, date, date);
+  const rule = findRuleForDate(rules, date);
+  if (!rule) return emptyDutyShift(date);
+
+  const templates = await listDutyChecklistTemplates(supabase, true);
+  await materializeMissingShifts(supabase, [date], rules, templates);
+
+  const shift = await supabase.from("truc_nhat_ca").select(DUTY_SHIFT_SELECT).eq("ngay_truc", date).maybeSingle();
+  throwDatabaseError(shift.error);
+  if (!shift.data) throw new ApiException("Không thể tạo ca trực từ lịch lặp.", 500);
+  return toDutyShift(shift.data as unknown as DutyShiftRow);
+}
+
+/** Chốt (tạo mới hoặc ghi đè) ca trực cho 1 ngày cụ thể — admin giao/sửa lịch trực riêng ngày đó. */
+export async function upsertDutyShift(
+  supabase: ApiSupabaseClient,
+  input: DutyShiftInput,
+  access: RequestAccountAccess
+): Promise<DutyShift> {
+  const { ids: assigneeIds } = await resolveAccounts(supabase, input.assigneeIds, "Người trực");
+
+  const { data: existing, error: existingError } = await supabase
+    .from("truc_nhat_ca")
+    .select("id")
+    .eq("ngay_truc", input.date)
+    .maybeSingle();
+  throwDatabaseError(existingError);
+
+  let caId: string;
+  if (existing) {
+    caId = existing.id as string;
+    const { error } = await supabase
+      .from("truc_nhat_ca")
+      .update({
+        nguon: "thu_cong",
+        ghi_chu: input.note ?? null,
+        ...(input.status ? { trang_thai: input.status } : {}),
+      })
+      .eq("id", caId);
+    throwDatabaseError(error);
+  } else {
+    const { data, error } = await supabase
+      .from("truc_nhat_ca")
+      .insert({
+        ngay_truc: input.date,
+        nguon: "thu_cong",
+        ghi_chu: input.note ?? null,
+        created_by: access.id,
+        ...(input.status ? { trang_thai: input.status } : {}),
+      })
+      .select("id")
+      .single();
+    throwDatabaseError(error);
+    if (!data) throw new ApiException("Supabase không trả về ca trực vừa tạo.", 500);
+    caId = data.id as string;
+    const templates = await listDutyChecklistTemplates(supabase, true);
+    await copyChecklistTemplatesToShift(supabase, caId, templates);
+  }
+
+  await syncAssignments(supabase, "truc_nhat_ca_phu_trach", "ca_id", caId, assigneeIds);
+
+  const shift = await getDutyShiftById(supabase, caId);
+  if (!shift) throw new ApiException("Không tìm thấy ca trực vừa lưu.", 500);
+  return shift;
+}
+
+/** ca_id của 1 đầu việc checklist — dùng để kiểm tra quyền trước khi cho tick. */
+export async function getDutyChecklistItemShiftId(
+  supabase: ApiSupabaseClient,
+  itemId: string
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("truc_nhat_ca_dau_viec")
+    .select("ca_id")
+    .eq("id", itemId)
+    .maybeSingle();
+  throwDatabaseError(error);
+  return data ? (data.ca_id as string) : null;
+}
+
+export async function toggleDutyChecklistItem(
+  supabase: ApiSupabaseClient,
+  itemId: string,
+  done: boolean,
+  access: RequestAccountAccess
+): Promise<DutyChecklistItem> {
+  const { data, error } = await supabase
+    .from("truc_nhat_ca_dau_viec")
+    .update({
+      hoan_thanh: done,
+      hoan_thanh_luc: done ? new Date().toISOString() : null,
+      hoan_thanh_boi: done ? access.id : null,
+    })
+    .eq("id", itemId)
+    .select(DUTY_CHECKLIST_ITEM_SELECT)
+    .maybeSingle();
+  throwDatabaseError(error);
+  if (!data) throw new ApiException("Không tìm thấy đầu việc.", 404);
+  return toDutyChecklistItem(data as unknown as DutyChecklistItemRow);
 }

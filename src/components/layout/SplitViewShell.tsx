@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 interface SplitViewContextValue {
   maximized: boolean;
   detailCollapsed: boolean;
+  openDetail: () => void;
   toggleDetailCollapsed: () => void;
   toggleMaximized: () => void;
 }
@@ -21,22 +22,29 @@ interface SplitViewShellProps {
   listSlot: ReactNode;
   children: ReactNode;
   detailOpen?: boolean;
+  detailKey?: string;
 }
 
 /**
  * Layout chia đôi màn hình: danh sách bên trái, chi tiết bên phải, mỗi bên cuộn độc lập.
  * Dưới breakpoint lg không đủ chỗ nên chỉ hiển thị chi tiết (danh sách ẩn).
  */
-export function SplitViewShell({ listSlot, children, detailOpen = true }: SplitViewShellProps) {
+export function SplitViewShell({ listSlot, children, detailOpen = true, detailKey }: SplitViewShellProps) {
   const [maximized, setMaximized] = useState(false);
-  const [detailCollapsed, setDetailCollapsed] = useState(false);
+  const [detailState, setDetailState] = useState({ key: detailKey, collapsed: false });
+  const detailCollapsed = detailState.key === detailKey && detailState.collapsed;
+
+  function setDetailCollapsed(collapsed: boolean) {
+    setDetailState({ key: detailKey, collapsed });
+  }
 
   return (
     <SplitViewContext.Provider
       value={{
         maximized,
         detailCollapsed,
-        toggleDetailCollapsed: () => setDetailCollapsed((prev) => !prev),
+        openDetail: () => setDetailCollapsed(false),
+        toggleDetailCollapsed: () => setDetailCollapsed(!detailCollapsed),
         toggleMaximized: () => {
           setDetailCollapsed(false);
           setMaximized((prev) => !prev);
