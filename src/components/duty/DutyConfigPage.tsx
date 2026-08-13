@@ -8,8 +8,13 @@ import { ModalLoadingFallback } from "@/components/ui/ModalLoadingFallback";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { AvatarStack } from "@/components/ui/Avatar";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
+import { useCurrentAccount } from "@/hooks/useCurrentAccount";
+import { useSessionQuery } from "@/hooks/useSessionQuery";
+import { buildCacheKey } from "@/lib/client-cache/session-data-cache";
+import { CACHE_TTL } from "@/lib/client-cache/ttl";
+import { CACHE_RESOURCE } from "@/lib/client-cache/resources";
 import { getErrorMessage } from "@/lib/errors";
-import { formatDateVN } from "@/lib/utils";
+import { formatDateVN, getAppDateKey } from "@/lib/utils";
 import { dutyService } from "@/services/duty-service";
 import { projectService } from "@/services/project-service";
 import type {
@@ -32,46 +37,73 @@ const DutyTemplateFormModal = dynamic(
 
 type Tab = "rules" | "templates";
 
-/** Khoảng thời gian mặc định khi bấm "Sinh thêm lịch trực" thủ công. */
-const GENERATE_MORE_DAYS = 56;
-
 export function DutyConfigPage() {
   const { notify, confirm } = useFeedback();
+  const { account } = useCurrentAccount();
+  const accountId = account?.id;
+  const accountRole = account?.role;
   const [tab, setTab] = useState<Tab>("rules");
-  const [rules, setRules] = useState<DutyRecurringRule[]>([]);
-  const [templates, setTemplates] = useState<DutyChecklistTemplate[]>([]);
-  const [members, setMembers] = useState<ProjectMember[]>([]);
-  const [loading, setLoading] = useState(true);
   const [editingRule, setEditingRule] = useState<DutyRecurringRule | "new" | null>(null);
   const [editingTemplate, setEditingTemplate] = useState<DutyChecklistTemplate | "new" | null>(null);
-  const [generating, setGenerating] = useState(false);
 
-  async function load() {
-    setLoading(true);
-    try {
-      const [ruleData, templateData, memberData] = await Promise.all([
-        dutyService.getRecurringRules(),
-        dutyService.getChecklistTemplates(),
-        projectService.getDirectory(),
-      ]);
-      setRules(ruleData);
-      setTemplates(templateData);
-      setMembers(memberData);
-    } catch (error) {
-      notify({
-        type: "error",
-        title: "Không thể tải dữ liệu trực nhật",
-        description: getErrorMessage(error, "Vui lòng thử lại."),
-      });
-    } finally {
-      setLoading(false);
-    }
-  }
+  // Cache theo session (giống trang lịch trực) — quay lại trang này sau khi
+  // điều hướng đi nơi khác sẽ hiện ngay dữ liệu cũ thay vì phải tải lại từ đầu.
+  const rulesQuery = useSessionQuery<DutyRecurringRule[]>({
+    key: accountId
+      ? buildCacheKey({ accountId, role: accountRole ?? "member", resource: CACHE_RESOURCE.dutyRules })
+      : null,
+    fetcher: (signal) => dutyService.getRecurringRules({ signal }),
+    ttl: CACHE_TTL.list,
+  });
+  const templatesQuery = useSessionQuery<DutyChecklistTemplate[]>({
+    key: accountId
+      ? buildCacheKey({ accountId, role: accountRole ?? "member", resource: CACHE_RESOURCE.dutyTemplates })
+      : null,
+    fetcher: (signal) => dutyService.getChecklistTemplates({ signal }),
+    ttl: CACHE_TTL.list,
+  });
+  const membersQuery = useSessionQuery<ProjectMember[]>({
+    key: accountId
+      ? buildCacheKey({ accountId, role: accountRole ?? "member", resource: CACHE_RESOURCE.directoryMembers })
+      : null,
+    fetcher: (signal) => projectService.getDirectory({ signal }),
+    ttl: CACHE_TTL.directory,
+  });
+
+  const rules = rulesQuery.data ?? [];
+  const templates = templatesQuery.data ?? [];
+  const members = membersQuery.data ?? [];
+  const loading = rulesQuery.status === "loading" || templatesQuery.status === "loading";
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!rulesQuery.error) return;
+    notify({
+      type: "error",
+      title: "Không thể tải lịch lặp hằng tuần",
+      description: getErrorMessage(rulesQuery.error, "Vui lòng thử lại."),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rulesQuery.error]);
+
+  useEffect(() => {
+    if (!templatesQuery.error) return;
+    notify({
+      type: "error",
+      title: "Không thể tải đầu việc mẫu",
+      description: getErrorMessage(templatesQuery.error, "Vui lòng thử lại."),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templatesQuery.error]);
+
+  useEffect(() => {
+    if (!membersQuery.error) return;
+    notify({
+      type: "error",
+      title: "Không thể tải danh sách nhân sự",
+      description: getErrorMessage(membersQuery.error, "Vui lòng thử lại."),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [membersQuery.error]);
 
   async function handleSaveRule(input: DutyRecurringRuleInput) {
     if (editingRule && editingRule !== "new") {
@@ -82,7 +114,7 @@ export function DutyConfigPage() {
       notify({ type: "success", title: "Đã tạo quy tắc lịch trực" });
     }
     setEditingRule(null);
-    await load();
+    rulesQuery.refresh();
   }
 
   async function handleDeleteRule(rule: DutyRecurringRule) {
@@ -96,30 +128,13 @@ export function DutyConfigPage() {
     try {
       await dutyService.deleteRecurringRule(rule.id);
       notify({ type: "success", title: "Đã xóa quy tắc lịch trực" });
-      await load();
+      rulesQuery.refresh();
     } catch (error) {
       notify({
         type: "error",
         title: "Không thể xóa quy tắc lịch trực",
         description: getErrorMessage(error, "Vui lòng thử lại."),
       });
-    }
-  }
-
-  async function handleGenerateMore() {
-    setGenerating(true);
-    try {
-      const to = new Date(Date.now() + GENERATE_MORE_DAYS * 86_400_000).toISOString().slice(0, 10);
-      await dutyService.generateSchedule(to);
-      notify({ type: "success", title: "Đã sinh thêm lịch trực" });
-    } catch (error) {
-      notify({
-        type: "error",
-        title: "Không thể sinh thêm lịch trực",
-        description: getErrorMessage(error, "Vui lòng thử lại."),
-      });
-    } finally {
-      setGenerating(false);
     }
   }
 
@@ -132,7 +147,7 @@ export function DutyConfigPage() {
       notify({ type: "success", title: "Đã tạo đầu việc mẫu" });
     }
     setEditingTemplate(null);
-    await load();
+    templatesQuery.refresh();
   }
 
   async function handleDeleteTemplate(template: DutyChecklistTemplate) {
@@ -145,7 +160,7 @@ export function DutyConfigPage() {
     try {
       await dutyService.deleteChecklistTemplate(template.id);
       notify({ type: "success", title: "Đã xóa đầu việc mẫu" });
-      await load();
+      templatesQuery.refresh();
     } catch (error) {
       notify({
         type: "error",
@@ -166,16 +181,10 @@ export function DutyConfigPage() {
         </div>
         <div className="flex gap-2">
           {tab === "rules" ? (
-            <>
-              <Button variant="secondary" onClick={handleGenerateMore} disabled={generating}>
-                <CalendarClock className="h-4 w-4" />
-                {generating ? "Đang sinh lịch..." : "Sinh thêm lịch trực"}
-              </Button>
-              <Button onClick={() => setEditingRule("new")}>
-                <Plus className="h-4 w-4" />
-                Thêm quy tắc
-              </Button>
-            </>
+            <Button onClick={() => setEditingRule("new")}>
+              <Plus className="h-4 w-4" />
+              Thêm quy tắc
+            </Button>
           ) : (
             <Button onClick={() => setEditingTemplate("new")}>
               <Plus className="h-4 w-4" />
@@ -229,28 +238,39 @@ export function DutyConfigPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {rules.map((rule) => (
+                {rules.map((rule) => {
+                  const isExpired = Boolean(rule.endDate && rule.endDate < getAppDateKey());
+                  return (
                   <tr key={rule.id}>
                     <td className="px-4 py-3 font-medium text-gray-900">
                       {DUTY_WEEKDAY_OPTIONS.find((weekday) => weekday.value === rule.weekday)?.label}
                     </td>
                     <td className="px-4 py-3">
-                      <AvatarStack
-                        people={rule.assignees.map((assignee) => ({
-                          name: assignee.name,
-                          avatarColor: assignee.avatarColor,
-                        }))}
-                      />
+                      <div className="flex items-center gap-2">
+                        <AvatarStack
+                          people={rule.assignees.map((assignee) => ({
+                            name: assignee.name,
+                            avatarColor: assignee.avatarColor,
+                          }))}
+                        />
+                        <span className="text-gray-700">
+                          {rule.assignees.map((assignee) => assignee.name).join(", ")}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-gray-600">{formatDateVN(rule.startDate)}</td>
                     <td className="px-4 py-3 text-gray-600">{rule.endDate ? formatDateVN(rule.endDate) : "—"}</td>
                     <td className="px-4 py-3">
                       <span
                         className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold ${
-                          rule.active ? "bg-emerald-100 text-emerald-600" : "bg-gray-100 text-gray-500"
+                          isExpired
+                            ? "bg-gray-100 text-gray-500"
+                            : rule.active
+                              ? "bg-emerald-100 text-emerald-600"
+                              : "bg-gray-100 text-gray-500"
                         }`}
                       >
-                        {rule.active ? "Đang áp dụng" : "Tạm dừng"}
+                        {isExpired ? "Hết hạn" : rule.active ? "Đang áp dụng" : "Tạm dừng"}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -274,7 +294,8 @@ export function DutyConfigPage() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

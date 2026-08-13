@@ -1,6 +1,6 @@
 import { apiClient } from "@/services/api-client";
 import type {
-  DutyChecklistItem,
+  DutyChecklistToggleResult,
   DutyChecklistTemplate,
   DutyChecklistTemplateInput,
   DutyRecurringRule,
@@ -26,12 +26,12 @@ export const dutyService = {
     return apiClient.post<boolean>("/truc-nhat/ca/generate", { to });
   },
 
-  async toggleChecklistItem(itemId: string, done: boolean): Promise<DutyChecklistItem> {
-    return apiClient.patch<DutyChecklistItem>(`/truc-nhat/ca-dau-viec/${itemId}`, { done });
+  async toggleChecklistItem(itemId: string, done: boolean): Promise<DutyChecklistToggleResult> {
+    return apiClient.patch<DutyChecklistToggleResult>(`/truc-nhat/ca-dau-viec/${itemId}`, { done });
   },
 
-  async getRecurringRules(): Promise<DutyRecurringRule[]> {
-    return apiClient.get<DutyRecurringRule[]>("/truc-nhat/lich-lap");
+  async getRecurringRules(options?: { signal?: AbortSignal }): Promise<DutyRecurringRule[]> {
+    return apiClient.get<DutyRecurringRule[]>("/truc-nhat/lich-lap", { signal: options?.signal });
   },
 
   async createRecurringRule(input: DutyRecurringRuleInput): Promise<DutyRecurringRule> {
@@ -46,8 +46,8 @@ export const dutyService = {
     return apiClient.delete<boolean>(`/truc-nhat/lich-lap/${id}`);
   },
 
-  async getChecklistTemplates(): Promise<DutyChecklistTemplate[]> {
-    return apiClient.get<DutyChecklistTemplate[]>("/truc-nhat/dau-viec-mau");
+  async getChecklistTemplates(options?: { signal?: AbortSignal }): Promise<DutyChecklistTemplate[]> {
+    return apiClient.get<DutyChecklistTemplate[]>("/truc-nhat/dau-viec-mau", { signal: options?.signal });
   },
 
   async createChecklistTemplate(input: DutyChecklistTemplateInput): Promise<DutyChecklistTemplate> {

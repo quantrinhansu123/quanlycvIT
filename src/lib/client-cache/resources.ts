@@ -12,4 +12,7 @@ export const CACHE_RESOURCE = {
   directoryMembers: "directory-members",
   directoryProjects: "directory-projects",
   directoryTasks: "directory-tasks",
+  dutyRoster: "duty-roster",
+  dutyRules: "duty-rules",
+  dutyTemplates: "duty-templates",
 } as const;

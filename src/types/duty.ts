@@ -78,6 +78,11 @@ export interface DutyChecklistItem {
   doneBy?: ProjectMember;
 }
 
+export interface DutyChecklistToggleResult {
+  item: DutyChecklistItem;
+  status: DutyShiftStatus;
+}
+
 export interface DutyShift {
   /** null nghĩa là ca "ảo" — tính từ lịch lặp, chưa được chốt lưu trong DB. */
   id: string | null;

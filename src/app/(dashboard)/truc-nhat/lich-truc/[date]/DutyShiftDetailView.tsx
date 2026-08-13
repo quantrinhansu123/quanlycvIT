@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ArrowLeft, CalendarDays, Save } from "lucide-react";
+import { ArrowLeft, CalendarDays, PanelRightClose, Save, X } from "lucide-react";
 import type { AccountRole } from "@/types/account";
 import type { DutyShift } from "@/types/duty";
 import { DUTY_STATUS_META } from "@/types/duty";
@@ -11,14 +11,21 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { MemberMultiSelect } from "@/components/ui/MemberMultiSelect";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
+import { useSessionDataCache } from "@/components/providers/SessionDataCacheProvider";
+import { useSplitView } from "@/components/layout/SplitViewShell";
 import { dutyService } from "@/services/duty-service";
+import { projectService } from "@/services/project-service";
+import { useSessionQuery } from "@/hooks/useSessionQuery";
+import { buildCacheKey } from "@/lib/client-cache/session-data-cache";
+import { CACHE_TTL } from "@/lib/client-cache/ttl";
+import { CACHE_RESOURCE } from "@/lib/client-cache/resources";
 import { getErrorMessage } from "@/lib/errors";
-import { cn, formatDateVN } from "@/lib/utils";
+import { cn, formatDateVN, getAppDateKey } from "@/lib/utils";
 
 interface DutyShiftDetailViewProps {
   date: string;
   initialShift: DutyShift;
-  members: ProjectMember[];
+  accountId: string;
   accountRole: AccountRole;
   employeeCode: string;
 }
@@ -26,22 +33,41 @@ interface DutyShiftDetailViewProps {
 export function DutyShiftDetailView({
   date,
   initialShift,
-  members,
+  accountId,
   accountRole,
   employeeCode,
 }: DutyShiftDetailViewProps) {
   const { notify } = useFeedback();
+  const cache = useSessionDataCache();
+  const splitView = useSplitView();
   const [shift, setShift] = useState<DutyShift>(initialShift);
+  const canManage = accountRole !== "member";
+  // Đã được DutyRosterCalendarClient (layout, không remount khi đổi ngày) nạp
+  // sẵn vào session cache — ở đây gần như luôn là cache hit, không gọi mạng.
+  const { data: membersData } = useSessionQuery<ProjectMember[]>({
+    key: canManage
+      ? buildCacheKey({ accountId, role: accountRole, resource: CACHE_RESOURCE.directoryMembers })
+      : null,
+    fetcher: (signal) => projectService.getDirectory({ signal }),
+    ttl: CACHE_TTL.directory,
+  });
+  const members = membersData ?? [];
   const [assigneeIds, setAssigneeIds] = useState<string[]>(shift.assignees.map((assignee) => assignee.id));
   const [note, setNote] = useState(shift.note ?? "");
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [togglingAll, setTogglingAll] = useState(false);
 
-  const canManage = accountRole !== "member";
   const isAssignee = shift.assignees.some((assignee) => assignee.id === employeeCode);
   const canToggleChecklist = canManage || isAssignee;
-  const meta = DUTY_STATUS_META[shift.status];
+  const todayKey = getAppDateKey();
+  const isDutyDay = date === todayKey;
+  const isOverdue = date < todayKey && shift.status !== "hoan_thanh";
+  const meta = isOverdue
+    ? { label: "Chưa hoàn thành", badge: "bg-rose-100 text-rose-600" }
+    : DUTY_STATUS_META[shift.status];
   const doneCount = shift.checklist.filter((item) => item.done).length;
+  const allChecklistDone = shift.checklist.length > 0 && doneCount === shift.checklist.length;
   const dirty =
     JSON.stringify([...assigneeIds].sort()) !==
       JSON.stringify(shift.assignees.map((assignee) => assignee.id).sort()) ||
@@ -69,11 +95,13 @@ export function DutyShiftDetailView({
   async function handleToggle(itemId: string, done: boolean) {
     setTogglingId(itemId);
     try {
-      const updatedItem = await dutyService.toggleChecklistItem(itemId, done);
+      const result = await dutyService.toggleChecklistItem(itemId, done);
       setShift((current) => ({
         ...current,
-        checklist: current.checklist.map((item) => (item.id === itemId ? updatedItem : item)),
+        status: result.status,
+        checklist: current.checklist.map((item) => (item.id === itemId ? result.item : item)),
       }));
+      cache.invalidate(CACHE_RESOURCE.dutyRoster);
     } catch (error) {
       notify({
         type: "error",
@@ -82,6 +110,34 @@ export function DutyShiftDetailView({
       });
     } finally {
       setTogglingId(null);
+    }
+  }
+
+  async function handleToggleAll(done: boolean) {
+    setTogglingAll(true);
+    try {
+      for (const item of shift.checklist) {
+        if (item.done === done) continue;
+        setTogglingId(item.id);
+        const result = await dutyService.toggleChecklistItem(item.id, done);
+        setShift((current) => ({
+          ...current,
+          status: result.status,
+          checklist: current.checklist.map((currentItem) =>
+            currentItem.id === item.id ? result.item : currentItem
+          ),
+        }));
+      }
+      cache.invalidate(CACHE_RESOURCE.dutyRoster);
+    } catch (error) {
+      notify({
+        type: "error",
+        title: "Không thể cập nhật tất cả đầu việc",
+        description: getErrorMessage(error, "Vui lòng thử lại."),
+      });
+    } finally {
+      setTogglingId(null);
+      setTogglingAll(false);
     }
   }
 
@@ -108,6 +164,25 @@ export function DutyShiftDetailView({
             {meta.label}
           </span>
         </div>
+        {splitView && !splitView.maximized && (
+          <button
+            type="button"
+            onClick={splitView.toggleDetailCollapsed}
+            className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 lg:flex"
+            aria-label="Thu gọn khung chi tiết"
+            title="Thu gọn"
+          >
+            <PanelRightClose className="h-5 w-5" />
+          </button>
+        )}
+        <Link
+          href="/truc-nhat/lich-truc"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+          aria-label="Đóng chi tiết ca trực"
+          title="Đóng"
+        >
+          <X className="h-5 w-5" />
+        </Link>
       </div>
 
       <div className="flex-1 overflow-y-auto p-5">
@@ -170,9 +245,24 @@ export function DutyShiftDetailView({
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-gray-700">Đầu việc trực nhật</h2>
             {shift.checklist.length > 0 && (
-              <span className="text-xs text-gray-400">
-                {doneCount}/{shift.checklist.length} hoàn thành
-              </span>
+              <div className="flex items-center gap-3">
+                {isDutyDay && (
+                  <label className="flex cursor-pointer items-center gap-1.5 text-xs text-gray-500">
+                    <input
+                      type="checkbox"
+                      checked={allChecklistDone}
+                      disabled={!canToggleChecklist || togglingAll || !shift.id}
+                      onChange={(event) => handleToggleAll(event.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-400"
+                      aria-label="Hoàn thành tất cả đầu việc trực nhật"
+                    />
+                    Hoàn thành tất cả
+                  </label>
+                )}
+                <span className="text-xs text-gray-400">
+                  {doneCount}/{shift.checklist.length} hoàn thành
+                </span>
+              </div>
             )}
           </div>
           {shift.checklist.length === 0 ? (
@@ -184,13 +274,15 @@ export function DutyShiftDetailView({
                   key={item.id}
                   className="flex items-center gap-3 rounded-lg border border-gray-100 px-3 py-2.5"
                 >
-                  <input
-                    type="checkbox"
-                    checked={item.done}
-                    disabled={!canToggleChecklist || togglingId === item.id || !shift.id}
-                    onChange={(event) => handleToggle(item.id, event.target.checked)}
-                    className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-400"
-                  />
+                  {isDutyDay && (
+                    <input
+                      type="checkbox"
+                      checked={item.done}
+                      disabled={!canToggleChecklist || togglingAll || togglingId === item.id || !shift.id}
+                      onChange={(event) => handleToggle(item.id, event.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-400"
+                    />
+                  )}
                   <span
                     className={cn("flex-1 text-sm", item.done ? "text-gray-400 line-through" : "text-gray-700")}
                   >
