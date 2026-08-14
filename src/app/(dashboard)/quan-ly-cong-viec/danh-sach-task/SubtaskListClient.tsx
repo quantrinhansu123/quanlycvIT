@@ -59,6 +59,7 @@ const EMPTY_PROJECTS: ProjectDirectoryItem[] = [];
 const EMPTY_MEMBERS: ProjectMember[] = [];
 const EMPTY_WORK_TASKS: WorkTaskDirectoryItem[] = [];
 const EMPTY_SUBTASKS: Subtask[] = [];
+const SUBTASK_ACCEPTED_EVENT = "app:subtask-accepted";
 
 type ViewMode = "table" | "grid";
 type FormModalState = { mode: "create" } | { mode: "edit"; subtask: Subtask } | null;
@@ -206,6 +207,39 @@ export function SubtaskListClient({
       ),
     });
   }, [workTasksError, membersError, projectsError, notify]);
+
+  useEffect(() => {
+    function handleSubtaskAccepted(event: Event) {
+      const accepted = (event as CustomEvent<Subtask>).detail;
+      if (!accepted?.id) return;
+
+      setSubtaskPage((previous) => {
+        if (!previous || !previous.items.some((item) => item.id === accepted.id)) {
+          return previous ?? { items: [], total: 0 };
+        }
+
+        // Xác nhận chuyển Task từ Chưa làm sang Đang làm. Nếu danh sách
+        // đang lọc theo trạng thái cũ thì loại bản ghi ngay.
+        if (statuses.length > 0 && !statuses.includes(accepted.status)) {
+          return {
+            items: previous.items.filter((item) => item.id !== accepted.id),
+            total: Math.max(0, previous.total - 1),
+          };
+        }
+
+        return {
+          items: previous.items.map((item) => item.id === accepted.id ? accepted : item),
+          total: previous.total,
+        };
+      });
+      // Key đang hiển thị đã được patch; các trang/bộ lọc khác sẽ
+      // tải dữ liệu mới khi người dùng chuyển sang.
+      cache.invalidate(CACHE_RESOURCE.subtasksList, listKey);
+    }
+
+    window.addEventListener(SUBTASK_ACCEPTED_EVENT, handleSubtaskAccepted);
+    return () => window.removeEventListener(SUBTASK_ACCEPTED_EVENT, handleSubtaskAccepted);
+  }, [cache, listKey, setSubtaskPage, statuses]);
 
   // Đổi dự án thì bỏ những lựa chọn "Công việc" không thuộc dự án mới.
   function handleProjectChange(nextProjectId: string) {

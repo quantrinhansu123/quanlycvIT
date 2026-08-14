@@ -86,6 +86,7 @@ interface SubtaskDetailViewProps {
 }
 
 const ACTIVITY_PAGE_SIZE = 20;
+const SUBTASK_ACCEPTED_EVENT = "app:subtask-accepted";
 
 export function SubtaskDetailView({
   subtaskId,
@@ -317,7 +318,9 @@ export function SubtaskDetailView({
       const accepted = await subtaskService.acceptSubtask(subtask.id);
       setSubtask(accepted);
       window.dispatchEvent(new CustomEvent("app:notifications-changed"));
-      cache.invalidate(CACHE_RESOURCE.subtasksList);
+      // Layout danh sách/chi tiết giữ danh sách mount khi mở Task. Patch ngay
+      // bản ghi hiện tại thay vì xóa cache khiến danh sách chớp thành rỗng.
+      window.dispatchEvent(new CustomEvent<Subtask>(SUBTASK_ACCEPTED_EVENT, { detail: accepted }));
       cache.invalidate(CACHE_RESOURCE.tasksList);
       void refreshActivity();
       notify({

@@ -74,6 +74,10 @@ export class SessionDataCache {
 
   set<T>(key: string, data: T, ttl: CacheTtl): void {
     const now = Date.now();
+    // `set()` can be an optimistic update while an older revalidation request is
+    // still running. Bump the version so that old response cannot overwrite the
+    // newer mutation result when it finishes later.
+    this.versions.set(key, (this.versions.get(key) ?? 0) + 1);
     this.entries.set(key, {
       data,
       fetchedAt: now,
