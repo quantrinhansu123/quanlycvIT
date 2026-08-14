@@ -124,7 +124,7 @@ export function DutyConfigPage() {
     const weekdayLabel = DUTY_WEEKDAY_OPTIONS.find((weekday) => weekday.value === rule.weekday)?.label;
     const confirmed = await confirm({
       title: "Xóa quy tắc lịch trực?",
-      description: `Xóa quy tắc trực ${weekdayLabel} hằng tuần. Các ca đã chốt trước đó vẫn được giữ lại.`,
+      description: `Xóa quy tắc trực ${weekdayLabel} hằng tuần và các ca được sinh từ quy tắc này. Các ca đã chỉnh riêng vẫn được giữ lại.`,
       tone: "danger",
     });
     if (!confirmed) return;

@@ -3269,6 +3269,16 @@ export async function updateDutyRecurringRule(
 }
 
 export async function deleteDutyRecurringRule(supabase: ApiSupabaseClient, id: string): Promise<boolean> {
+  // Ca sinh từ lịch lặp phải bị gỡ cùng quy tắc; nếu không lịch sẽ tiếp tục hiển thị
+  // dữ liệu đã "chốt" dù quản trị viên đã xóa cấu hình. Ca đã chỉnh riêng giữ nguồn
+  // "thu_cong" nên không bị ảnh hưởng.
+  const { error: shiftsError } = await supabase
+    .from("truc_nhat_ca")
+    .delete()
+    .eq("lich_lap_id", id)
+    .eq("nguon", "lap_lich");
+  throwDatabaseError(shiftsError);
+
   const { data, error } = await supabase
     .from("truc_nhat_lich_lap")
     .delete()
