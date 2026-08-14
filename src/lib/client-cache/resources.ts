@@ -9,6 +9,7 @@ export const CACHE_RESOURCE = {
   projectsList: "projects-list",
   tasksList: "tasks-list",
   subtasksList: "subtasks-list",
+  accountsList: "accounts-list",
   directoryMembers: "directory-members",
   directoryProjects: "directory-projects",
   directoryTasks: "directory-tasks",
