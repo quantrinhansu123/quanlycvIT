@@ -23,7 +23,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="vi" className="h-full">
+    <html lang="vi" className="h-full" suppressHydrationWarning>
       <body className="h-full font-sans antialiased">
         {children}
         <WebVitalsReporter />

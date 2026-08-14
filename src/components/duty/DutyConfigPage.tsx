@@ -8,6 +8,7 @@ import { ModalLoadingFallback } from "@/components/ui/ModalLoadingFallback";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { AvatarStack } from "@/components/ui/Avatar";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
+import { useSessionDataCache } from "@/components/providers/SessionDataCacheProvider";
 import { useCurrentAccount } from "@/hooks/useCurrentAccount";
 import { useSessionQuery } from "@/hooks/useSessionQuery";
 import { buildCacheKey } from "@/lib/client-cache/session-data-cache";
@@ -39,6 +40,7 @@ type Tab = "rules" | "templates";
 
 export function DutyConfigPage() {
   const { notify, confirm } = useFeedback();
+  const cache = useSessionDataCache();
   const { account } = useCurrentAccount();
   const accountId = account?.id;
   const accountRole = account?.role;
@@ -115,6 +117,7 @@ export function DutyConfigPage() {
     }
     setEditingRule(null);
     rulesQuery.refresh();
+    cache.invalidate(CACHE_RESOURCE.dutyRoster);
   }
 
   async function handleDeleteRule(rule: DutyRecurringRule) {
@@ -129,6 +132,7 @@ export function DutyConfigPage() {
       await dutyService.deleteRecurringRule(rule.id);
       notify({ type: "success", title: "Đã xóa quy tắc lịch trực" });
       rulesQuery.refresh();
+      cache.invalidate(CACHE_RESOURCE.dutyRoster);
     } catch (error) {
       notify({
         type: "error",
@@ -148,6 +152,7 @@ export function DutyConfigPage() {
     }
     setEditingTemplate(null);
     templatesQuery.refresh();
+    cache.invalidate(CACHE_RESOURCE.dutyRoster);
   }
 
   async function handleDeleteTemplate(template: DutyChecklistTemplate) {
@@ -161,6 +166,7 @@ export function DutyConfigPage() {
       await dutyService.deleteChecklistTemplate(template.id);
       notify({ type: "success", title: "Đã xóa đầu việc mẫu" });
       templatesQuery.refresh();
+      cache.invalidate(CACHE_RESOURCE.dutyRoster);
     } catch (error) {
       notify({
         type: "error",

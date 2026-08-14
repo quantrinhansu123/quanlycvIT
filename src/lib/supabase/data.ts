@@ -2875,6 +2875,98 @@ async function syncMissingChecklistTemplatesToShift(
   return true;
 }
 
+/**
+ * Đồng bộ checklist của những ca từ hôm nay trở đi với cấu hình đầu việc hiện tại.
+ * Mục đã hoàn thành được giữ làm lịch sử; mục chưa hoàn thành sẽ nhận tên/thứ tự
+ * mới, được thêm khi có mẫu mới, hoặc bị bỏ khi mẫu đã tắt/xóa.
+ */
+async function syncChecklistTemplatesToUpcomingShifts(supabase: ApiSupabaseClient): Promise<void> {
+  const [{ data: shifts, error: shiftsError }, templates] = await Promise.all([
+    supabase.from("truc_nhat_ca").select("id").gte("ngay_truc", getAppDateKey()),
+    listDutyChecklistTemplates(supabase, true),
+  ]);
+  throwDatabaseError(shiftsError);
+
+  const shiftIds = (shifts ?? []).map((shift) => shift.id as string);
+  if (shiftIds.length === 0) return;
+
+  const { data: checklist, error: checklistError } = await supabase
+    .from("truc_nhat_ca_dau_viec")
+    .select("ca_id,dau_viec_mau_id")
+    .in("ca_id", shiftIds);
+  throwDatabaseError(checklistError);
+
+  const activeTemplateIds = new Set(templates.map((template) => template.id));
+  const existingTemplateKeys = new Set(
+    (checklist ?? [])
+      .filter((item) => item.dau_viec_mau_id)
+      .map((item) => `${item.ca_id as string}:${item.dau_viec_mau_id as string}`)
+  );
+  const newChecklistRows = shiftIds.flatMap((caId) =>
+    templates
+      .filter((template) => !existingTemplateKeys.has(`${caId}:${template.id}`))
+      .map((template) => ({
+        ca_id: caId,
+        dau_viec_mau_id: template.id,
+        ten: template.name,
+        thu_tu: template.order,
+      }))
+  );
+  if (newChecklistRows.length > 0) {
+    const { error } = await supabase.from("truc_nhat_ca_dau_viec").insert(newChecklistRows);
+    throwDatabaseError(error);
+  }
+
+  const existingTemplateIds = [...new Set(
+    (checklist ?? [])
+      .map((item) => item.dau_viec_mau_id)
+      .filter((templateId): templateId is string => Boolean(templateId))
+  )];
+  const inactiveTemplateIds = existingTemplateIds.filter((templateId) => !activeTemplateIds.has(templateId));
+  if (inactiveTemplateIds.length > 0) {
+    const { error } = await supabase
+      .from("truc_nhat_ca_dau_viec")
+      .delete()
+      .in("ca_id", shiftIds)
+      .in("dau_viec_mau_id", inactiveTemplateIds)
+      .eq("hoan_thanh", false);
+    throwDatabaseError(error);
+  }
+
+  for (const template of templates) {
+    const { error } = await supabase
+      .from("truc_nhat_ca_dau_viec")
+      .update({ ten: template.name, thu_tu: template.order })
+      .in("ca_id", shiftIds)
+      .eq("dau_viec_mau_id", template.id)
+      .eq("hoan_thanh", false);
+    throwDatabaseError(error);
+  }
+
+  const { data: syncedChecklist, error: syncedChecklistError } = await supabase
+    .from("truc_nhat_ca_dau_viec")
+    .select("ca_id,hoan_thanh")
+    .in("ca_id", shiftIds);
+  throwDatabaseError(syncedChecklistError);
+  const doneStatesByShift = new Map<string, boolean[]>();
+  for (const caId of shiftIds) doneStatesByShift.set(caId, []);
+  for (const item of syncedChecklist ?? []) {
+    const caId = item.ca_id as string;
+    doneStatesByShift.get(caId)?.push(item.hoan_thanh as boolean);
+  }
+  const shiftIdsByStatus = new Map<DutyShiftStatus, string[]>();
+  for (const [caId, doneStates] of doneStatesByShift) {
+    const status = deriveDutyShiftStatus(doneStates);
+    const ids = shiftIdsByStatus.get(status) ?? [];
+    ids.push(caId);
+    shiftIdsByStatus.set(status, ids);
+  }
+  for (const [status, ids] of shiftIdsByStatus) {
+    const { error } = await supabase.from("truc_nhat_ca").update({ trang_thai: status }).in("id", ids);
+    throwDatabaseError(error);
+  }
+}
+
 /** Chốt các ngày trong `dateKeys` chưa có `truc_nhat_ca` nhưng có quy tắc lặp áp dụng. */
 async function materializeMissingShifts(
   supabase: ApiSupabaseClient,
@@ -2962,6 +3054,34 @@ export async function generateDutyShiftsForRule(
   await generateShiftsForRules(supabase, [rule], from, toDate);
 }
 
+/** Đồng bộ người trực cho các ca chưa bị chỉnh thủ công, đã sinh từ quy tắc lặp. */
+async function syncUpcomingGeneratedShiftAssignees(
+  supabase: ApiSupabaseClient,
+  ruleId: string,
+  input: DutyRecurringRuleInput,
+  assigneeIds: string[]
+): Promise<void> {
+  const from = getAppDateKey() > input.startDate ? getAppDateKey() : input.startDate;
+  if (input.endDate && input.endDate < from) return;
+
+  let query = supabase
+    .from("truc_nhat_ca")
+    .select("id,ngay_truc")
+    .eq("lich_lap_id", ruleId)
+    .eq("nguon", "lap_lich")
+    .gte("ngay_truc", from);
+  if (input.endDate) query = query.lte("ngay_truc", input.endDate);
+  const { data: shifts, error } = await query;
+  throwDatabaseError(error);
+
+  const matchingShiftIds = (shifts ?? [])
+    .filter((shift) => isoWeekday(shift.ngay_truc as string) === input.weekday)
+    .map((shift) => shift.id as string);
+  for (const shiftId of matchingShiftIds) {
+    await syncAssignments(supabase, "truc_nhat_ca_phu_trach", "ca_id", shiftId, assigneeIds);
+  }
+}
+
 /** Sinh lịch trực cho tất cả quy tắc đang hoạt động tới ngày `toDate`. */
 export async function generateDutySchedule(supabase: ApiSupabaseClient, toDate: string): Promise<void> {
   const from = getAppDateKey();
@@ -3002,6 +3122,7 @@ export async function createDutyChecklistTemplate(
     .single();
   throwDatabaseError(error);
   if (!data) throw new ApiException("Supabase không trả về đầu việc mẫu vừa tạo.", 500);
+  await syncChecklistTemplatesToUpcomingShifts(supabase);
   return toDutyChecklistTemplate(data as DutyTemplateRow);
 }
 
@@ -3022,10 +3143,29 @@ export async function updateDutyChecklistTemplate(
     .select(DUTY_TEMPLATE_SELECT)
     .maybeSingle();
   throwDatabaseError(error);
+  if (data) await syncChecklistTemplatesToUpcomingShifts(supabase);
   return data ? toDutyChecklistTemplate(data as DutyTemplateRow) : null;
 }
 
 export async function deleteDutyChecklistTemplate(supabase: ApiSupabaseClient, id: string): Promise<boolean> {
+  // Xóa các mục chưa hoàn thành trước, vì sau khi xóa mẫu khóa ngoại sẽ thành null
+  // và không còn biết mục nào cần được bỏ khỏi checklist ca trực.
+  const { data: shifts, error: shiftsError } = await supabase
+    .from("truc_nhat_ca")
+    .select("id")
+    .gte("ngay_truc", getAppDateKey());
+  throwDatabaseError(shiftsError);
+  const shiftIds = (shifts ?? []).map((shift) => shift.id as string);
+  if (shiftIds.length > 0) {
+    const { error } = await supabase
+      .from("truc_nhat_ca_dau_viec")
+      .delete()
+      .in("ca_id", shiftIds)
+      .eq("dau_viec_mau_id", id)
+      .eq("hoan_thanh", false);
+    throwDatabaseError(error);
+  }
+
   const { data, error } = await supabase
     .from("truc_nhat_dau_viec_mau")
     .delete()
@@ -3122,6 +3262,7 @@ export async function updateDutyRecurringRule(
 
   if (input.active) {
     await generateDutyShiftsForRule(supabase, id, defaultDutyGenerateToDate(input.endDate));
+    await syncUpcomingGeneratedShiftAssignees(supabase, id, input, assigneeIds);
   }
 
   return getDutyRecurringRule(supabase, id);
