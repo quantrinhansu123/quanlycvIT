@@ -1,6 +1,6 @@
 import { ApiException } from "@/lib/api/response";
 import type { ProjectColor, ProjectInput, ProjectStepConfig } from "@/types/project";
-import type { SubtaskInput, SubtaskUpdateEntry, TaskFileAttachment, TaskLinkAttachment } from "@/types/subtask";
+import type { SubtaskInput, SubtaskPromptItem, SubtaskUpdateEntry, TaskFileAttachment, TaskLinkAttachment } from "@/types/subtask";
 import type { TaskPriority, TaskStatus, WorkTaskInput } from "@/types/task";
 import type {
   DutyChecklistTemplateInput,
@@ -174,6 +174,46 @@ function subtaskUpdateEntries(body: Record<string, unknown>): SubtaskUpdateEntry
       links: parseLinkAttachmentArray(entry.links),
       createdAt,
     };
+  });
+}
+
+export function parseSubtaskPromptItems(body: Record<string, unknown>): SubtaskPromptItem[] {
+  const value = body.items;
+  if (!Array.isArray(value)) {
+    throw new ApiException("Danh sách Prompt phải là một mảng.", 400);
+  }
+  if (value.length > 30) {
+    throw new ApiException("Mỗi Task chỉ được lưu tối đa 30 dòng Prompt.", 400);
+  }
+
+  const ids = new Set<string>();
+  return value.map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new ApiException("Dòng Prompt không hợp lệ.", 400);
+    }
+    const entry = item as Record<string, unknown>;
+    if (typeof entry.id !== "string" || !entry.id.trim() || ids.has(entry.id.trim())) {
+      throw new ApiException("Mã dòng Prompt không hợp lệ hoặc bị trùng.", 400);
+    }
+    ids.add(entry.id.trim());
+
+    if (typeof entry.content !== "string") {
+      throw new ApiException("Nội dung Prompt phải là chuỗi.", 400);
+    }
+    const content = entry.content.trim();
+    if (content.length > 5000) {
+      throw new ApiException("Mỗi nội dung Prompt chỉ được tối đa 5.000 ký tự.", 400);
+    }
+
+    const imageUrl =
+      typeof entry.imageUrl === "string" && entry.imageUrl.trim()
+        ? entry.imageUrl.trim()
+        : undefined;
+    if (imageUrl && !isHttpUrl(imageUrl)) {
+      throw new ApiException("Link ảnh trong Prompt không hợp lệ.", 400);
+    }
+    const status = entry.status === "processed" ? "processed" : "unprocessed";
+    return { id: entry.id.trim(), content, imageUrl, status };
   });
 }
 

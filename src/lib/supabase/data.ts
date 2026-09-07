@@ -13,6 +13,7 @@ import {
 import type {
   Subtask,
   SubtaskInput,
+  SubtaskPromptItem,
   SubtaskReport,
   SubtaskTestHistoryEntry,
   SubtaskTestResult,
@@ -1573,6 +1574,7 @@ function hydrateSubtasks(rows: SubtaskRow[]): Subtask[] {
       links: row.lien_ket_dinh_kem ?? [],
       images: row.hinh_anh ?? [],
       updates: row.cap_nhat_bo_sung ?? [],
+      promptItems: [],
     };
   });
 }
@@ -1717,6 +1719,58 @@ export async function getSubtask(
   if (!data) return null;
   const [subtask] = hydrateSubtasks([data as unknown as SubtaskRow]);
   return subtask;
+}
+
+export async function updateSubtaskPromptItems(
+  supabase: ApiSupabaseClient,
+  id: string,
+  items: SubtaskPromptItem[]
+): Promise<SubtaskPromptItem[] | null> {
+  const { data, error } = await supabase
+    .from("task")
+    .update({ prompt_items: items })
+    .eq("id", id)
+    .select("prompt_items")
+    .maybeSingle();
+  if (error?.code === "42703" || error?.code === "PGRST204") {
+    throw new ApiException(
+      "Cơ sở dữ liệu chưa được cập nhật cho tính năng Prompt.",
+      503
+    );
+  }
+  throwDatabaseError(error);
+  if (!data) return null;
+  return normalizeSubtaskPromptItems(data.prompt_items);
+}
+
+function normalizeSubtaskPromptItems(value: unknown): SubtaskPromptItem[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const entry = item as Record<string, unknown>;
+    if (typeof entry.id !== "string" || typeof entry.content !== "string") return [];
+    return [{
+      id: entry.id,
+      content: entry.content,
+      imageUrl: typeof entry.imageUrl === "string" ? entry.imageUrl : undefined,
+      status: entry.status === "processed" ? "processed" as const : "unprocessed" as const,
+    }];
+  });
+}
+
+export async function getSubtaskPromptItems(
+  supabase: ApiSupabaseClient,
+  id: string
+): Promise<SubtaskPromptItem[]> {
+  const { data, error } = await supabase
+    .from("task")
+    .select("prompt_items")
+    .eq("id", id)
+    .maybeSingle();
+  // Giữ trang chi tiết hoạt động trong lúc deployment chưa chạy migration mới.
+  if (error?.code === "42703" || error?.code === "PGRST204") return [];
+  throwDatabaseError(error);
+  return data ? normalizeSubtaskPromptItems(data.prompt_items) : [];
 }
 
 function subtaskPayload(

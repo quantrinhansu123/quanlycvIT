@@ -21,6 +21,14 @@ export interface SubtaskUpdateEntry {
   createdAt: string;
 }
 
+/** Một yêu cầu dùng để ghép nội dung với URL ảnh thành Prompt có thể sao chép. */
+export interface SubtaskPromptItem {
+  id: string;
+  content: string;
+  imageUrl?: string;
+  status: "unprocessed" | "processed";
+}
+
 export interface Subtask {
   id: string;
   title: string;
@@ -55,6 +63,8 @@ export interface Subtask {
   images: string[];
   /** Các lần bổ sung mô tả và đính kèm sau lần đầu tiên. */
   updates: SubtaskUpdateEntry[];
+  /** Các dòng yêu cầu và ảnh dùng trong khu vực tạo Prompt. */
+  promptItems: SubtaskPromptItem[];
 }
 
 export interface SubtaskInput {

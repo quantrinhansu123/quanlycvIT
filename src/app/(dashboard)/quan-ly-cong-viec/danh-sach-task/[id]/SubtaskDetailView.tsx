@@ -52,6 +52,7 @@ import { useCurrentAccount } from "@/hooks/useCurrentAccount";
 import { useSessionDataCache } from "@/components/providers/SessionDataCacheProvider";
 import { CACHE_RESOURCE } from "@/lib/client-cache/resources";
 import { useSplitView } from "@/components/layout/SplitViewShell";
+import { SubtaskPromptPanel } from "@/components/subtasks/SubtaskPromptPanel";
 
 const SubtaskFormModal = dynamic(
   () => import("@/components/subtasks/SubtaskFormModal").then((mod) => mod.SubtaskFormModal),
@@ -600,6 +601,12 @@ export function SubtaskDetailView({
                 </p>
               </OverviewCard>
             </section>
+
+            <SubtaskPromptPanel
+              key={`${subtask.id}-${subtask.updatedAt ?? ""}`}
+              subtaskId={subtask.id}
+              initialItems={subtask.promptItems}
+            />
 
             <section className="grid grid-cols-1 gap-5 @3xl/detail:grid-cols-3">
               <Panel
