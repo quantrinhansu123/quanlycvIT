@@ -308,7 +308,7 @@ export function ProjectListClient({ accountId, accountRole, initialProjects, ini
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white">
+    <div className="flex h-full min-h-0 min-w-0 max-w-full flex-col overflow-hidden bg-white [contain:inline-size]">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-gray-100 px-3 py-2">
         <button
           type="button"
@@ -371,7 +371,7 @@ export function ProjectListClient({ accountId, accountRole, initialProjects, ini
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
-        <div className="account-table-scroll min-h-0 flex-1 overflow-auto">
+        <div className="account-table-scroll min-h-0 w-0 min-w-full flex-1 overflow-auto [contain:inline-size]">
         {loading ? (
           <TableSkeleton rows={4} />
         ) : error ? (

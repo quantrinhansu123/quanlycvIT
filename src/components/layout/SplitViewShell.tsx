@@ -28,7 +28,7 @@ interface SplitViewShellProps {
 
 /**
  * Layout chia đôi màn hình: danh sách bên trái, chi tiết bên phải, mỗi bên cuộn độc lập.
- * Dưới breakpoint lg không đủ chỗ nên chỉ hiển thị chi tiết (danh sách ẩn).
+ * Dưới breakpoint xl không đủ chỗ (sidebar + list + detail) nên chỉ hiển thị chi tiết.
  * Khi mở chi tiết, cột danh sách thu hẹp để ưu tiên nội dung bên phải.
  */
 export function SplitViewShell({ listSlot, children, detailOpen = true, detailKey }: SplitViewShellProps) {
@@ -54,7 +54,7 @@ export function SplitViewShell({ listSlot, children, detailOpen = true, detailKe
         },
       }}
     >
-      <div className="flex h-full min-h-0 overflow-hidden">
+      <div className="flex h-full min-h-0 w-full min-w-0 max-w-full overflow-hidden [contain:inline-size]">
         <div
           className={cn(
             "min-h-0 min-w-0 shrink-0 flex-col overflow-hidden border-r border-gray-200",
@@ -63,22 +63,22 @@ export function SplitViewShell({ listSlot, children, detailOpen = true, detailKe
               : maximized
               ? "hidden"
               : detailCollapsed
-                ? "hidden lg:flex lg:flex-1"
-                : "hidden lg:flex lg:w-[300px] xl:w-[340px]"
+                ? "hidden xl:flex xl:flex-1"
+                : "hidden xl:flex xl:w-[280px] 2xl:w-[320px]"
           )}
         >
           {listSlot}
         </div>
         <div
           className={cn(
-            "@container/detail h-full min-h-0 min-w-0 flex-1 overflow-y-auto",
-            !detailOpen ? "hidden" : detailCollapsed && "lg:hidden"
+            "@container/detail h-full min-h-0 min-w-0 max-w-full flex-1 overflow-x-clip overflow-y-auto [contain:inline-size]",
+            !detailOpen ? "hidden" : detailCollapsed && "xl:hidden"
           )}
         >
           {children}
         </div>
         {detailOpen && detailCollapsed && !maximized && (
-          <div className="hidden h-full shrink-0 items-start border-l border-gray-200 bg-white px-2 pt-3 lg:flex">
+          <div className="hidden h-full shrink-0 items-start border-l border-gray-200 bg-white px-2 pt-3 xl:flex">
             <button
               type="button"
               onClick={() => setDetailCollapsed(false)}

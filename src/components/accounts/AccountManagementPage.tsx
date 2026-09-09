@@ -516,7 +516,7 @@ export function AccountManagementPage() {
         </div>
       </div>
 
-      <div className="account-table-scroll min-h-0 flex-1 overflow-auto">
+      <div className="account-table-scroll min-h-0 w-0 min-w-full flex-1 overflow-auto [contain:inline-size]">
         <table className="w-full min-w-[1680px] border-collapse text-left text-xs">
           <thead className="sticky top-0 z-10 bg-gray-50 text-xs font-semibold text-gray-700">
             <tr className="border-b border-gray-200">

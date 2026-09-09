@@ -132,8 +132,8 @@ export function LoginPage() {
   };
 
   return (
-    <main className="login-page min-h-screen bg-white text-gray-900">
-      <div className="grid min-h-screen lg:grid-cols-[55%_45%]">
+    <main className="login-page min-h-screen max-w-full overflow-x-clip bg-white text-gray-900">
+      <div className="grid min-h-screen min-w-0 lg:grid-cols-[minmax(0,55%)_minmax(0,45%)]">
         <section className="login-intro relative hidden overflow-hidden border-r border-brand-100 px-8 py-8 lg:flex xl:px-14 xl:py-10">
           <div className="login-grid absolute inset-0 opacity-60" aria-hidden="true" />
           <div className="relative z-10 mx-auto flex w-full max-w-[900px] flex-col">

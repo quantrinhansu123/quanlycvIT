@@ -457,16 +457,16 @@ export function SubtaskDetailView({
     : SUBTASK_STATUS_OPTIONS;
 
   return (
-    <div className="min-h-full bg-white pb-2">
+    <div className="min-h-full min-w-0 max-w-full overflow-x-clip bg-white pb-2 [contain:inline-size]">
       <div className="border-b border-gray-100 bg-white">
-        <div className="mx-auto flex w-full max-w-none items-start justify-between gap-4 px-3 py-3 @sm/detail:px-5">
+        <div className="mx-auto flex w-full min-w-0 max-w-full flex-wrap items-start justify-between gap-3 px-3 py-3 @sm/detail:px-5">
           <div className="flex min-w-0 flex-1 items-start gap-3">
             {splitView && !splitView.maximized ? (
               <>
                 <button
                   type="button"
                   onClick={splitView.toggleDetailCollapsed}
-                  className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 lg:flex"
+                  className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 xl:flex"
                   aria-label="Thu panel chi tiết"
                   title="Thu panel chi tiết"
                 >
@@ -475,7 +475,7 @@ export function SubtaskDetailView({
                 <button
                   type="button"
                   onClick={() => router.back()}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 lg:hidden"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 xl:hidden"
                   aria-label="Quay lại"
                 >
                   <ArrowLeft className="h-4 w-4" />
@@ -518,7 +518,7 @@ export function SubtaskDetailView({
             </nav>
           </div>
 
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
             {statusLocked && (
               <span className="inline-flex h-9 items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700">
                 <CircleCheck className="h-4 w-4" />
@@ -529,7 +529,7 @@ export function SubtaskDetailView({
               <button
                 type="button"
                 onClick={splitView.toggleMaximized}
-                className="hidden h-9 w-9 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 lg:flex"
+                className="hidden h-9 w-9 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 xl:flex"
                 aria-label={splitView.maximized ? "Thu nhỏ về chia đôi màn hình" : "Phóng to toàn màn hình"}
                 title={splitView.maximized ? "Thu nhỏ về chia đôi màn hình" : "Phóng to toàn màn hình"}
               >
@@ -952,8 +952,8 @@ export function SubtaskDetailView({
         )}
       </div>
 
-      <div className="sticky bottom-0 z-20 border-t border-gray-200 bg-white/95 px-4 py-2 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-none gap-2">
+      <div className="sticky bottom-0 z-20 max-w-full border-t border-gray-200 bg-white/95 px-4 py-2 backdrop-blur">
+        <div className="mx-auto flex w-full min-w-0 max-w-full gap-2">
           <BottomTab
             active={tab === "info"}
             onClick={() => setTab("info")}
@@ -1182,7 +1182,7 @@ function BottomTab({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex min-w-[190px] flex-1 items-center justify-center gap-2 rounded-lg px-5 py-2 text-sm font-semibold transition-colors",
+        "flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors sm:px-5",
         active
           ? "bg-brand-600 text-white shadow-sm"
           : "bg-gray-50 text-gray-500 hover:bg-gray-100"

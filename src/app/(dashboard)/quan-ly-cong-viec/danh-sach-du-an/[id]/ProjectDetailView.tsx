@@ -175,10 +175,10 @@ export function ProjectDetailView({
   return (
     <div
       className={cn(
-        "bg-white",
+        "min-w-0 max-w-full bg-white",
         tab === "tasks"
           ? "flex h-full min-h-0 flex-col overflow-hidden"
-          : "min-h-full pb-2"
+          : "min-h-full overflow-x-hidden pb-2"
       )}
     >
       <div className="shrink-0 border-b border-gray-100 bg-white">
@@ -669,7 +669,7 @@ function BottomTab({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex min-w-[190px] flex-1 items-center justify-center gap-2 rounded-lg px-5 py-2 text-sm font-semibold transition-colors",
+        "flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors sm:px-5",
         active
           ? "bg-brand-600 text-white shadow-sm"
           : "bg-gray-50 text-gray-500 hover:bg-gray-100"

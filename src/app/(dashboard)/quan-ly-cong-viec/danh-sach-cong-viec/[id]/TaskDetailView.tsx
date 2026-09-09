@@ -256,16 +256,16 @@ export function TaskDetailView({
   const viewOnly = readOnly || task.status === "done";
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white">
+    <div className="flex h-full min-h-0 min-w-0 max-w-full flex-col overflow-hidden bg-white [contain:inline-size]">
       <div className="shrink-0 border-b border-gray-100 bg-white">
-        <div className="mx-auto flex w-full max-w-none items-start justify-between gap-4 px-3 py-3 @sm/detail:px-5">
+        <div className="mx-auto flex w-full min-w-0 max-w-full flex-wrap items-start justify-between gap-3 px-3 py-3 @sm/detail:px-5">
           <div className="flex min-w-0 flex-1 items-start gap-3">
             {splitView && !splitView.maximized ? (
               <>
                 <button
                   type="button"
                   onClick={splitView.toggleDetailCollapsed}
-                  className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 lg:flex"
+                  className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 xl:flex"
                   aria-label="Thu panel chi tiết"
                   title="Thu panel chi tiết"
                 >
@@ -274,7 +274,7 @@ export function TaskDetailView({
                 <button
                   type="button"
                   onClick={() => router.back()}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 lg:hidden"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 xl:hidden"
                   aria-label="Quay lại"
                 >
                   <ArrowLeft className="h-4 w-4" />
@@ -328,7 +328,7 @@ export function TaskDetailView({
               <button
                 type="button"
                 onClick={splitView.toggleMaximized}
-                className="hidden h-9 w-9 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 lg:flex"
+                className="hidden h-9 w-9 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 xl:flex"
                 aria-label={splitView.maximized ? "Thu nhỏ về chia đôi màn hình" : "Phóng to toàn màn hình"}
                 title={splitView.maximized ? "Thu nhỏ về chia đôi màn hình" : "Phóng to toàn màn hình"}
               >
@@ -829,7 +829,7 @@ function BottomTab({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex min-w-[190px] flex-1 items-center justify-center gap-2 rounded-lg px-5 py-2 text-sm font-semibold transition-colors",
+        "flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors sm:px-5",
         active
           ? "bg-brand-600 text-white shadow-sm"
           : "bg-gray-50 text-gray-500 hover:bg-gray-100"

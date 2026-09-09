@@ -16,18 +16,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <CurrentAccountProvider>
       <SessionDataCacheProvider>
         <FeedbackProvider>
-          <div className="flex h-screen bg-gray-50">
-            <div className="hidden lg:block">
-              <Sidebar collapsed={collapsed} />
-            </div>
+          <div className="flex h-dvh w-full max-w-full overflow-hidden overscroll-none bg-gray-50 [contain:inline-size]">
+            <Sidebar collapsed={collapsed} variant="rail" />
             <MobileMenu open={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} />
 
-            <div className="flex min-w-0 flex-1 flex-col">
+            <div className="flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden [contain:inline-size]">
               <Header
                 onToggleSidebar={() => setCollapsed((prev) => !prev)}
                 onOpenMobileMenu={() => setMobileMenuOpen(true)}
               />
-              <main className="flex-1 overflow-y-auto">{children}</main>
+              <main className="min-h-0 min-w-0 max-w-full flex-1 overflow-x-clip overflow-y-auto [contain:inline-size]">
+                {children}
+              </main>
             </div>
           </div>
         </FeedbackProvider>

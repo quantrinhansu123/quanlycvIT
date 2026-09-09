@@ -372,7 +372,7 @@ export function Header({ onToggleSidebar, onOpenMobileMenu }: HeaderProps) {
 
   return (
     <>
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-2 border-b border-gray-100 bg-white px-4 sm:px-5">
+    <header className="sticky top-0 z-30 flex h-16 min-w-0 items-center gap-2 overflow-x-clip border-b border-gray-100 bg-white px-4 sm:px-5">
       <button
         type="button"
         onClick={onOpenMobileMenu}
@@ -420,7 +420,7 @@ export function Header({ onToggleSidebar, onOpenMobileMenu }: HeaderProps) {
           <section
             role="dialog"
             aria-label="Thông báo Task"
-            className="absolute right-0 top-11 z-50 w-[min(380px,calc(100vw-24px))] overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl"
+            className="absolute right-0 top-11 z-50 w-[380px] max-w-[min(380px,calc(100dvw-1.5rem))] overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl"
           >
             <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3.5">
               <div>

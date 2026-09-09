@@ -246,7 +246,7 @@ export function SubtaskPromptPanel({ subtaskId, initialItems }: SubtaskPromptPan
   }
 
   return (
-    <article className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+    <article className="min-w-0 max-w-full overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm [contain:inline-size]">
       <div className="h-1 bg-sky-500" />
       <div className="p-4 @md/detail:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -280,8 +280,8 @@ export function SubtaskPromptPanel({ subtaskId, initialItems }: SubtaskPromptPan
           </div>
         </div>
 
-        <div className="mt-5 overflow-x-auto rounded-xl border border-gray-200">
-          <table className="w-full min-w-[860px] border-collapse text-left text-sm">
+        <div className="mt-5 w-0 min-w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-gray-200 [contain:inline-size]">
+          <table className="w-full min-w-[720px] border-collapse text-left text-sm">
             <thead className="bg-gray-50">
               <tr className="border-b border-gray-200 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
                 <th className="w-10 px-3 py-3">
