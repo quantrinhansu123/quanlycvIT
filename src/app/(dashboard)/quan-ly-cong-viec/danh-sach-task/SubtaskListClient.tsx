@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
   AlertTriangle,
@@ -41,6 +41,7 @@ import { useSessionDataCache } from "@/components/providers/SessionDataCacheProv
 import { buildCacheKey } from "@/lib/client-cache/session-data-cache";
 import { CACHE_TTL } from "@/lib/client-cache/ttl";
 import { CACHE_RESOURCE } from "@/lib/client-cache/resources";
+import { useSplitView } from "@/components/layout/SplitViewShell";
 
 const SubtaskFormModal = dynamic(
   () => import("@/components/subtasks/SubtaskFormModal").then((mod) => mod.SubtaskFormModal),
@@ -83,8 +84,12 @@ export function SubtaskListClient({
   initialProjects,
 }: SubtaskListClientProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { confirm, notify } = useFeedback();
   const cache = useSessionDataCache();
+  const splitView = useSplitView();
+  const compactList = Boolean(splitView?.detailOpen);
+  const activeSubtaskId = compactList ? pathname.split("/").pop() : undefined;
   const isAdmin = accountRole === "admin";
   const isMember = accountRole === "member";
 
@@ -105,7 +110,7 @@ export function SubtaskListClient({
   const [reportDrawer, setReportDrawer] = useState<Subtask | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
-  const [pageSize, setPageSize] = useState(50);
+  const [pageSize, setPageSize] = useState(30);
   const [page, setPage] = useState(1);
 
   function currentFilters(): Omit<SubtaskListFilters, "page" | "pageSize"> {
@@ -436,7 +441,7 @@ export function SubtaskListClient({
           <ArrowLeft className="h-4 w-4" />
         </button>
 
-        <div className="relative min-w-[180px] max-w-[525px] flex-1 xl:min-w-0">
+        <div className={cn("relative flex-1", compactList ? "min-w-0" : "min-w-[180px] max-w-[525px] xl:min-w-0")}>
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <input
             type="search"
@@ -447,102 +452,110 @@ export function SubtaskListClient({
           />
         </div>
 
-        <SearchableFilterSelect
-          className="w-[110px] shrink-0 2xl:w-[130px]"
-          label="Dự án"
-          searchPlaceholder="Tìm dự án..."
-          value={projectId}
-          onChange={handleProjectChange}
-          options={projects.map((p) => ({ value: p.id, label: p.name }))}
-        />
-        <SearchableFilterMultiSelect
-          className="w-[120px] shrink-0 2xl:w-[140px]"
-          label="Công việc"
-          searchPlaceholder="Tìm công việc..."
-          value={workTaskIds}
-          onChange={setWorkTaskIds}
-          options={workTaskOptions.map((t) => ({ value: t.id, label: t.title }))}
-        />
-        {!isMember && (
-          <MemberFilterMultiSelect
-            className="w-[130px] shrink-0 2xl:w-[150px]"
-            label="Người thực hiện"
-            value={assigneeIds}
-            onChange={setAssigneeIds}
-            options={members}
-          />
+        {!compactList && (
+          <>
+            <SearchableFilterSelect
+              className="w-[110px] shrink-0 2xl:w-[130px]"
+              label="Dự án"
+              searchPlaceholder="Tìm dự án..."
+              value={projectId}
+              onChange={handleProjectChange}
+              options={projects.map((p) => ({ value: p.id, label: p.name }))}
+            />
+            <SearchableFilterMultiSelect
+              className="w-[120px] shrink-0 2xl:w-[140px]"
+              label="Công việc"
+              searchPlaceholder="Tìm công việc..."
+              value={workTaskIds}
+              onChange={setWorkTaskIds}
+              options={workTaskOptions.map((t) => ({ value: t.id, label: t.title }))}
+            />
+            {!isMember && (
+              <MemberFilterMultiSelect
+                className="w-[130px] shrink-0 2xl:w-[150px]"
+                label="Người thực hiện"
+                value={assigneeIds}
+                onChange={setAssigneeIds}
+                options={members}
+              />
+            )}
+            <SearchableFilterMultiSelect
+              className="w-[112px] shrink-0 2xl:w-[124px]"
+              label="Mức độ ưu tiên"
+              searchPlaceholder="Tìm mức ưu tiên..."
+              value={priorities}
+              onChange={(values) => setPriorities(values as TaskPriority[])}
+              options={TASK_PRIORITY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+            />
+            <SearchableFilterMultiSelect
+              className="w-[92px] shrink-0 2xl:w-[104px]"
+              label="Trạng thái"
+              searchPlaceholder="Tìm trạng thái..."
+              value={statuses}
+              onChange={(values) => setStatuses(values as TaskStatus[])}
+              options={SUBTASK_STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+            />
+            <button
+              type="button"
+              onClick={() => setNeedsTesting((current) => !current)}
+              className={cn(
+                "flex h-9 shrink-0 items-center whitespace-nowrap rounded-lg border px-2.5 text-xs font-medium",
+                needsTesting ? "border-violet-300 bg-violet-50 text-violet-700" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+              )}
+            >
+              Cần tôi test
+            </button>
+            <button
+              type="button"
+              onClick={() => setOverdueOnly((prev) => !prev)}
+              className={cn(
+                "flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 text-xs font-medium",
+                overdueOnly ? "border-rose-300 bg-rose-50 text-rose-600" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+              )}
+            >
+              <AlertTriangle className="h-4 w-4" />
+              Task trễ hạn
+            </button>
+          </>
         )}
-        <SearchableFilterMultiSelect
-          className="w-[112px] shrink-0 2xl:w-[124px]"
-          label="Mức độ ưu tiên"
-          searchPlaceholder="Tìm mức ưu tiên..."
-          value={priorities}
-          onChange={(values) => setPriorities(values as TaskPriority[])}
-          options={TASK_PRIORITY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
-        />
-        <SearchableFilterMultiSelect
-          className="w-[92px] shrink-0 2xl:w-[104px]"
-          label="Trạng thái"
-          searchPlaceholder="Tìm trạng thái..."
-          value={statuses}
-          onChange={(values) => setStatuses(values as TaskStatus[])}
-          options={SUBTASK_STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
-        />
-        <button
-          type="button"
-          onClick={() => setNeedsTesting((current) => !current)}
-          className={cn(
-            "flex h-9 shrink-0 items-center whitespace-nowrap rounded-lg border px-2.5 text-xs font-medium",
-            needsTesting ? "border-violet-300 bg-violet-50 text-violet-700" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
-          )}
-        >
-          Cần tôi test
-        </button>
-        <button
-          type="button"
-          onClick={() => setOverdueOnly((prev) => !prev)}
-          className={cn(
-            "flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 text-xs font-medium",
-            overdueOnly ? "border-rose-300 bg-rose-50 text-rose-600" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
-          )}
-        >
-          <AlertTriangle className="h-4 w-4" />
-          Task trễ hạn
-        </button>
 
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          <Button size="sm" className="whitespace-nowrap px-2.5" onClick={() => setFormModal({ mode: "create" })}>
-            <Plus className="h-4 w-4" />
-            Thêm mới
-          </Button>
-          <div className="flex overflow-hidden rounded-lg border border-gray-200 bg-white">
-            <button
-              type="button"
-              onClick={() => setViewMode("table")}
-              className={cn("flex h-9 w-9 items-center justify-center", viewMode === "table" ? "bg-gray-100 text-gray-700" : "text-gray-400 hover:bg-gray-50")}
-              aria-label="Xem dạng bảng"
-            >
-              <TableIcon className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("grid")}
-              className={cn("flex h-9 w-9 items-center justify-center border-l border-gray-200", viewMode === "grid" ? "bg-gray-100 text-gray-700" : "text-gray-400 hover:bg-gray-50")}
-              aria-label="Xem dạng lưới"
-            >
-              <LayoutGrid className="h-4 w-4" />
-            </button>
-          </div>
-          <button
-            type="button"
-            onClick={() => void handleExportPdf()}
-            title="Xuất PDF"
-            disabled={subtasks.length === 0}
-            className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label="Xuất PDF"
-          >
-            <Download className="h-4 w-4" />
-          </button>
+        <div className={cn("flex shrink-0 items-center gap-2", !compactList && "ml-auto")}>
+          {!compactList && (
+            <>
+              <Button size="sm" className="whitespace-nowrap px-2.5" onClick={() => setFormModal({ mode: "create" })}>
+                <Plus className="h-4 w-4" />
+                Thêm mới
+              </Button>
+              <div className="flex overflow-hidden rounded-lg border border-gray-200 bg-white">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("table")}
+                  className={cn("flex h-9 w-9 items-center justify-center", viewMode === "table" ? "bg-gray-100 text-gray-700" : "text-gray-400 hover:bg-gray-50")}
+                  aria-label="Xem dạng bảng"
+                >
+                  <TableIcon className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("grid")}
+                  className={cn("flex h-9 w-9 items-center justify-center border-l border-gray-200", viewMode === "grid" ? "bg-gray-100 text-gray-700" : "text-gray-400 hover:bg-gray-50")}
+                  aria-label="Xem dạng lưới"
+                >
+                  <LayoutGrid className="h-4 w-4" />
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleExportPdf()}
+                title="Xuất PDF"
+                disabled={subtasks.length === 0}
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                aria-label="Xuất PDF"
+              >
+                <Download className="h-4 w-4" />
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -564,7 +577,7 @@ export function SubtaskListClient({
               </Button>
             }
           />
-        ) : viewMode === "table" ? (
+        ) : compactList || viewMode === "table" ? (
           <SubtaskTable
             subtasks={subtasks}
             workTasksById={workTasksById}
@@ -587,6 +600,8 @@ export function SubtaskListClient({
             canTest
             onPassTest={(subtask) => void handleTest(subtask, true)}
             onFailTest={(subtask) => void handleTest(subtask, false)}
+            compact={compactList}
+            activeId={activeSubtaskId}
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3">

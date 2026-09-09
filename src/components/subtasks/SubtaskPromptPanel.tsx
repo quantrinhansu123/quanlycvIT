@@ -10,6 +10,7 @@ import {
   MessageSquareText,
   Plus,
   Trash2,
+  X,
 } from "lucide-react";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { cn } from "@/lib/utils";
@@ -18,16 +19,28 @@ import { subtaskService } from "@/services/subtask-service";
 import type { SubtaskPromptItem } from "@/types/subtask";
 
 const MAX_PROMPT_ITEMS = 30;
+const MAX_IMAGES_PER_ITEM = 10;
 const ACCEPTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/avif"]);
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
 
 function emptyItem(id = crypto.randomUUID()): SubtaskPromptItem {
-  return { id, content: "", status: "unprocessed" };
+  return { id, content: "", imageUrls: [], status: "unprocessed" };
+}
+
+function itemImageUrls(item: SubtaskPromptItem): string[] {
+  return item.imageUrls ?? [];
 }
 
 function combinedPrompt(item: SubtaskPromptItem): string {
-  return [item.content.trim(), item.imageUrl].filter(Boolean).join("\n");
+  return [item.content.trim(), ...itemImageUrls(item)].filter(Boolean).join("\n");
+}
+
+function mergeSelectedPrompts(items: SubtaskPromptItem[]): string {
+  return items
+    .map((item) => combinedPrompt(item))
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 async function copyToClipboard(value: string): Promise<void> {
@@ -55,36 +68,52 @@ export function SubtaskPromptPanel({ subtaskId, initialItems }: SubtaskPromptPan
   const initial = initialItems.length > 0 ? initialItems : [emptyItem(`prompt-empty-${subtaskId}`)];
   const [items, setItems] = useState<SubtaskPromptItem[]>(initial);
   const itemsRef = useRef(initial);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [uploadingIds, setUploadingIds] = useState<Set<string>>(new Set());
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
-  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [copiedMerged, setCopiedMerged] = useState(false);
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const saveGenerationRef = useRef(0);
   const hasEditedRef = useRef(false);
 
   useEffect(() => {
+    // SSR chi tiết đã kèm prompt_items — bỏ GET trùng khi đã có dữ liệu.
+    const hasInitialPrompts = initialItems.some(
+      (item) => item.content.trim() || (item.imageUrls?.length ?? 0) > 0
+    );
+    if (hasInitialPrompts) return;
+
     let active = true;
     void subtaskService.getPromptItems(subtaskId).then((savedItems) => {
       if (!active || hasEditedRef.current || savedItems.length === 0) return;
       itemsRef.current = savedItems;
       setItems(savedItems);
+      setSelectedIds([]);
     }).catch(() => {
       // Trang vẫn dùng được khi deployment chưa áp dụng migration Prompt.
     });
     return () => {
       active = false;
     };
+    // Chỉ refetch theo task; initialItems lấy từ lần mount (SSR / remount sau update).
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- tránh refetch khi parent re-render
   }, [subtaskId]);
+
+  const selectedItems = items.filter((item) => selectedIds.includes(item.id));
+  const mergedPrompt = mergeSelectedPrompts(selectedItems);
+  const allSelected = items.length > 0 && items.every((item) => selectedIds.includes(item.id));
+  const someSelected = selectedIds.length > 0 && !allSelected;
 
   function replaceItems(next: SubtaskPromptItem[]) {
     itemsRef.current = next;
     setItems(next);
+    setSelectedIds((current) => current.filter((id) => next.some((item) => item.id === id)));
   }
 
   function persist(next: SubtaskPromptItem[]) {
     const generation = ++saveGenerationRef.current;
     setSaveStatus("saving");
-    const payload = next.filter((item) => item.content.trim() || item.imageUrl);
+    const payload = next.filter((item) => item.content.trim() || itemImageUrls(item).length > 0);
     saveQueueRef.current = saveQueueRef.current
       .catch(() => undefined)
       .then(async () => {
@@ -123,21 +152,70 @@ export function SubtaskPromptPanel({ subtaskId, initialItems }: SubtaskPromptPan
     persist(remaining);
   }
 
-  async function uploadImage(itemId: string, file: File) {
+  function removeImage(itemId: string, imageUrl: string) {
+    const current = itemsRef.current.find((item) => item.id === itemId);
+    if (!current) return;
+    updateItem(itemId, { imageUrls: itemImageUrls(current).filter((url) => url !== imageUrl) }, true);
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds((current) =>
+      current.includes(id) ? current.filter((itemId) => itemId !== id) : [...current, id]
+    );
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds(allSelected ? [] : items.map((item) => item.id));
+  }
+
+  async function uploadImages(itemId: string, files: File[]) {
+    if (files.length === 0) return;
     hasEditedRef.current = true;
-    if (!ACCEPTED_IMAGE_TYPES.has(file.type)) {
-      notify({ type: "error", title: "Ảnh không hợp lệ", description: "Chỉ hỗ trợ JPG, PNG, WEBP hoặc AVIF." });
-      return;
-    }
-    if (file.size === 0 || file.size > 10 * 1024 * 1024) {
-      notify({ type: "error", title: "Ảnh không hợp lệ", description: "Ảnh phải có dung lượng từ 1 byte đến 10 MB." });
+
+    const current = itemsRef.current.find((item) => item.id === itemId);
+    if (!current) return;
+    const existing = itemImageUrls(current);
+    const availableSlots = MAX_IMAGES_PER_ITEM - existing.length;
+    if (availableSlots <= 0) {
+      notify({
+        type: "error",
+        title: "Đã đủ ảnh",
+        description: `Mỗi yêu cầu chỉ được tối đa ${MAX_IMAGES_PER_ITEM} ảnh.`,
+      });
       return;
     }
 
-    setUploadingIds((current) => new Set(current).add(itemId));
+    const selected = files.slice(0, availableSlots);
+    if (files.length > availableSlots) {
+      notify({
+        type: "error",
+        title: "Vượt giới hạn ảnh",
+        description: `Chỉ thêm ${availableSlots} ảnh để không vượt quá ${MAX_IMAGES_PER_ITEM} ảnh.`,
+      });
+    }
+
+    for (const file of selected) {
+      if (!ACCEPTED_IMAGE_TYPES.has(file.type)) {
+        notify({ type: "error", title: "Ảnh không hợp lệ", description: "Chỉ hỗ trợ JPG, PNG, WEBP hoặc AVIF." });
+        return;
+      }
+      if (file.size === 0 || file.size > 10 * 1024 * 1024) {
+        notify({ type: "error", title: "Ảnh không hợp lệ", description: "Ảnh phải có dung lượng từ 1 byte đến 10 MB." });
+        return;
+      }
+    }
+
+    setUploadingIds((currentIds) => new Set(currentIds).add(itemId));
     try {
-      const imageUrl = await subtaskService.uploadImage(file);
-      const next = itemsRef.current.map((item) => (item.id === itemId ? { ...item, imageUrl } : item));
+      const uploaded: string[] = [];
+      for (const file of selected) {
+        uploaded.push(await subtaskService.uploadImage(file));
+      }
+      const next = itemsRef.current.map((item) =>
+        item.id === itemId
+          ? { ...item, imageUrls: [...itemImageUrls(item), ...uploaded].slice(0, MAX_IMAGES_PER_ITEM) }
+          : item
+      );
       replaceItems(next);
       persist(next);
     } catch (error) {
@@ -147,22 +225,21 @@ export function SubtaskPromptPanel({ subtaskId, initialItems }: SubtaskPromptPan
         description: getErrorMessage(error, "Vui lòng thử lại."),
       });
     } finally {
-      setUploadingIds((current) => {
-        const next = new Set(current);
+      setUploadingIds((currentIds) => {
+        const next = new Set(currentIds);
         next.delete(itemId);
         return next;
       });
     }
   }
 
-  async function handleCopy(item: SubtaskPromptItem) {
-    const prompt = combinedPrompt(item);
-    if (!prompt) return;
+  async function handleCopyMerged() {
+    if (!mergedPrompt) return;
     try {
-      await copyToClipboard(prompt);
-      setCopiedId(item.id);
-      window.setTimeout(() => setCopiedId((current) => (current === item.id ? null : current)), 1500);
-      notify({ type: "success", title: "Đã sao chép Prompt" });
+      await copyToClipboard(mergedPrompt);
+      setCopiedMerged(true);
+      window.setTimeout(() => setCopiedMerged(false), 1500);
+      notify({ type: "success", title: "Đã sao chép Prompt ghép" });
     } catch {
       notify({ type: "error", title: "Không thể sao chép", description: "Hãy chọn nội dung và sao chép thủ công." });
     }
@@ -179,7 +256,7 @@ export function SubtaskPromptPanel({ subtaskId, initialItems }: SubtaskPromptPan
               Prompt
             </h2>
             <p className="mt-2 text-xs text-gray-500">
-              Nhập yêu cầu, dán ảnh bằng Ctrl+V và sao chép Prompt đã ghép với link Cloudinary.
+              Nhập yêu cầu, tải nhiều ảnh (mỗi ảnh một link Cloudinary). Tick chọn để ghép Prompt rồi sao chép.
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -203,147 +280,218 @@ export function SubtaskPromptPanel({ subtaskId, initialItems }: SubtaskPromptPan
           </div>
         </div>
 
-        <div className="mt-5 space-y-4">
-          {items.map((item, index) => {
-            const prompt = combinedPrompt(item);
-            const uploading = uploadingIds.has(item.id);
-            return (
-              <div key={item.id} className="rounded-xl border border-gray-200 bg-gray-50/70 p-3 @md/detail:p-4">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <span className="text-sm font-bold text-gray-700">Yêu cầu {index + 1}</span>
-                  <button
-                    type="button"
-                    onClick={() => removeItem(item.id)}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition hover:bg-rose-50 hover:text-rose-600"
-                    aria-label={`Xóa yêu cầu ${index + 1}`}
+        <div className="mt-5 overflow-x-auto rounded-xl border border-gray-200">
+          <table className="w-full min-w-[860px] border-collapse text-left text-sm">
+            <thead className="bg-gray-50">
+              <tr className="border-b border-gray-200 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                <th className="w-10 px-3 py-3">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = someSelected;
+                    }}
+                    onChange={toggleSelectAll}
+                    disabled={items.length === 0}
+                    className="h-4 w-4 rounded border-gray-300 text-sky-600 focus:ring-sky-500"
+                    aria-label="Chọn tất cả yêu cầu"
+                  />
+                </th>
+                <th className="w-12 whitespace-nowrap px-2 py-3">#</th>
+                <th className="min-w-[220px] px-2 py-3">Nội dung yêu cầu</th>
+                <th className="min-w-[260px] whitespace-nowrap px-2 py-3">Ảnh tham chiếu</th>
+                <th className="w-[140px] whitespace-nowrap px-2 py-3">Trạng thái</th>
+                <th className="w-12 px-2 py-3 text-center">Xóa</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {items.map((item, index) => {
+                const uploading = uploadingIds.has(item.id);
+                const selected = selectedIds.includes(item.id);
+                const images = itemImageUrls(item);
+                const canAddMore = images.length < MAX_IMAGES_PER_ITEM;
+                return (
+                  <tr
+                    key={item.id}
+                    className={cn(
+                      "align-top transition",
+                      selected ? "bg-sky-50/60" : "bg-white hover:bg-gray-50/80"
+                    )}
                   >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 gap-3 @2xl/detail:grid-cols-[minmax(0,1fr)_220px_160px]">
-                  <label className="block">
-                    <span className="mb-1.5 block text-xs font-semibold text-gray-500">Nội dung yêu cầu</span>
-                    <textarea
-                      value={item.content}
-                      onChange={(event) => updateItem(item.id, { content: event.target.value })}
-                      onBlur={() => persist(itemsRef.current)}
-                      maxLength={5000}
-                      rows={5}
-                      placeholder="Gõ nội dung yêu cầu..."
-                      className="min-h-32 w-full resize-y rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm leading-6 text-gray-800 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
-                    />
-                  </label>
-
-                  <div>
-                    <span className="mb-1.5 block text-xs font-semibold text-gray-500">Ảnh tham chiếu</span>
-                    <label
-                      className={cn(
-                        "flex min-h-32 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-xl border border-dashed bg-white text-center outline-none transition focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-100",
-                        item.imageUrl ? "border-sky-200" : "border-gray-300 hover:border-sky-400 hover:bg-sky-50/40"
-                      )}
-                      tabIndex={0}
-                      onPaste={(event) => {
-                        const file = Array.from(event.clipboardData.items)
-                          .find((entry) => entry.kind === "file" && entry.type.startsWith("image/"))
-                          ?.getAsFile();
-                        if (!file) return;
-                        event.preventDefault();
-                        void uploadImage(item.id, file);
-                      }}
-                    >
+                    <td className="px-3 py-3">
                       <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp,image/avif"
-                        className="sr-only"
-                        disabled={uploading}
-                        onChange={(event) => {
-                          const file = event.target.files?.[0];
-                          if (file) void uploadImage(item.id, file);
-                          event.target.value = "";
-                        }}
+                        type="checkbox"
+                        checked={selected}
+                        onChange={() => toggleSelect(item.id)}
+                        className="h-4 w-4 rounded border-gray-300 text-sky-600 focus:ring-sky-500"
+                        aria-label={`Chọn yêu cầu ${index + 1}`}
                       />
-                      {uploading ? (
-                        <>
-                          <LoaderCircle className="h-6 w-6 animate-spin text-sky-600" />
-                          <span className="mt-2 text-xs font-semibold text-sky-700">Đang tải lên Cloudinary...</span>
-                        </>
-                      ) : item.imageUrl ? (
-                        <>
-                          {/* URL Cloudinary động nên dùng img thay vì giới hạn hostname của next/image. */}
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={item.imageUrl} alt={`Ảnh yêu cầu ${index + 1}`} className="h-24 w-full object-cover" />
-                          <span className="w-full truncate px-2 py-1.5 text-[11px] text-sky-700">{item.imageUrl}</span>
-                        </>
-                      ) : (
-                        <>
-                          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-sky-50 text-sky-600">
-                            <ImagePlus className="h-5 w-5" />
-                          </span>
-                          <span className="mt-2 text-xs font-semibold text-gray-600">Nhấn để chọn ảnh</span>
-                          <span className="mt-1 inline-flex items-center gap-1 text-[11px] text-gray-400">
-                            <ClipboardPaste className="h-3 w-3" /> Dán bằng Ctrl+V
-                          </span>
-                        </>
-                      )}
-                    </label>
-                    {item.imageUrl && (
+                    </td>
+                    <td className="px-2 py-3 text-xs font-semibold text-gray-500">{index + 1}</td>
+                    <td className="px-2 py-3">
+                      <textarea
+                        value={item.content}
+                        onChange={(event) => updateItem(item.id, { content: event.target.value })}
+                        onBlur={() => persist(itemsRef.current)}
+                        maxLength={5000}
+                        rows={3}
+                        placeholder="Gõ nội dung yêu cầu..."
+                        className="min-h-20 w-full resize-y rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-sm leading-5 text-gray-800 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                      />
+                    </td>
+                    <td className="px-2 py-3">
+                      <div className="space-y-2">
+                        {images.length > 0 && (
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {images.map((url, imageIndex) => (
+                              <div
+                                key={`${url}-${imageIndex}`}
+                                className="group relative overflow-hidden rounded-lg border border-sky-100 bg-white"
+                              >
+                                {/* URL Cloudinary động nên dùng img thay vì giới hạn hostname của next/image. */}
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={url}
+                                  alt={`Ảnh ${imageIndex + 1} yêu cầu ${index + 1}`}
+                                  className="h-14 w-full object-cover"
+                                />
+                                <p className="truncate px-1.5 py-1 text-[9px] leading-tight text-sky-700" title={url}>
+                                  {url}
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => removeImage(item.id, url)}
+                                  className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/55 text-white opacity-0 transition group-hover:opacity-100"
+                                  aria-label={`Xóa ảnh ${imageIndex + 1}`}
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        <label
+                          className={cn(
+                            "flex min-h-16 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed bg-white px-2 py-2 text-center outline-none transition focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-100",
+                            !canAddMore || uploading
+                              ? "cursor-not-allowed border-gray-200 opacity-60"
+                              : images.length > 0
+                                ? "border-sky-200 hover:border-sky-400 hover:bg-sky-50/40"
+                                : "border-gray-300 hover:border-sky-400 hover:bg-sky-50/40"
+                          )}
+                          tabIndex={canAddMore && !uploading ? 0 : -1}
+                          onPaste={(event) => {
+                            if (!canAddMore || uploading) return;
+                            const pasted = Array.from(event.clipboardData.items)
+                              .filter((entry) => entry.kind === "file" && entry.type.startsWith("image/"))
+                              .map((entry) => entry.getAsFile())
+                              .filter((file): file is File => Boolean(file));
+                            if (pasted.length === 0) return;
+                            event.preventDefault();
+                            void uploadImages(item.id, pasted);
+                          }}
+                        >
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp,image/avif"
+                            multiple
+                            className="sr-only"
+                            disabled={uploading || !canAddMore}
+                            onChange={(event) => {
+                              const files = Array.from(event.target.files ?? []);
+                              if (files.length > 0) void uploadImages(item.id, files);
+                              event.target.value = "";
+                            }}
+                          />
+                          {uploading ? (
+                            <>
+                              <LoaderCircle className="h-5 w-5 animate-spin text-sky-600" />
+                              <span className="mt-1 text-[10px] font-semibold text-sky-700">Đang tải lên Cloudinary...</span>
+                            </>
+                          ) : (
+                            <>
+                              <ImagePlus className="h-4 w-4 text-sky-600" />
+                              <span className="mt-1 text-[10px] font-semibold text-gray-600">
+                                {canAddMore
+                                  ? images.length > 0
+                                    ? `Thêm ảnh (${images.length}/${MAX_IMAGES_PER_ITEM})`
+                                    : "Chọn nhiều ảnh / Ctrl+V"
+                                  : `Đã đủ ${MAX_IMAGES_PER_ITEM} ảnh`}
+                              </span>
+                              {canAddMore && (
+                                <span className="mt-0.5 inline-flex items-center gap-0.5 text-[10px] text-gray-400">
+                                  <ClipboardPaste className="h-2.5 w-2.5" /> Mỗi ảnh → 1 link
+                                </span>
+                              )}
+                            </>
+                          )}
+                        </label>
+                      </div>
+                    </td>
+                    <td className="px-2 py-3">
+                      <select
+                        value={item.status}
+                        onChange={(event) => updateItem(
+                          item.id,
+                          { status: event.target.value as SubtaskPromptItem["status"] },
+                          true
+                        )}
+                        className={cn(
+                          "h-9 w-full rounded-lg border bg-white px-2 text-xs font-semibold outline-none transition focus:ring-2",
+                          item.status === "processed"
+                            ? "border-emerald-200 text-emerald-700 focus:border-emerald-400 focus:ring-emerald-100"
+                            : "border-amber-200 text-amber-700 focus:border-amber-400 focus:ring-amber-100"
+                        )}
+                      >
+                        <option value="unprocessed">Chưa xử lý</option>
+                        <option value="processed">Đã xử lý</option>
+                      </select>
+                    </td>
+                    <td className="px-2 py-3 text-center">
                       <button
                         type="button"
-                        onClick={() => updateItem(item.id, { imageUrl: undefined }, true)}
-                        className="mt-1.5 text-xs font-medium text-rose-600 hover:underline"
+                        onClick={() => removeItem(item.id)}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition hover:bg-rose-50 hover:text-rose-600"
+                        aria-label={`Xóa yêu cầu ${index + 1}`}
                       >
-                        Xóa ảnh
+                        <Trash2 className="h-4 w-4" />
                       </button>
-                    )}
-                  </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
 
-                  <label className="block">
-                    <span className="mb-1.5 block text-xs font-semibold text-gray-500">Trạng thái</span>
-                    <select
-                      value={item.status}
-                      onChange={(event) => updateItem(
-                        item.id,
-                        { status: event.target.value as SubtaskPromptItem["status"] },
-                        true
-                      )}
-                      className={cn(
-                        "h-10 w-full rounded-xl border bg-white px-3 text-sm font-semibold outline-none transition focus:ring-2",
-                        item.status === "processed"
-                          ? "border-emerald-200 text-emerald-700 focus:border-emerald-400 focus:ring-emerald-100"
-                          : "border-amber-200 text-amber-700 focus:border-amber-400 focus:ring-amber-100"
-                      )}
-                    >
-                      <option value="unprocessed">Chưa xử lý</option>
-                      <option value="processed">Đã xử lý</option>
-                    </select>
-                  </label>
-                </div>
-
-                <div className="mt-3">
-                  <div className="mb-1.5 flex items-center justify-between gap-3">
-                    <span className="text-xs font-semibold text-gray-500">Prompt đã ghép</span>
-                    <button
-                      type="button"
-                      onClick={() => void handleCopy(item)}
-                      disabled={!prompt}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-sky-200 bg-white px-2.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      {copiedId === item.id ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                      {copiedId === item.id ? "Đã sao chép" : "Sao chép"}
-                    </button>
-                  </div>
-                  <textarea
-                    value={prompt}
-                    readOnly
-                    rows={3}
-                    placeholder="Prompt sẽ tự động xuất hiện tại đây..."
-                    className="min-h-20 w-full resize-y rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm leading-6 text-gray-700 outline-none"
-                  />
-                </div>
-              </div>
-            );
-          })}
+        <div className="mt-4 rounded-xl border border-sky-100 bg-sky-50/50 p-3 @md/detail:p-4">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <span className="text-xs font-semibold text-sky-800">Prompt ghép</span>
+              <p className="mt-0.5 text-[11px] text-sky-700/80">
+                {selectedIds.length === 0
+                  ? "Tick chọn một hoặc nhiều yêu cầu để ghép Prompt."
+                  : `Đã chọn ${selectedIds.length} yêu cầu`}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleCopyMerged()}
+              disabled={!mergedPrompt}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-sky-200 bg-white px-2.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {copiedMerged ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+              {copiedMerged ? "Đã sao chép" : "Sao chép"}
+            </button>
+          </div>
+          <textarea
+            value={mergedPrompt}
+            readOnly
+            rows={5}
+            placeholder="Prompt ghép sẽ hiện tại đây khi bạn chọn yêu cầu..."
+            className="min-h-28 w-full resize-y rounded-xl border border-sky-100 bg-white px-3 py-2.5 text-sm leading-6 text-gray-700 outline-none"
+          />
         </div>
       </div>
     </article>

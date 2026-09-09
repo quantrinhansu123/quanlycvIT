@@ -3,7 +3,7 @@ import { listDirectory, listProjectDirectory, listSubtasksPage, listWorkTaskDire
 import type { RequestAccountAccess } from "@/lib/supabase/authorization";
 
 const INITIAL_PAGE = 1;
-const INITIAL_PAGE_SIZE = 50;
+const INITIAL_PAGE_SIZE = 30;
 
 export async function loadSubtaskListInitialData(supabase: ApiSupabaseClient, access: RequestAccountAccess) {
   const isMember = access.role === "member";

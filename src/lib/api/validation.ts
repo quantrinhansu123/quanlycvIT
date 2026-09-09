@@ -205,16 +205,37 @@ export function parseSubtaskPromptItems(body: Record<string, unknown>): SubtaskP
       throw new ApiException("Mỗi nội dung Prompt chỉ được tối đa 5.000 ký tự.", 400);
     }
 
-    const imageUrl =
-      typeof entry.imageUrl === "string" && entry.imageUrl.trim()
-        ? entry.imageUrl.trim()
-        : undefined;
-    if (imageUrl && !isHttpUrl(imageUrl)) {
+    const imageUrls = parsePromptImageUrls(entry);
+    const status = entry.status === "processed" ? "processed" : "unprocessed";
+    return { id: entry.id.trim(), content, imageUrls, status };
+  });
+}
+
+/** Đọc imageUrls[]; tương thích dữ liệu cũ chỉ có imageUrl đơn. */
+function parsePromptImageUrls(entry: Record<string, unknown>): string[] {
+  const urls: string[] = [];
+  if (Array.isArray(entry.imageUrls)) {
+    for (const value of entry.imageUrls) {
+      if (typeof value !== "string" || !value.trim()) {
+        throw new ApiException("Danh sách ảnh Prompt không hợp lệ.", 400);
+      }
+      const url = value.trim();
+      if (!isHttpUrl(url)) {
+        throw new ApiException("Link ảnh trong Prompt không hợp lệ.", 400);
+      }
+      urls.push(url);
+    }
+  } else if (typeof entry.imageUrl === "string" && entry.imageUrl.trim()) {
+    const url = entry.imageUrl.trim();
+    if (!isHttpUrl(url)) {
       throw new ApiException("Link ảnh trong Prompt không hợp lệ.", 400);
     }
-    const status = entry.status === "processed" ? "processed" : "unprocessed";
-    return { id: entry.id.trim(), content, imageUrl, status };
-  });
+    urls.push(url);
+  }
+  if (urls.length > 10) {
+    throw new ApiException("Mỗi dòng Prompt chỉ được tối đa 10 ảnh.", 400);
+  }
+  return urls;
 }
 
 function progressValue(body: Record<string, unknown>): number {

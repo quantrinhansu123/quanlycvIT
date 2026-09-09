@@ -1,13 +1,6 @@
 import { createServerSupabaseClient } from "@/lib/supabase/api";
 import { assertSubtaskReadable, requireRequestAccount } from "@/lib/supabase/authorization";
-import {
-  getSubtask,
-  listSubtaskTestHistory,
-  listDirectory,
-  listSubtaskActivity,
-  listSubtaskReports,
-  listWorkTasks,
-} from "@/lib/supabase/data";
+import { getSubtask, getWorkTaskDirectoryItem } from "@/lib/supabase/data";
 import { SubtaskDetailView } from "./SubtaskDetailView";
 
 interface SubtaskDetailPageProps {
@@ -18,28 +11,26 @@ export default async function SubtaskDetailPage({ params }: SubtaskDetailPagePro
   const { id } = await params;
   const supabase = await createServerSupabaseClient();
   const access = await requireRequestAccount(supabase);
-  await assertSubtaskReadable(supabase, access, id);
-  const memberAssigneeIds = access.role === "member" ? [access.id] : undefined;
 
-  const [subtask, workTasks, reports, members, activity, testHistory] = await Promise.all([
+  // Song song ACL + task; chỉ lấy 1 công việc cha — không tải cả directory/members.
+  const [, subtask] = await Promise.all([
+    assertSubtaskReadable(supabase, access, id),
     getSubtask(supabase, id),
-    listWorkTasks(supabase, { assigneeIds: memberAssigneeIds }),
-    listSubtaskReports(supabase, id),
-    listDirectory(supabase),
-    listSubtaskActivity(supabase, id),
-    listSubtaskTestHistory(supabase, id),
   ]);
+  const parentWorkTask = subtask
+    ? await getWorkTaskDirectoryItem(supabase, subtask.workTaskId)
+    : null;
 
   return (
     <SubtaskDetailView
       subtaskId={id}
       initialSubtask={subtask}
-      initialWorkTasks={workTasks}
-      initialReports={reports}
-      initialMembers={members}
-      initialActivity={activity.items}
-      initialActivityTotal={activity.total}
-      initialTestHistory={testHistory}
+      initialWorkTasks={parentWorkTask ? [parentWorkTask] : []}
+      initialReports={[]}
+      initialMembers={[]}
+      initialActivity={[]}
+      initialActivityTotal={0}
+      initialTestHistory={[]}
     />
   );
 }

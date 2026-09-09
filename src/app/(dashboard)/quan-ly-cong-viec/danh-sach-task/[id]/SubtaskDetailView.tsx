@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -30,7 +30,7 @@ import { projectService } from "@/services/project-service";
 import { taskService } from "@/services/task-service";
 import { subtaskService } from "@/services/subtask-service";
 import type { ProjectMember } from "@/types/project";
-import type { TaskFileAttachment, TaskLinkAttachment, WorkTask } from "@/types/task";
+import type { TaskFileAttachment, TaskLinkAttachment, WorkTaskDirectoryItem } from "@/types/task";
 import { SUBTASK_STATUS_OPTIONS, TASK_PRIORITY_OPTIONS } from "@/types/task";
 import type { Subtask, SubtaskReport, SubtaskTestHistoryEntry } from "@/types/subtask";
 import { isSubtaskOverdue } from "@/types/subtask";
@@ -52,8 +52,11 @@ import { useCurrentAccount } from "@/hooks/useCurrentAccount";
 import { useSessionDataCache } from "@/components/providers/SessionDataCacheProvider";
 import { CACHE_RESOURCE } from "@/lib/client-cache/resources";
 import { useSplitView } from "@/components/layout/SplitViewShell";
-import { SubtaskPromptPanel } from "@/components/subtasks/SubtaskPromptPanel";
 
+const SubtaskPromptPanel = dynamic(
+  () => import("@/components/subtasks/SubtaskPromptPanel").then((mod) => mod.SubtaskPromptPanel),
+  { ssr: false, loading: () => <div className="h-40 animate-pulse rounded-2xl bg-gray-100" /> }
+);
 const SubtaskFormModal = dynamic(
   () => import("@/components/subtasks/SubtaskFormModal").then((mod) => mod.SubtaskFormModal),
   { ssr: false, loading: () => <ModalLoadingFallback /> }
@@ -78,7 +81,7 @@ function getDayDistance(date: string): number {
 interface SubtaskDetailViewProps {
   subtaskId: string;
   initialSubtask: Subtask | null;
-  initialWorkTasks: WorkTask[];
+  initialWorkTasks: WorkTaskDirectoryItem[];
   initialReports: SubtaskReport[];
   initialMembers: ProjectMember[];
   initialActivity: TaskActivityEvent[];
@@ -105,13 +108,15 @@ export function SubtaskDetailView({
   const cache = useSessionDataCache();
   const splitView = useSplitView();
   const [subtask, setSubtask] = useState<Subtask | null>(initialSubtask);
-  const [workTasks, setWorkTasks] = useState<WorkTask[]>(initialWorkTasks);
+  const [workTasks, setWorkTasks] = useState<WorkTaskDirectoryItem[]>(initialWorkTasks);
   const [reports, setReports] = useState<SubtaskReport[]>(initialReports);
   const [members, setMembers] = useState<ProjectMember[]>(initialMembers);
   const [activity, setActivity] = useState<TaskActivityEvent[]>(initialActivity);
   const [activityTotal, setActivityTotal] = useState(initialActivityTotal);
   const [testHistory, setTestHistory] = useState<SubtaskTestHistoryEntry[]>(initialTestHistory);
   const [activityLoadingMore, setActivityLoadingMore] = useState(false);
+  const [secondaryLoading, setSecondaryLoading] = useState(false);
+  const [directoryReady, setDirectoryReady] = useState(initialMembers.length > 0);
   const [error, setError] = useState(false);
   const [tab, setTab] = useState<Tab>("info");
   const [editing, setEditing] = useState(false);
@@ -119,37 +124,6 @@ export function SubtaskDetailView({
   const [reportAtCompletion, setReportAtCompletion] = useState(false);
   const [quickUpdating, setQuickUpdating] = useState(false);
   const [accepting, setAccepting] = useState(false);
-  const load = useCallback(async () => {
-    try {
-      const [subtaskData, workTaskList, reportData, memberData, activityPage, historyData] =
-        await Promise.all([
-          subtaskService.getSubtaskById(subtaskId),
-          taskService.getTasks(),
-          subtaskService.getSubtaskReports(subtaskId),
-          projectService.getDirectory(),
-          subtaskService.getSubtaskActivity(subtaskId, 1, ACTIVITY_PAGE_SIZE),
-          subtaskService.getSubtaskTestHistory(subtaskId),
-        ]);
-      setSubtask(subtaskData);
-      setWorkTasks(workTaskList);
-      setReports(reportData);
-      setMembers(memberData);
-      setActivity(activityPage.items);
-      setActivityTotal(activityPage.total);
-      setTestHistory(historyData);
-      setError(false);
-    } catch (loadError) {
-      setError(true);
-      notify({
-        type: "error",
-        title: "Không thể tải chi tiết Task",
-        description: getErrorMessage(
-          loadError,
-          "Vui lòng kiểm tra kết nối và thử lại."
-        ),
-      });
-    }
-  }, [subtaskId, notify]);
 
   /**
    * Nhật ký hoạt động được ghi bằng trigger DB ngay khi mutation ghi xong nên chỉ cần
@@ -164,6 +138,81 @@ export function SubtaskDetailView({
       // Bỏ qua lỗi làm mới timeline — không chặn luồng thao tác chính.
     }
   }, [subtaskId]);
+
+  const load = useCallback(async () => {
+    try {
+      const subtaskData = await subtaskService.getSubtaskById(subtaskId);
+      setSubtask(subtaskData);
+      setError(false);
+      void refreshActivity();
+      if (tab === "reports") {
+        const reportData = await subtaskService.getSubtaskReports(subtaskId);
+        setReports(reportData);
+      }
+    } catch (loadError) {
+      setError(true);
+      notify({
+        type: "error",
+        title: "Không thể tải chi tiết Task",
+        description: getErrorMessage(
+          loadError,
+          "Vui lòng kiểm tra kết nối và thử lại."
+        ),
+      });
+    }
+  }, [subtaskId, notify, tab, refreshActivity]);
+
+  /** Directory đầy đủ chỉ cần khi mở form sửa / báo cáo. */
+  const ensureDirectory = useCallback(async () => {
+    if (directoryReady) return;
+    const [workTaskList, memberData] = await Promise.all([
+      taskService.getTaskDirectory(),
+      projectService.getDirectory(),
+    ]);
+    setWorkTasks(workTaskList);
+    setMembers(memberData);
+    setDirectoryReady(true);
+  }, [directoryReady]);
+
+  // Timeline: trì hoãn sau paint để không tranh băng thông với hydrate UI.
+  useEffect(() => {
+    let active = true;
+    const timer = window.setTimeout(() => {
+      void Promise.all([
+        subtaskService.getSubtaskActivity(subtaskId, 1, ACTIVITY_PAGE_SIZE),
+        subtaskService.getSubtaskTestHistory(subtaskId),
+      ])
+        .then(([activityPage, historyData]) => {
+          if (!active) return;
+          setActivity(activityPage.items);
+          setActivityTotal(activityPage.total);
+          setTestHistory(historyData);
+        })
+        .catch(() => undefined);
+    }, 400);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [subtaskId]);
+
+  // Báo cáo chỉ tải khi mở tab lịch sử.
+  useEffect(() => {
+    if (tab !== "reports") return;
+    let active = true;
+    setSecondaryLoading(true);
+    void subtaskService.getSubtaskReports(subtaskId)
+      .then((reportData) => {
+        if (active) setReports(reportData);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setSecondaryLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [tab, subtaskId]);
 
   const handleAttachmentSave = useCallback(async (value: {
     files: TaskFileAttachment[];
@@ -388,7 +437,10 @@ export function SubtaskDetailView({
   }
 
   const workTask = workTasks.find((item) => item.id === subtask.workTaskId);
-  const assignee = members.find((member) => member.id === subtask.assigneeId);
+  const assignee =
+    subtask.assignees.find((member) => member.id === subtask.assigneeId) ??
+    subtask.assignees[0] ??
+    members.find((member) => member.id === subtask.assigneeId);
   const dueDistance = getDayDistance(subtask.dueDate);
   const overdue = isSubtaskOverdue(subtask);
   const needsAcceptance = Boolean(
@@ -504,7 +556,9 @@ export function SubtaskDetailView({
               </Button>
             ) : !isTester && !statusLocked ? (
               <Button
-                onClick={() => setEditing(true)}
+                onClick={() => {
+                  void ensureDirectory().then(() => setEditing(true));
+                }}
                 className="rounded-full bg-brand-600 hover:bg-brand-700"
               >
                 <Pencil className="h-4 w-4" />
@@ -517,17 +571,17 @@ export function SubtaskDetailView({
 
       <div className="mx-auto w-full max-w-none px-3 pb-8 pt-4 @sm/detail:px-5">
         {tab === "info" ? (
-          <div className="space-y-5">
-            <section className="grid grid-cols-1 gap-4 @md/detail:grid-cols-2 @5xl/detail:grid-cols-4">
+          <div className="space-y-3">
+            <section className="grid grid-cols-2 gap-2 @3xl/detail:grid-cols-4">
               <OverviewCard
                 label="Tiến độ thực tế"
                 icon={CircleCheck}
                 iconClassName="bg-violet-50 text-violet-600"
               >
-                <strong className="text-2xl font-bold text-gray-950">
+                <strong className="text-lg font-bold text-gray-950">
                   {subtask.progress}%
                 </strong>
-                <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-gray-100">
+                <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-gray-100">
                   <div
                     className="h-full rounded-full bg-violet-600"
                     style={{ width: `${subtask.progress}%` }}
@@ -542,7 +596,7 @@ export function SubtaskDetailView({
               >
                 <p
                   className={cn(
-                    "text-sm font-bold",
+                    "text-sm font-bold leading-snug",
                     overdue ? "text-rose-500" : "text-gray-900"
                   )}
                 >
@@ -552,7 +606,7 @@ export function SubtaskDetailView({
                       ? "Hạn hôm nay"
                       : `Còn ${dueDistance} ngày`}
                 </p>
-                <p className="mt-2 text-xs text-gray-400">
+                <p className="mt-1 text-[11px] text-gray-400">
                   {formatDateVN(subtask.dueDate)}
                 </p>
               </OverviewCard>
@@ -586,19 +640,12 @@ export function SubtaskDetailView({
                   onChange={(value) => {
                     if (value === "testing" && subtask.status !== "testing" && account?.role === "member") {
                       setReportAtCompletion(true);
-                      setReportDrawerOpen(true);
+                      void ensureDirectory().then(() => setReportDrawerOpen(true));
                       return;
                     }
                     handleQuickUpdate({ status: value as Subtask["status"] });
                   }}
                 />
-                <p className="mt-2 text-[11px] text-gray-400">
-                  {statusLocked
-                    ? "Task đã hoàn thành nên trạng thái đã được khóa."
-                    : account?.role === "member"
-                      ? "Báo cáo tiến độ 100% và gửi cho Tester để chuyển Task sang Chờ test."
-                      : "Thay đổi trạng thái sẽ tự động đồng bộ tiến độ Task."}
-                </p>
               </OverviewCard>
             </section>
 
@@ -876,13 +923,19 @@ export function SubtaskDetailView({
               </div>
               {account?.role !== "admin" && !isTester && (subtask.status === "todo" || subtask.status === "inProgress") && <Button onClick={() => {
                 setReportAtCompletion(false);
-                setReportDrawerOpen(true);
+                void ensureDirectory().then(() => setReportDrawerOpen(true));
               }}>
                 <Plus className="h-4 w-4" />
                 Báo cáo tiến độ
               </Button>}
             </div>
-            {reports.length === 0 ? (
+            {secondaryLoading && reports.length === 0 ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((item) => (
+                  <div key={item} className="h-20 animate-pulse rounded-xl bg-gray-100" />
+                ))}
+              </div>
+            ) : reports.length === 0 ? (
               <EmptyState
                 icon={FileClock}
                 title="Chưa có báo cáo nào"
@@ -1010,18 +1063,18 @@ function OverviewCard({
   children: React.ReactNode;
 }) {
   return (
-    <article className="relative min-h-32 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-400">
+    <article className="relative rounded-xl border border-gray-100 bg-white px-3 py-2.5 shadow-sm">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-gray-400">
         {label}
       </p>
-      <div className="mt-2 pr-12">{children}</div>
+      <div className="mt-1 pr-8">{children}</div>
       <span
         className={cn(
-          "absolute right-4 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full",
+          "absolute right-2.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full",
           iconClassName
         )}
       >
-        <Icon className="h-4 w-4" />
+        <Icon className="h-3.5 w-3.5" />
       </span>
     </article>
   );
@@ -1043,7 +1096,7 @@ function QuickSelect({
       value={value}
       disabled={disabled}
       onChange={(event) => onChange(event.target.value)}
-      className="h-9 max-w-full rounded-xl border border-gray-200 bg-white px-3 text-xs font-bold text-gray-800 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+      className="h-8 max-w-full rounded-lg border border-gray-200 bg-white px-2 text-xs font-bold text-gray-800 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
     >
       {options.map((option) => (
         <option key={option.value} value={option.value}>

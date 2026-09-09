@@ -18,7 +18,7 @@ import {
   WORK_ITEM_TABLE_CLASS,
   WORK_ITEM_TITLE_CLASS,
 } from "@/components/ui/work-item-table-layout";
-import { formatDateVN } from "@/lib/utils";
+import { cn, formatDateVN } from "@/lib/utils";
 
 interface SubtaskTableProps {
   subtasks: Subtask[];
@@ -46,6 +46,10 @@ interface SubtaskTableProps {
   onPassTest?: (subtask: Subtask) => void;
   onFailTest?: (subtask: Subtask) => void;
   readOnly?: boolean;
+  /** Khi mở chi tiết: chỉ hiện checkbox + tên task. */
+  compact?: boolean;
+  /** Task đang xem chi tiết (để highlight trong chế độ compact). */
+  activeId?: string;
 }
 
 export function SubtaskTable({
@@ -72,6 +76,8 @@ export function SubtaskTable({
   onPassTest,
   onFailTest,
   readOnly = false,
+  compact = false,
+  activeId,
 }: SubtaskTableProps) {
   const router = useRouter();
   const splitView = useSplitView();
@@ -82,19 +88,30 @@ export function SubtaskTable({
     selectableSubtasks.length > 0 &&
     selectableSubtasks.every((subtask) => selectedIds.includes(subtask.id));
   const showProjectColumn = !hideWorkTaskColumn && Boolean(projectsById);
-  const columnWidths = subtaskColumnWidths(hideWorkTaskColumn, showProjectColumn);
+  const columnWidths = compact
+    ? ["w-10", "min-w-0"]
+    : subtaskColumnWidths(hideWorkTaskColumn, showProjectColumn);
 
   return (
     <div className="min-w-0">
       <table
-        className={`${WORK_ITEM_TABLE_CLASS} ${hideWorkTaskColumn ? "min-w-[760px]" : showProjectColumn ? "min-w-[920px]" : "min-w-[840px]"}`}
+        className={cn(
+          WORK_ITEM_TABLE_CLASS,
+          compact
+            ? "min-w-0"
+            : hideWorkTaskColumn
+              ? "min-w-[760px]"
+              : showProjectColumn
+                ? "min-w-[920px]"
+                : "min-w-[840px]"
+        )}
       >
         <colgroup>
           {columnWidths.map((width, index) => <col key={index} className={width} />)}
         </colgroup>
         <thead className="sticky top-0 z-10 bg-gray-50">
           <tr className="border-b border-gray-100 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-            <th className="px-2 py-3">
+            <th className={cn("px-2", compact ? "py-2" : "py-3")}>
               <input
                 type="checkbox"
                 checked={allSelected}
@@ -104,16 +121,20 @@ export function SubtaskTable({
                 aria-label="Chọn tất cả"
               />
             </th>
-            <th className="whitespace-nowrap px-2 py-3">Tên task</th>
-            {!hideWorkTaskColumn && <th className="whitespace-nowrap px-2 py-3">Thuộc công việc</th>}
-            {showProjectColumn && <th className="whitespace-nowrap px-2 py-3">Dự án</th>}
-            <th className="whitespace-nowrap px-2 py-3">Người thực hiện</th>
-            <th className="whitespace-nowrap px-2 py-3">Người tạo</th>
-            <th className="whitespace-nowrap px-2 py-3">Hạn hoàn thành</th>
-            <th className="whitespace-nowrap px-2 py-3">Tiến độ</th>
-            <th className="whitespace-nowrap px-2 py-3">Ưu tiên</th>
-            <th className="whitespace-nowrap px-1.5 py-3">Trạng thái</th>
-            <th className="whitespace-nowrap px-1 py-3 text-center">Thao tác</th>
+            <th className={cn("whitespace-nowrap px-2", compact ? "py-2" : "py-3")}>Tên task</th>
+            {!compact && (
+              <>
+                {!hideWorkTaskColumn && <th className="whitespace-nowrap px-2 py-3">Thuộc công việc</th>}
+                {showProjectColumn && <th className="whitespace-nowrap px-2 py-3">Dự án</th>}
+                <th className="whitespace-nowrap px-2 py-3">Người thực hiện</th>
+                <th className="whitespace-nowrap px-2 py-3">Người tạo</th>
+                <th className="whitespace-nowrap px-2 py-3">Hạn hoàn thành</th>
+                <th className="whitespace-nowrap px-2 py-3">Tiến độ</th>
+                <th className="whitespace-nowrap px-2 py-3">Ưu tiên</th>
+                <th className="whitespace-nowrap px-1.5 py-3">Trạng thái</th>
+                <th className="whitespace-nowrap px-1 py-3 text-center">Thao tác</th>
+              </>
+            )}
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
@@ -122,6 +143,7 @@ export function SubtaskTable({
             const assignee = membersById.get(subtask.assigneeId);
             const overdue = isSubtaskOverdue(subtask);
             const rowReadOnly = readOnly || subtask.status === "done";
+            const isActive = activeId === subtask.id;
             const needsAcceptance = Boolean(
               isMember &&
               currentAccountId &&
@@ -195,8 +217,14 @@ export function SubtaskTable({
             ];
 
             return (
-              <tr key={subtask.id} className="data-table-row group">
-                <td className="px-2 py-3 align-top">
+              <tr
+                key={subtask.id}
+                className={cn(
+                  "data-table-row group",
+                  isActive && "bg-brand-50/70"
+                )}
+              >
+                <td className={cn("px-2 align-middle", compact ? "py-1.5" : "py-3 align-top")}>
                   <input
                     type="checkbox"
                     checked={selectedIds.includes(subtask.id)}
@@ -206,88 +234,92 @@ export function SubtaskTable({
                     aria-label={`Chọn task ${subtask.title}`}
                   />
                 </td>
-                <td className="min-w-0 px-2 py-3 align-top">
+                <td className={cn("min-w-0 px-2", compact ? "py-1.5 align-middle" : "py-3 align-top")}>
                   <IntentPrefetchLink
                     href={`/quan-ly-cong-viec/danh-sach-task/${subtask.id}`}
-                    className={WORK_ITEM_TITLE_CLASS}
+                    className={cn(WORK_ITEM_TITLE_CLASS, "line-clamp-2")}
                     onClick={() => splitView?.openDetail()}
                   >
                     {subtask.title}
                   </IntentPrefetchLink>
-                  {subtask.description && (
+                  {!compact && subtask.description && (
                     <p className="mt-0.5 truncate text-xs text-gray-400">{subtask.description}</p>
                   )}
                 </td>
-                {!hideWorkTaskColumn && (
-                  <td className="min-w-0 px-2 py-3 align-top">
-                    <span className="block break-words text-xs text-gray-600">{workTask?.title ?? "--"}</span>
-                  </td>
+                {!compact && (
+                  <>
+                    {!hideWorkTaskColumn && (
+                      <td className="min-w-0 px-2 py-3 align-top">
+                        <span className="block break-words text-xs text-gray-600">{workTask?.title ?? "--"}</span>
+                      </td>
+                    )}
+                    {showProjectColumn && (
+                      <td className="min-w-0 px-2 py-3 align-top">
+                        <span className="block break-words text-xs text-gray-600">
+                          {(workTask && projectsById?.get(workTask.projectId)?.name) ?? "--"}
+                        </span>
+                      </td>
+                    )}
+                    <td className="min-w-0 px-2 py-3 align-top">
+                      {subtask.assignees.length > 1 ? (
+                        <div
+                          className="flex min-w-0 cursor-pointer items-center"
+                          title={subtask.assignees.map((member) => member.name).join(", ")}
+                          aria-label={`Người thực hiện: ${subtask.assignees.map((member) => member.name).join(", ")}`}
+                        >
+                          <AvatarStack people={subtask.assignees} max={3} />
+                        </div>
+                      ) : assignee ?? subtask.assignees[0] ? (
+                        <div className="flex min-w-0 items-center">
+                          <Avatar
+                            name={(assignee ?? subtask.assignees[0]).name}
+                            color={(assignee ?? subtask.assignees[0]).avatarColor}
+                            size="sm"
+                            className="cursor-pointer"
+                          />
+                        </div>
+                      ) : (
+                        "--"
+                      )}
+                    </td>
+                    <td className="px-2 py-3 align-top">
+                      {subtask.creator ? (
+                        <Avatar
+                          name={subtask.creator.name}
+                          color={subtask.creator.avatarColor}
+                          size="sm"
+                          className="cursor-pointer"
+                        />
+                      ) : (
+                        "--"
+                      )}
+                    </td>
+                    <td className="px-2 py-3 align-top">
+                      <div className="flex items-center gap-1 whitespace-nowrap text-xs text-gray-500">
+                        <CalendarDays className="hidden h-3.5 w-3.5 shrink-0 text-gray-300 2xl:block" />
+                        {formatDateVN(subtask.dueDate)}
+                      </div>
+                      {overdue && <OverdueTag className="mt-1" />}
+                    </td>
+                    <td className="px-2 py-3 align-top">
+                      <ProgressBar value={subtask.progress} className={WORK_ITEM_PROGRESS_CLASS} />
+                    </td>
+                    <td className="px-2 py-3 align-top">
+                      <TaskPriorityBadge priority={subtask.priority} className="px-1.5 py-0.5 text-[10px]" />
+                    </td>
+                    <td className="px-1.5 py-3 align-top">
+                      <TaskStatusBadge status={subtask.status} className="px-1.5 py-0.5 text-[10px]" />
+                    </td>
+                    <td className="px-1 py-3 text-center align-top">
+                      <div className="inline-flex">
+                        <RowActionMenu
+                          label={`Thao tác Task ${subtask.title}`}
+                          items={actionItems}
+                        />
+                      </div>
+                    </td>
+                  </>
                 )}
-                {showProjectColumn && (
-                  <td className="min-w-0 px-2 py-3 align-top">
-                    <span className="block break-words text-xs text-gray-600">
-                      {(workTask && projectsById?.get(workTask.projectId)?.name) ?? "--"}
-                    </span>
-                  </td>
-                )}
-                <td className="min-w-0 px-2 py-3 align-top">
-                  {subtask.assignees.length > 1 ? (
-                    <div
-                      className="flex min-w-0 cursor-pointer items-center"
-                      title={subtask.assignees.map((member) => member.name).join(", ")}
-                      aria-label={`Người thực hiện: ${subtask.assignees.map((member) => member.name).join(", ")}`}
-                    >
-                      <AvatarStack people={subtask.assignees} max={3} />
-                    </div>
-                  ) : assignee ?? subtask.assignees[0] ? (
-                    <div className="flex min-w-0 items-center">
-                      <Avatar
-                        name={(assignee ?? subtask.assignees[0]).name}
-                        color={(assignee ?? subtask.assignees[0]).avatarColor}
-                        size="sm"
-                        className="cursor-pointer"
-                      />
-                    </div>
-                  ) : (
-                    "--"
-                  )}
-                </td>
-                <td className="px-2 py-3 align-top">
-                  {subtask.creator ? (
-                    <Avatar
-                      name={subtask.creator.name}
-                      color={subtask.creator.avatarColor}
-                      size="sm"
-                      className="cursor-pointer"
-                    />
-                  ) : (
-                    "--"
-                  )}
-                </td>
-                <td className="px-2 py-3 align-top">
-                  <div className="flex items-center gap-1 whitespace-nowrap text-xs text-gray-500">
-                    <CalendarDays className="hidden h-3.5 w-3.5 shrink-0 text-gray-300 2xl:block" />
-                    {formatDateVN(subtask.dueDate)}
-                  </div>
-                  {overdue && <OverdueTag className="mt-1" />}
-                </td>
-                <td className="px-2 py-3 align-top">
-                  <ProgressBar value={subtask.progress} className={WORK_ITEM_PROGRESS_CLASS} />
-                </td>
-                <td className="px-2 py-3 align-top">
-                  <TaskPriorityBadge priority={subtask.priority} className="px-1.5 py-0.5 text-[10px]" />
-                </td>
-                <td className="px-1.5 py-3 align-top">
-                  <TaskStatusBadge status={subtask.status} className="px-1.5 py-0.5 text-[10px]" />
-                </td>
-                <td className="px-1 py-3 text-center align-top">
-                  <div className="inline-flex">
-                    <RowActionMenu
-                      label={`Thao tác Task ${subtask.title}`}
-                      items={actionItems}
-                    />
-                  </div>
-                </td>
               </tr>
             );
           })}

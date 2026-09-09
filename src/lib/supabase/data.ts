@@ -134,7 +134,7 @@ interface WorkTaskRow {
 interface SubtaskRow {
   id: string;
   ten_task: string;
-  mo_ta: string | null;
+  mo_ta?: string | null;
   created_at: string;
   updated_at: string;
   ngay_bat_dau: string | null;
@@ -146,11 +146,11 @@ interface SubtaskRow {
   uu_tien: string;
   tien_do_thuc_te: number;
   nhan_tag: string[] | null;
-  hinh_anh: string[] | null;
-  tep_dinh_kem: TaskFileAttachment[] | null;
-  lien_ket_dinh_kem: TaskLinkAttachment[] | null;
-  cap_nhat_bo_sung: SubtaskUpdateEntry[] | null;
-  task_tien_de_id: string | null;
+  hinh_anh?: string[] | null;
+  tep_dinh_kem?: TaskFileAttachment[] | null;
+  lien_ket_dinh_kem?: TaskLinkAttachment[] | null;
+  cap_nhat_bo_sung?: SubtaskUpdateEntry[] | null;
+  task_tien_de_id?: string | null;
   cong_viec_id: string;
   nguoi_tao_id: string | null;
   /** Người phụ trách chính "cũ" (cột nguoi_phu_trach_id), lấy kèm qua embed. */
@@ -160,6 +160,8 @@ interface SubtaskRow {
   /** Người tạo Task, lấy kèm để hiển thị trong danh sách. */
   creator: AccountRow | null;
   tester: AccountRow | null;
+  /** Chỉ có khi select chi tiết (`SUBTASK_DETAIL_SELECT`). */
+  prompt_items?: unknown;
 }
 
 interface TaskActivityRow {
@@ -271,6 +273,15 @@ const WORK_TASK_DIRECTORY_SELECT =
   `cong_viec_phu_trach(tai_khoan_id,la_chinh,tai_khoan(${ACCOUNT_SELECT}))`;
 const SUBTASK_SELECT =
   "id,ten_task,mo_ta,created_at,updated_at,ngay_bat_dau,ngay_ket_thuc,nguoi_phu_trach_id,nguoi_tao_id,nguoi_test_id,ghi_chu_test,trang_thai,uu_tien,tien_do_thuc_te,nhan_tag,hinh_anh,tep_dinh_kem,lien_ket_dinh_kem,cap_nhat_bo_sung,task_tien_de_id,cong_viec_id," +
+  `legacy_assignee:tai_khoan!nguoi_phu_trach_id(${ACCOUNT_SELECT}),` +
+  `creator:tai_khoan!nguoi_tao_id(${ACCOUNT_SELECT}),` +
+  `tester:tai_khoan!nguoi_test_id(${ACCOUNT_SELECT}),` +
+  `task_phu_trach(tai_khoan_id,la_chinh,xac_nhan_luc,tai_khoan(${ACCOUNT_SELECT}))`;
+/** Chi tiết Task cần thêm prompt_items; danh sách bỏ qua để tránh JSON nặng. */
+const SUBTASK_DETAIL_SELECT = `${SUBTASK_SELECT},prompt_items`;
+/** Danh sách bảng: bỏ mô tả/đính kèm/cập nhật bổ sung để giảm payload. */
+const SUBTASK_LIST_SELECT =
+  "id,ten_task,created_at,updated_at,ngay_bat_dau,ngay_ket_thuc,nguoi_phu_trach_id,nguoi_tao_id,nguoi_test_id,ghi_chu_test,trang_thai,uu_tien,tien_do_thuc_te,nhan_tag,cong_viec_id," +
   `legacy_assignee:tai_khoan!nguoi_phu_trach_id(${ACCOUNT_SELECT}),` +
   `creator:tai_khoan!nguoi_tao_id(${ACCOUNT_SELECT}),` +
   `tester:tai_khoan!nguoi_test_id(${ACCOUNT_SELECT}),` +
@@ -1061,26 +1072,42 @@ export async function listWorkTaskDirectory(
   if (visibleTaskIds) query = query.in("id", visibleTaskIds);
   const { data, error } = await query;
   throwDatabaseError(error);
-  return (data ?? []).map((raw) => {
-    const row = raw as unknown as Pick<WorkTaskRow,
-      "id" | "ten_cv" | "du_an_id" | "ngay_bat_dau" | "ngay_hoan_thanh" |
-      "legacy_assignee" | "cong_viec_phu_trach">;
-    const assignees = (row.cong_viec_phu_trach ?? [])
-      .slice()
-      .sort((a, b) => Number(b.la_chinh) - Number(a.la_chinh))
-      .map((assignment) => assignment.tai_khoan)
-      .filter((account): account is AccountRow => Boolean(account))
-      .map(toProjectMember);
-    if (assignees.length === 0 && row.legacy_assignee) assignees.push(toProjectMember(row.legacy_assignee));
-    return {
-      id: row.id,
-      title: row.ten_cv,
-      projectId: row.du_an_id,
-      startDate: row.ngay_bat_dau ?? "",
-      dueDate: row.ngay_hoan_thanh ?? "",
-      assignees,
-    };
-  });
+  return (data ?? []).map((raw) => mapWorkTaskDirectoryItem(raw));
+}
+
+/** Một công việc tối giản — dùng trang chi tiết Task thay vì tải cả directory. */
+export async function getWorkTaskDirectoryItem(
+  supabase: ApiSupabaseClient,
+  id: string
+): Promise<WorkTaskDirectoryItem | null> {
+  const { data, error } = await supabase
+    .from("cong_viec")
+    .select(WORK_TASK_DIRECTORY_SELECT)
+    .eq("id", id)
+    .maybeSingle();
+  throwDatabaseError(error);
+  return data ? mapWorkTaskDirectoryItem(data) : null;
+}
+
+function mapWorkTaskDirectoryItem(raw: unknown): WorkTaskDirectoryItem {
+  const row = raw as unknown as Pick<WorkTaskRow,
+    "id" | "ten_cv" | "du_an_id" | "ngay_bat_dau" | "ngay_hoan_thanh" |
+    "legacy_assignee" | "cong_viec_phu_trach">;
+  const assignees = (row.cong_viec_phu_trach ?? [])
+    .slice()
+    .sort((a, b) => Number(b.la_chinh) - Number(a.la_chinh))
+    .map((assignment) => assignment.tai_khoan)
+    .filter((account): account is AccountRow => Boolean(account))
+    .map(toProjectMember);
+  if (assignees.length === 0 && row.legacy_assignee) assignees.push(toProjectMember(row.legacy_assignee));
+  return {
+    id: row.id,
+    title: row.ten_cv,
+    projectId: row.du_an_id,
+    startDate: row.ngay_bat_dau ?? "",
+    dueDate: row.ngay_hoan_thanh ?? "",
+    assignees,
+  };
 }
 
 /**
@@ -1574,7 +1601,9 @@ function hydrateSubtasks(rows: SubtaskRow[]): Subtask[] {
       links: row.lien_ket_dinh_kem ?? [],
       images: row.hinh_anh ?? [],
       updates: row.cap_nhat_bo_sung ?? [],
-      promptItems: [],
+      promptItems: row.prompt_items !== undefined
+        ? normalizeSubtaskPromptItems(row.prompt_items)
+        : [],
     };
   });
 }
@@ -1671,7 +1700,7 @@ export async function listSubtasksPage(
 
   let query = supabase
     .from("task")
-    .select(SUBTASK_SELECT, { count: "exact" })
+    .select(SUBTASK_LIST_SELECT, { count: "exact" })
     .order("created_at", { ascending: false });
 
   if (filters.search?.trim()) {
@@ -1710,14 +1739,28 @@ export async function getSubtask(
   supabase: ApiSupabaseClient,
   id: string
 ): Promise<Subtask | null> {
-  const { data, error } = await supabase
+  const detailed = await supabase
     .from("task")
-    .select(SUBTASK_SELECT)
+    .select(SUBTASK_DETAIL_SELECT)
     .eq("id", id)
     .maybeSingle();
-  throwDatabaseError(error);
-  if (!data) return null;
-  const [subtask] = hydrateSubtasks([data as unknown as SubtaskRow]);
+
+  // Deployment chưa có cột prompt_items: fallback select danh sách.
+  if (detailed.error?.code === "42703" || detailed.error?.code === "PGRST204") {
+    const fallback = await supabase
+      .from("task")
+      .select(SUBTASK_SELECT)
+      .eq("id", id)
+      .maybeSingle();
+    throwDatabaseError(fallback.error);
+    if (!fallback.data) return null;
+    const [subtask] = hydrateSubtasks([fallback.data as unknown as SubtaskRow]);
+    return subtask;
+  }
+
+  throwDatabaseError(detailed.error);
+  if (!detailed.data) return null;
+  const [subtask] = hydrateSubtasks([detailed.data as unknown as SubtaskRow]);
   return subtask;
 }
 
@@ -1749,10 +1792,18 @@ function normalizeSubtaskPromptItems(value: unknown): SubtaskPromptItem[] {
     if (!item || typeof item !== "object" || Array.isArray(item)) return [];
     const entry = item as Record<string, unknown>;
     if (typeof entry.id !== "string" || typeof entry.content !== "string") return [];
+    const imageUrls: string[] = [];
+    if (Array.isArray(entry.imageUrls)) {
+      for (const url of entry.imageUrls) {
+        if (typeof url === "string" && url.trim()) imageUrls.push(url.trim());
+      }
+    } else if (typeof entry.imageUrl === "string" && entry.imageUrl.trim()) {
+      imageUrls.push(entry.imageUrl.trim());
+    }
     return [{
       id: entry.id,
       content: entry.content,
-      imageUrl: typeof entry.imageUrl === "string" ? entry.imageUrl : undefined,
+      imageUrls: imageUrls.slice(0, 10),
       status: entry.status === "processed" ? "processed" as const : "unprocessed" as const,
     }];
   });

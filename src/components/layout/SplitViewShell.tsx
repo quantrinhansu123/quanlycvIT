@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 
 interface SplitViewContextValue {
   maximized: boolean;
+  detailOpen: boolean;
   detailCollapsed: boolean;
   openDetail: () => void;
   toggleDetailCollapsed: () => void;
@@ -28,6 +29,7 @@ interface SplitViewShellProps {
 /**
  * Layout chia đôi màn hình: danh sách bên trái, chi tiết bên phải, mỗi bên cuộn độc lập.
  * Dưới breakpoint lg không đủ chỗ nên chỉ hiển thị chi tiết (danh sách ẩn).
+ * Khi mở chi tiết, cột danh sách thu hẹp để ưu tiên nội dung bên phải.
  */
 export function SplitViewShell({ listSlot, children, detailOpen = true, detailKey }: SplitViewShellProps) {
   const [maximized, setMaximized] = useState(false);
@@ -42,6 +44,7 @@ export function SplitViewShell({ listSlot, children, detailOpen = true, detailKe
     <SplitViewContext.Provider
       value={{
         maximized,
+        detailOpen,
         detailCollapsed,
         openDetail: () => setDetailCollapsed(false),
         toggleDetailCollapsed: () => setDetailCollapsed(!detailCollapsed),
@@ -61,7 +64,7 @@ export function SplitViewShell({ listSlot, children, detailOpen = true, detailKe
               ? "hidden"
               : detailCollapsed
                 ? "hidden lg:flex lg:flex-1"
-                : "hidden lg:flex lg:w-1/2"
+                : "hidden lg:flex lg:w-[300px] xl:w-[340px]"
           )}
         >
           {listSlot}

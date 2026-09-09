@@ -25,7 +25,8 @@ export interface SubtaskUpdateEntry {
 export interface SubtaskPromptItem {
   id: string;
   content: string;
-  imageUrl?: string;
+  /** Các link Cloudinary của ảnh tham chiếu (mỗi ảnh một URL). */
+  imageUrls: string[];
   status: "unprocessed" | "processed";
 }
 
