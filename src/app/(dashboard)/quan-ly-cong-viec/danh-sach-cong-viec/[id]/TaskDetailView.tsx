@@ -21,6 +21,7 @@ import {
   PanelRightClose,
   Pencil,
   RotateCcw,
+  Trash2,
   UsersRound,
   type LucideIcon,
 } from "lucide-react";
@@ -93,7 +94,7 @@ export function TaskDetailView({
   readOnly,
 }: TaskDetailViewProps) {
   const router = useRouter();
-  const { notify } = useFeedback();
+  const { confirm, notify } = useFeedback();
   const cache = useSessionDataCache();
   const splitView = useSplitView();
   const [task, setTask] = useState<WorkTask | null>(initialTask);
@@ -105,6 +106,7 @@ export function TaskDetailView({
   const [error, setError] = useState(false);
   const [tab, setTab] = useState<Tab>("info");
   const [editing, setEditing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [quickUpdating, setQuickUpdating] = useState(false);
 
   const load = useCallback(async () => {
@@ -218,6 +220,39 @@ export function TaskDetailView({
       });
     } finally {
       setQuickUpdating(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!task || readOnly || deleting) return;
+    const confirmed = await confirm({
+      title: "Xóa công việc?",
+      description: `Công việc “${task.title}” và các task trực thuộc sẽ bị xóa. Hành động này không thể hoàn tác.`,
+      confirmLabel: "Xóa công việc",
+      tone: "danger",
+    });
+    if (!confirmed) return;
+    setDeleting(true);
+    try {
+      const deleted = await taskService.deleteTask(task.id);
+      if (!deleted) throw new Error("Công việc không tồn tại hoặc đã được xóa trước đó.");
+      cache.invalidate(CACHE_RESOURCE.tasksList);
+      cache.invalidate(CACHE_RESOURCE.directoryTasks);
+      cache.invalidate(CACHE_RESOURCE.projectsList);
+      notify({
+        type: "success",
+        title: "Đã xóa công việc",
+        description: `Công việc “${task.title}” đã được xóa.`,
+      });
+      router.push("/quan-ly-cong-viec/danh-sach-cong-viec");
+    } catch (deleteError) {
+      notify({
+        type: "error",
+        title: "Xóa công việc thất bại",
+        description: getErrorMessage(deleteError, "Không thể xóa công việc. Vui lòng thử lại."),
+      });
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -335,13 +370,26 @@ export function TaskDetailView({
                 {splitView.maximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </button>
             )}
-            {!viewOnly && <Button
-              onClick={() => setEditing(true)}
-              className="rounded-full bg-brand-600 hover:bg-brand-700"
-            >
-              <Pencil className="h-4 w-4" />
-              <span className="hidden @xl/detail:inline">Chỉnh sửa công việc</span>
-            </Button>}
+            {!viewOnly && (
+              <Button
+                onClick={() => setEditing(true)}
+                className="rounded-full bg-brand-600 hover:bg-brand-700"
+              >
+                <Pencil className="h-4 w-4" />
+                <span className="hidden @xl/detail:inline">Chỉnh sửa</span>
+              </Button>
+            )}
+            {!readOnly && (
+              <Button
+                variant="secondary"
+                onClick={() => void handleDelete()}
+                disabled={deleting}
+                className="rounded-full border-rose-200 text-rose-600 ring-rose-200 hover:bg-rose-50 hover:text-rose-700"
+              >
+                <Trash2 className="h-4 w-4" />
+                <span className="hidden @xl/detail:inline">Xóa</span>
+              </Button>
+            )}
           </div>
         </div>
       </div>

@@ -180,6 +180,9 @@ export class SessionDataCache {
     for (const [key, pendingEntry] of Array.from(this.pending.entries())) {
       if (matches(key)) {
         this.versions.set(key, (this.versions.get(key) ?? 0) + 1);
+        // Xóa khỏi pending TRƯỚC khi abort để effect mới không tái sử dụng
+        // promise đã hủy → tránh kẹt skeleton (loading mãi, không error).
+        this.pending.delete(key);
         pendingEntry.controller.abort();
       }
     }

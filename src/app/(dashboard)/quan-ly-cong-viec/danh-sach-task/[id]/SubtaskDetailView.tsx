@@ -15,7 +15,6 @@ import {
   Flag,
   History,
   Info,
-  ListTodo,
   Maximize2,
   Minimize2,
   PanelRightClose,
@@ -751,8 +750,8 @@ export function SubtaskDetailView({
                 accentClassName="bg-violet-600"
                 icon={UsersRound}
                 iconClassName="text-violet-600"
-                title="Nhân sự & Công việc"
-                subtitle="Người thực hiện và công việc trực thuộc"
+                title="Nhân sự"
+                subtitle="Người thực hiện và người test"
               >
                 <p className="mb-2 text-xs font-medium text-gray-400">
                   Người thực hiện:
@@ -791,28 +790,6 @@ export function SubtaskDetailView({
                     </p>
                   )}
                 </div>
-
-                <p className="mb-2 mt-5 text-xs font-medium text-gray-400">
-                  Thuộc công việc:
-                </p>
-                {workTask ? (
-                  <Link
-                    href={`/quan-ly-cong-viec/danh-sach-cong-viec/${workTask.id}`}
-                    className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50/80 p-3 transition-colors hover:bg-gray-100"
-                  >
-                    <FileClock className="h-5 w-5 shrink-0 text-brand-500" />
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-bold text-gray-900">
-                        {workTask.title}
-                      </span>
-                      <span className="block text-xs text-gray-400">
-                        Hạn: {formatDateVN(workTask.dueDate)}
-                      </span>
-                    </span>
-                  </Link>
-                ) : (
-                  <p className="text-sm text-gray-400">Không xác định</p>
-                )}
 
                 {subtask.assignees.length > 1 && (
                   <div className="mt-4 flex items-center gap-2 text-xs text-gray-400">
@@ -868,32 +845,8 @@ export function SubtaskDetailView({
               </Panel>
             </section>
 
-            <section className="grid grid-cols-1 gap-5 @3xl/detail:grid-cols-3">
+            <section className="grid grid-cols-1 gap-5">
               <Panel
-                accentClassName="bg-orange-500"
-                icon={ListTodo}
-                iconClassName="text-orange-500"
-                title="Công việc trực thuộc"
-                subtitle="Công việc cha chứa Task này"
-              >
-                <div className="flex min-h-36 items-center justify-center text-center">
-                  {workTask ? (
-                    <Link
-                      href={`/quan-ly-cong-viec/danh-sach-cong-viec/${workTask.id}`}
-                      className="rounded-xl bg-orange-50 px-4 py-3 text-sm font-semibold text-orange-700 hover:bg-orange-100"
-                    >
-                      {workTask.title}
-                    </Link>
-                  ) : (
-                    <p className="text-sm italic text-gray-400">
-                      Không xác định công việc
-                    </p>
-                  )}
-                </div>
-              </Panel>
-
-              <Panel
-                className="@3xl/detail:col-span-2"
                 accentClassName="bg-emerald-500"
                 icon={RotateCcw}
                 iconClassName="text-emerald-500"

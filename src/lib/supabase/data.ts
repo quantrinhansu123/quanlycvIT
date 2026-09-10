@@ -1517,20 +1517,10 @@ export async function deleteWorkTask(
   supabase: ApiSupabaseClient,
   id: string
 ): Promise<boolean> {
-  const current = await getWorkTask(supabase, id);
-  if (!current) return false;
-  if (current.status === "done") {
-    throw new ApiException(
-      "Công việc đã hoàn thành nên chỉ có thể xem, không thể xóa.",
-      409
-    );
-  }
-
   const { data, error } = await supabase
     .from("cong_viec")
     .delete()
     .eq("id", id)
-    .neq("trang_thai", "done")
     .select("id")
     .maybeSingle();
   throwDatabaseError(error);

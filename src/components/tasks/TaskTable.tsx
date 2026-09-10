@@ -8,7 +8,7 @@ import type { ProjectDirectoryItem, ProjectMember } from "@/types/project";
 import { Avatar, AvatarStack } from "@/components/ui/Avatar";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { TaskPriorityBadge, TaskStatusBadge, OverdueTag } from "@/components/tasks/TaskBadges";
-import { RowActionMenu } from "@/components/ui/RowActionMenu";
+import { ActionIconButton } from "@/components/ui/ActionIconButton";
 import { IntentPrefetchLink } from "@/components/navigation/IntentPrefetchLink";
 import {
   taskColumnWidths,
@@ -29,6 +29,7 @@ interface TaskTableProps {
   onDelete: (task: WorkTask) => void;
   hideProjectColumn?: boolean;
   readOnly?: boolean;
+  deletingId?: string | null;
 }
 
 export function TaskTable({
@@ -42,6 +43,7 @@ export function TaskTable({
   onDelete,
   hideProjectColumn = false,
   readOnly = false,
+  deletingId = null,
 }: TaskTableProps) {
   const router = useRouter();
   const selectableTasks = tasks.filter((task) => task.status !== "done");
@@ -53,7 +55,7 @@ export function TaskTable({
   return (
     <div className="min-w-0">
       <table
-        className={`${WORK_ITEM_TABLE_CLASS} ${hideProjectColumn ? "min-w-[760px]" : "min-w-[840px]"}`}
+        className={`${WORK_ITEM_TABLE_CLASS} ${hideProjectColumn ? "min-w-[820px]" : "min-w-[920px]"}`}
       >
         <colgroup>
           {columnWidths.map((width, index) => <col key={index} className={width} />)}
@@ -77,7 +79,11 @@ export function TaskTable({
             <th className="whitespace-nowrap px-2 py-3">Tiến độ</th>
             <th className="whitespace-nowrap px-2 py-3">Ưu tiên</th>
             <th className="whitespace-nowrap px-2 py-3">Trạng thái</th>
-            {!readOnly && <th className="whitespace-nowrap px-2 py-3 text-left">Thao tác</th>}
+            {!readOnly && (
+              <th className="sticky right-0 z-20 whitespace-nowrap border-l border-gray-200 bg-gray-50 px-2 py-3 text-left">
+                Thao tác
+              </th>
+            )}
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
@@ -85,6 +91,7 @@ export function TaskTable({
             const project = projectsById.get(task.projectId);
             const assignee = membersById.get(task.assigneeId);
             const overdue = isTaskOverdue(task);
+            const locked = task.status === "done";
 
             return (
               <tr key={task.id} className="data-table-row group">
@@ -93,7 +100,7 @@ export function TaskTable({
                     type="checkbox"
                     checked={selectedIds.includes(task.id)}
                     onChange={() => onToggleSelect(task.id)}
-                    disabled={task.status === "done"}
+                    disabled={locked}
                     className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
                     aria-label={`Chọn công việc ${task.title}`}
                   />
@@ -157,32 +164,35 @@ export function TaskTable({
                 <td className="px-2 py-3 align-top">
                   <TaskStatusBadge status={task.status} className="px-1.5 py-0.5 text-[11px]" />
                 </td>
-                {!readOnly && <td className="px-2 py-3 align-top">
-                  <RowActionMenu
-                    label={`Thao tác công việc ${task.title}`}
-                    items={[
-                      {
-                        icon: Eye,
-                        label: "Xem chi tiết",
-                        onClick: () => router.push(`/quan-ly-cong-viec/danh-sach-cong-viec/${task.id}`),
-                      },
-                      ...(task.status === "done" ? [] : [
-                        {
-                          icon: Pencil,
-                          label: "Chỉnh sửa",
-                          tone: "primary" as const,
-                          onClick: () => onEdit(task),
-                        },
-                        {
-                          icon: Trash2,
-                          label: "Xóa công việc",
-                          tone: "danger" as const,
-                          onClick: () => onDelete(task),
-                        },
-                      ]),
-                    ]}
-                  />
-                </td>}
+                {!readOnly && (
+                  <td className="sticky right-0 z-[2] border-l border-gray-100 bg-white px-2 py-3 align-top group-hover:bg-gray-50">
+                    <div
+                      className="flex items-center gap-1.5"
+                      onClick={(event) => event.stopPropagation()}
+                      onKeyDown={(event) => event.stopPropagation()}
+                    >
+                      <ActionIconButton
+                        icon={Eye}
+                        label="Xem chi tiết"
+                        onClick={() => router.push(`/quan-ly-cong-viec/danh-sach-cong-viec/${task.id}`)}
+                      />
+                      <ActionIconButton
+                        icon={Pencil}
+                        label="Chỉnh sửa"
+                        tone="warning"
+                        disabled={locked || Boolean(deletingId)}
+                        onClick={() => onEdit(task)}
+                      />
+                      <ActionIconButton
+                        icon={Trash2}
+                        label={deletingId === task.id ? "Đang xóa..." : "Xóa công việc"}
+                        tone="danger"
+                        disabled={Boolean(deletingId)}
+                        onClick={() => onDelete(task)}
+                      />
+                    </div>
+                  </td>
+                )}
               </tr>
             );
           })}

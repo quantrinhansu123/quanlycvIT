@@ -176,12 +176,13 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
               </div>
             </div>
             <div className="mt-6 flex justify-end gap-3">
-              <Button variant="secondary" onClick={() => closeConfirm(false)} autoFocus>
+              <Button variant="secondary" onClick={() => closeConfirm(false)}>
                 {pendingConfirm.cancelLabel ?? "Hủy"}
               </Button>
               <Button
                 variant={pendingConfirm.tone === "primary" ? "primary" : "danger"}
                 onClick={() => closeConfirm(true)}
+                autoFocus
               >
                 {pendingConfirm.confirmLabel ?? "Xác nhận"}
               </Button>

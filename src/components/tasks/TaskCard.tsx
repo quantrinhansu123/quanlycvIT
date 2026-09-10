@@ -1,6 +1,7 @@
 "use client";
 
-import { CalendarDays } from "lucide-react";
+import { CalendarDays, Eye, Pencil, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import type { WorkTask } from "@/types/task";
 import { isTaskOverdue } from "@/types/task";
 import type { ProjectDirectoryItem, ProjectMember } from "@/types/project";
@@ -8,7 +9,7 @@ import { Avatar, AvatarStack } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { TaskPriorityBadge, TaskStatusBadge, OverdueTag } from "@/components/tasks/TaskBadges";
-import { TaskActionMenu } from "@/components/tasks/TaskActionMenu";
+import { ActionIconButton } from "@/components/ui/ActionIconButton";
 import { formatDateVN } from "@/lib/utils";
 import { IntentPrefetchLink } from "@/components/navigation/IntentPrefetchLink";
 
@@ -19,6 +20,7 @@ interface TaskCardProps {
   onEdit: (task: WorkTask) => void;
   onDelete: (task: WorkTask) => void;
   readOnly?: boolean;
+  deletingId?: string | null;
 }
 
 export function TaskCard({
@@ -28,8 +30,11 @@ export function TaskCard({
   onEdit,
   onDelete,
   readOnly = false,
+  deletingId = null,
 }: TaskCardProps) {
+  const router = useRouter();
   const overdue = isTaskOverdue(task);
+  const locked = task.status === "done";
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
@@ -39,10 +44,29 @@ export function TaskCard({
             {project.name}
           </Badge>
         ) : <span />}
-        {!readOnly && task.status !== "done" && <TaskActionMenu
-          onEdit={() => onEdit(task)}
-          onDelete={() => onDelete(task)}
-        />}
+        {!readOnly && (
+          <div className="flex shrink-0 items-center gap-1.5">
+            <ActionIconButton
+              icon={Eye}
+              label="Xem chi tiết"
+              onClick={() => router.push(`/quan-ly-cong-viec/danh-sach-cong-viec/${task.id}`)}
+            />
+            <ActionIconButton
+              icon={Pencil}
+              label="Chỉnh sửa"
+              tone="warning"
+              disabled={locked || Boolean(deletingId)}
+              onClick={() => onEdit(task)}
+            />
+            <ActionIconButton
+              icon={Trash2}
+              label={deletingId === task.id ? "Đang xóa..." : "Xóa công việc"}
+              tone="danger"
+              disabled={Boolean(deletingId)}
+              onClick={() => onDelete(task)}
+            />
+          </div>
+        )}
       </div>
 
       <IntentPrefetchLink

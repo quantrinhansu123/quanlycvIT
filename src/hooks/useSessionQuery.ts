@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
 import { useSessionDataCache } from "@/components/providers/SessionDataCacheProvider";
 import type { CacheTtl } from "@/lib/client-cache/session-data-cache";
 
@@ -46,6 +46,7 @@ export function useSessionQuery<T>({
 }: UseSessionQueryOptions<T>): UseSessionQueryResult<T> {
   const cache = useSessionDataCache();
   const fetcherRef = useRef(fetcher);
+  const didHydrateSeedRef = useRef(false);
   useEffect(() => {
     fetcherRef.current = fetcher;
   });
@@ -59,6 +60,16 @@ export function useSessionQuery<T>({
     }
     return null;
   });
+
+  // Client hydrate: SessionDataCache là instance mới (rỗng), trong khi useState
+  // initializer có thể không chạy lại → seed lại một lần để tránh skeleton oan.
+  useLayoutEffect(() => {
+    if (didHydrateSeedRef.current) return;
+    didHydrateSeedRef.current = true;
+    if (!key || initialData === undefined) return;
+    if (!cache.get<T>(key)) cache.set(key, initialData, ttl);
+  }, [cache, key, initialData, ttl]);
+
   const [renderTick, forceRender] = useReducer((tick: number) => tick + 1, 0);
   const [error, setError] = useState<unknown>(null);
   const [isRevalidating, setIsRevalidating] = useState(false);
@@ -86,7 +97,11 @@ export function useSessionQuery<T>({
       .fetch(key, (signal) => fetcherRef.current(signal), ttl)
       .catch((err: unknown) => {
         if (cancelled) return;
-        if (err instanceof DOMException && err.name === "AbortError") return;
+        if (err instanceof DOMException && err.name === "AbortError") {
+          // Invalidate đã hủy request; nếu effect vẫn active thì kích hoạt fetch mới.
+          setRevalidateTick((tick) => tick + 1);
+          return;
+        }
         // Giữ dữ liệu cũ trong cache nguyên vẹn — chỉ báo lỗi để UI hiện cảnh báo nhỏ + nút thử lại.
         setError(err);
       })

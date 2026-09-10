@@ -266,7 +266,7 @@ export function TaskListClient({
   }
 
   async function handleDelete(task: WorkTask) {
-    if (readOnly || task.status === "done" || deletingId) return;
+    if (readOnly || deletingId) return;
     const confirmed = await confirm({
       title: "Xóa công việc?",
       description: `Công việc “${task.title}” và các task trực thuộc sẽ bị xóa. Hành động này không thể hoàn tác.`,
@@ -274,20 +274,30 @@ export function TaskListClient({
       tone: "danger",
     });
     if (!confirmed) return;
+
     setDeletingId(task.id);
+    // Gỡ khỏi UI ngay — API xóa có thể mất vài giây vì cascade task/báo cáo.
+    startTransition(() => {
+      addOptimisticTask({ task, visible: false, insert: false });
+    });
+    setTaskPage((previous) => ({
+      items: (previous?.items ?? []).filter((item) => item.id !== task.id),
+      total: Math.max(0, (previous?.total ?? 0) - 1),
+    }));
+    setDependencyTasks((previous) => (previous ?? []).filter((item) => item.id !== task.id));
+    setSelectedIds((current) => current.filter((id) => id !== task.id));
+
     try {
       const deleted = await taskService.deleteTask(task.id);
       if (!deleted) throw new Error("Công việc không tồn tại hoặc đã được xóa trước đó.");
-      setTaskPage((previous) => ({
-        items: (previous?.items ?? []).filter((item) => item.id !== task.id),
-        total: Math.max(0, (previous?.total ?? 0) - 1),
-      }));
-      setDependencyTasks((previous) => (previous ?? []).filter((item) => item.id !== task.id));
       cache.invalidate(CACHE_RESOURCE.tasksList, listKey);
       cache.invalidate(CACHE_RESOURCE.directoryTasks, dependencyKey);
-      setSelectedIds((current) => current.filter((id) => id !== task.id));
+      router.refresh();
       notify({ type: "success", title: "Đã xóa công việc", description: `Công việc “${task.title}” đã được xóa.` });
     } catch (deleteError) {
+      cache.invalidate(CACHE_RESOURCE.tasksList);
+      cache.invalidate(CACHE_RESOURCE.directoryTasks);
+      await refreshTasks();
       notify({
         type: "error",
         title: "Xóa công việc thất bại",
@@ -523,6 +533,7 @@ export function TaskListClient({
             onToggleSelectAll={toggleSelectAll}
             onEdit={(task) => setFormModal({ mode: "edit", task })}
             onDelete={handleDelete}
+            deletingId={deletingId}
             readOnly={readOnly}
           />
         ) : (
@@ -535,6 +546,7 @@ export function TaskListClient({
                 assignee={membersById.get(task.assigneeId)}
                 onEdit={(t) => setFormModal({ mode: "edit", task: t })}
                 onDelete={handleDelete}
+                deletingId={deletingId}
                 readOnly={readOnly}
               />
             ))}
