@@ -57,3 +57,30 @@ export interface AccountDirectory {
   accounts: EmployeeAccount[];
   departments: Department[];
 }
+
+export interface AccountListFilters {
+  search?: string;
+  departmentId?: string;
+  position?: string;
+  role?: AccountRole;
+  status?: AccountStatus;
+  sort?: "employeeCode" | "name" | "username" | "startDate" | "createdAt";
+  direction?: "asc" | "desc";
+  page: number;
+  pageSize: number;
+}
+
+export interface AccountListSummary {
+  total: number;
+  active: number;
+  admins: number;
+  positions: string[];
+  departments: Array<{ id: string; count: number }>;
+}
+
+export interface AccountPage {
+  items: EmployeeAccount[];
+  total: number;
+  departments: Department[];
+  summary: AccountListSummary;
+}

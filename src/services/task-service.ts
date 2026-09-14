@@ -5,6 +5,7 @@ import type {
   TaskReport,
   TaskStatus,
   WorkTask,
+  WorkTaskDirectoryItem,
   WorkTaskInput,
   WorkTaskOption,
 } from "@/types/task";
@@ -62,8 +63,12 @@ export const taskService = {
     );
   },
 
-  async getTasks(filters: TaskFilters = {}): Promise<WorkTask[]> {
-    return apiClient.get<WorkTask[]>(`/tasks${buildQuery(filters)}`);
+  async getTasks(filters: TaskFilters = {}, options?: { signal?: AbortSignal }): Promise<WorkTask[]> {
+    return apiClient.get<WorkTask[]>(`/tasks${buildQuery(filters)}`, { signal: options?.signal });
+  },
+
+  async getTaskDirectory(options?: { signal?: AbortSignal }): Promise<WorkTaskDirectoryItem[]> {
+    return apiClient.get<WorkTaskDirectoryItem[]>("/tasks?directory=true", { signal: options?.signal });
   },
 
   /** Chỉ id + tên, dùng cho dropdown công việc tiền đề. */
@@ -84,7 +89,8 @@ export const taskService = {
 
   /** Tải một trang công việc từ server thay vì toàn bộ tập kết quả khớp bộ lọc. */
   async getTasksPage(
-    filters: TaskFilters & { page: number; pageSize: number }
+    filters: TaskFilters & { page: number; pageSize: number },
+    options?: { signal?: AbortSignal }
   ): Promise<TaskPage> {
     const params = new URLSearchParams();
     if (filters.search) params.set("search", filters.search);
@@ -98,15 +104,19 @@ export const taskService = {
     if (filters.overdueOnly) params.set("overdueOnly", "true");
     params.set("page", String(filters.page));
     params.set("pageSize", String(filters.pageSize));
-    return apiClient.get<TaskPage>(`/tasks?${params.toString()}`);
+    return apiClient.get<TaskPage>(`/tasks?${params.toString()}`, {
+      signal: options?.signal,
+    });
   },
 
   async getTaskById(id: string): Promise<WorkTask | null> {
     return apiClient.get<WorkTask>(`/tasks/${id}`);
   },
 
-  async createTask(input: WorkTaskInput): Promise<WorkTask> {
-    return apiClient.post<WorkTask>("/tasks", input);
+  async createTask(input: WorkTaskInput, options?: { idempotencyKey?: string }): Promise<WorkTask> {
+    return apiClient.post<WorkTask>("/tasks", input, {
+      headers: options?.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : undefined,
+    });
   },
 
   async updateTask(id: string, input: WorkTaskInput): Promise<WorkTask | null> {

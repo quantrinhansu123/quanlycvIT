@@ -21,8 +21,13 @@ export interface DashboardData {
   totalTasks: number;
 }
 
+export interface InitialDashboardData extends DashboardData {
+  accountId: string;
+  accountRole: "admin" | "manager" | "member";
+}
+
 /** Tải dữ liệu dashboard từ cookie phiên hiện tại và giữ đúng phạm vi quyền. */
-export async function getDashboardData(): Promise<DashboardData> {
+export async function getDashboardData(): Promise<InitialDashboardData> {
   const supabase = await createServerSupabaseClient();
   const access = await requireRequestAccount(supabase);
   const participantAccountId = access.role === "member" ? access.id : undefined;
@@ -42,6 +47,8 @@ export async function getDashboardData(): Promise<DashboardData> {
   ]);
 
   return {
+    accountId: access.id,
+    accountRole: access.role,
     projects: projects.items,
     tasks: tasks.items,
     members,

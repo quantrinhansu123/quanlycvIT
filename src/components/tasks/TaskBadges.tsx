@@ -1,4 +1,4 @@
-import { AlertTriangle, Flag } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { TASK_PRIORITY_META, TASK_STATUS_META, type TaskPriority, type TaskStatus } from "@/types/task";
 import { cn } from "@/lib/utils";
 
@@ -16,12 +16,11 @@ export function TaskPriorityBadge({ priority, className }: { priority: TaskPrior
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-semibold uppercase",
+        "inline-flex items-center whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-semibold uppercase",
         meta.badge,
         className
       )}
     >
-      {priority === "urgent" && <Flag className="h-3 w-3" />}
       {meta.label}
     </span>
   );

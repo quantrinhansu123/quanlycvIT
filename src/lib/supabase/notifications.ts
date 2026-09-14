@@ -4,7 +4,7 @@ import type { AppNotification } from "@/types/notification";
 
 interface NotificationRow {
   id: string;
-  loai: "task_assigned";
+  loai: "task_assigned" | "task_needs_testing" | "task_test_failed";
   tieu_de: string;
   noi_dung: string;
   task_id: string | null;
@@ -15,7 +15,12 @@ interface NotificationRow {
 function hydrateNotification(row: NotificationRow): AppNotification {
   return {
     id: row.id,
-    type: "taskAssigned",
+    type:
+      row.loai === "task_needs_testing"
+        ? "taskNeedsTesting"
+        : row.loai === "task_test_failed"
+          ? "taskTestFailed"
+          : "taskAssigned",
     title: row.tieu_de,
     content: row.noi_dung,
     taskId: row.task_id ?? undefined,

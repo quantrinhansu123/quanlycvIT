@@ -11,6 +11,8 @@ import { useCurrentAccount } from "@/hooks/useCurrentAccount";
 
 interface SidebarProps {
   collapsed: boolean;
+  /** rail: desktop (ẩn dưới lg). drawer: luôn hiện trong overlay mobile. */
+  variant?: "rail" | "drawer";
 }
 
 function routeMatches(pathname: string, href: string) {
@@ -18,7 +20,7 @@ function routeMatches(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function Sidebar({ collapsed }: SidebarProps) {
+export function Sidebar({ collapsed, variant = "rail" }: SidebarProps) {
   const pathname = usePathname();
   const { account } = useCurrentAccount();
   const activeGroupLabel =
@@ -40,8 +42,9 @@ export function Sidebar({ collapsed }: SidebarProps) {
   return (
     <aside
       className={cn(
-        "flex h-screen shrink-0 flex-col border-r border-gray-100 bg-white transition-all duration-200",
-        collapsed ? "w-0 overflow-hidden lg:w-[76px]" : "w-[264px]"
+        "h-full shrink-0 flex-col overflow-hidden border-r border-gray-100 bg-white transition-[width] duration-200",
+        variant === "drawer" ? "flex w-full" : "hidden lg:flex",
+        variant === "rail" && (collapsed ? "w-0 lg:w-[76px]" : "w-[264px]")
       )}
     >
       <div className="flex h-16 items-center gap-2 px-5">
@@ -60,14 +63,14 @@ export function Sidebar({ collapsed }: SidebarProps) {
           />
         </div>
         {!collapsed && (
-          <div className="leading-tight">
-            <p className="text-sm font-bold text-gray-900">IT Việt Nhật</p>
-            <p className="text-[11px] text-gray-400">Trang Quản Trị</p>
+          <div className="min-w-0 leading-tight">
+            <p className="truncate text-sm font-bold text-gray-900">IT Việt Nhật</p>
+            <p className="truncate text-[11px] text-gray-400">Trang Quản Trị</p>
           </div>
         )}
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 py-2">
+      <nav className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-3 py-2">
         <ul className="flex flex-col gap-1">
           {NAV_ITEMS.map((item) => {
             const forbiddenForMember = account?.role === "member" && item.href === "/nhan-vien";
@@ -108,7 +111,7 @@ export function Sidebar({ collapsed }: SidebarProps) {
                     forbiddenForMember && "cursor-not-allowed hover:bg-rose-50 hover:text-rose-600",
                     isActiveGroup &&
                       !collapsed &&
-                      "bg-slate-50 font-semibold text-gray-900 before:absolute before:-left-3 before:h-8 before:w-[3px] before:rounded-r-full before:bg-brand-600",
+                      "bg-slate-50 font-semibold text-gray-900 before:absolute before:left-0 before:h-8 before:w-[3px] before:rounded-r-full before:bg-brand-600",
                     isActiveGroup && collapsed && "bg-brand-50"
                   )}
                 >
@@ -133,7 +136,12 @@ export function Sidebar({ collapsed }: SidebarProps) {
                 </button>
                 {isOpen && !collapsed && !forbiddenForMember && (
                   <ul className="relative mt-1 flex flex-col gap-1 pl-4 before:absolute before:bottom-1 before:left-1 before:top-0 before:w-px before:bg-gray-200">
-                    {item.children.map((child) => {
+                    {item.children
+                      .filter(
+                        (child) =>
+                          !(child.href === "/truc-nhat/cau-hinh" && account?.role === "member")
+                      )
+                      .map((child) => {
                       const isChildActive = activeChildHref === child.href;
                       return (
                         <li key={child.href}>

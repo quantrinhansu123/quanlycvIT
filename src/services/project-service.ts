@@ -1,6 +1,7 @@
 import { apiClient } from "@/services/api-client";
 import type {
   Project,
+  ProjectDirectoryItem,
   ProjectInput,
   ProjectMember,
   ProjectOption,
@@ -33,9 +34,13 @@ export const projectService = {
     );
   },
 
-  async getProjects(search?: string): Promise<Project[]> {
+  async getProjects(search?: string, options?: { signal?: AbortSignal }): Promise<Project[]> {
     const query = search?.trim() ? `?q=${encodeURIComponent(search.trim())}` : "";
-    return apiClient.get<Project[]>(`/projects${query}`);
+    return apiClient.get<Project[]>(`/projects${query}`, { signal: options?.signal });
+  },
+
+  async getProjectDirectory(options?: { signal?: AbortSignal }): Promise<ProjectDirectoryItem[]> {
+    return apiClient.get<ProjectDirectoryItem[]>("/projects?directory=true", { signal: options?.signal });
   },
 
   /** Chỉ id/mã/tên — đủ cho bộ lọc danh sách, không kéo thành viên và thống kê công việc. */
@@ -57,7 +62,8 @@ export const projectService = {
     search: string | undefined,
     page: number,
     pageSize: number,
-    managerIds?: string[]
+    managerIds?: string[],
+    options?: { signal?: AbortSignal }
   ): Promise<ProjectPage> {
     const params = new URLSearchParams();
     if (search?.trim()) params.set("q", search.trim());
@@ -66,15 +72,19 @@ export const projectService = {
     }
     params.set("page", String(page));
     params.set("pageSize", String(pageSize));
-    return apiClient.get<ProjectPage>(`/projects?${params.toString()}`);
+    return apiClient.get<ProjectPage>(`/projects?${params.toString()}`, {
+      signal: options?.signal,
+    });
   },
 
   async getProjectById(id: string): Promise<Project | null> {
     return apiClient.get<Project>(`/projects/${id}`);
   },
 
-  async createProject(input: ProjectInput): Promise<Project> {
-    return apiClient.post<Project>("/projects", input);
+  async createProject(input: ProjectInput, options?: { idempotencyKey?: string }): Promise<Project> {
+    return apiClient.post<Project>("/projects", input, {
+      headers: options?.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : undefined,
+    });
   },
 
   async updateProject(id: string, input: ProjectInput): Promise<Project | null> {
@@ -85,8 +95,8 @@ export const projectService = {
     return apiClient.delete<boolean>(`/projects/${id}`);
   },
 
-  async getDirectory(): Promise<ProjectMember[]> {
-    return apiClient.get<ProjectMember[]>("/users");
+  async getDirectory(options?: { signal?: AbortSignal }): Promise<ProjectMember[]> {
+    return apiClient.get<ProjectMember[]>("/users", { signal: options?.signal });
   },
 
   async getProjectTasks(projectId: string): Promise<ProjectTask[]> {

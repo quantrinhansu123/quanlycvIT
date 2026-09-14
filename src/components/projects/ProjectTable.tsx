@@ -5,7 +5,8 @@ import { CalendarDays, Eye, Pencil, Trash2 } from "lucide-react";
 import { PROJECT_STATUS_META, type Project } from "@/types/project";
 import { AvatarStack } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
-import { ActionIconButton } from "@/components/ui/ActionIconButton";
+import { RowActionMenu } from "@/components/ui/RowActionMenu";
+import { IntentPrefetchLink } from "@/components/navigation/IntentPrefetchLink";
 import { formatDateVN } from "@/lib/utils";
 
 interface ProjectTableProps {
@@ -70,13 +71,12 @@ export function ProjectTable({
                 <Badge color={project.color}>{project.code}</Badge>
               </td>
               <td className="w-80 max-w-xs px-3 py-4 align-top">
-                <button
-                  type="button"
-                  onClick={() => router.push(`/quan-ly-cong-viec/danh-sach-du-an/${project.id}`)}
+                <IntentPrefetchLink
+                  href={`/quan-ly-cong-viec/danh-sach-du-an/${project.id}`}
                   className="block w-full whitespace-normal break-all text-left text-xs font-semibold leading-5 text-gray-800 hover:text-brand-600"
                 >
                   {project.name}
-                </button>
+                </IntentPrefetchLink>
                 {project.description && (
                   <p className="mt-0.5 truncate text-xs text-gray-400">{project.description}</p>
                 )}
@@ -107,25 +107,32 @@ export function ProjectTable({
                 </span>
               </td>
               <td className="px-3 py-4 text-left align-top">
-                <div className="flex items-center justify-start gap-1.5">
-                  <ActionIconButton
-                    icon={Eye}
-                    label="Xem chi tiết"
-                    onClick={() => router.push(`/quan-ly-cong-viec/danh-sach-du-an/${project.id}`)}
-                  />
-                  {!readOnly && <ActionIconButton
-                    icon={Pencil}
-                    label="Chỉnh sửa"
-                    tone="warning"
-                    onClick={() => onEdit(project)}
-                  />}
-                  {!readOnly && <ActionIconButton
-                    icon={Trash2}
-                    label="Xóa dự án"
-                    tone="danger"
-                    onClick={() => onDelete(project)}
-                  />}
-                </div>
+                <RowActionMenu
+                  label={`Thao tác dự án ${project.name}`}
+                  items={[
+                    {
+                      icon: Eye,
+                      label: "Xem chi tiết",
+                      onClick: () => router.push(`/quan-ly-cong-viec/danh-sach-du-an/${project.id}`),
+                    },
+                    ...(!readOnly
+                      ? [
+                          {
+                            icon: Pencil,
+                            label: "Chỉnh sửa",
+                            tone: "primary" as const,
+                            onClick: () => onEdit(project),
+                          },
+                          {
+                            icon: Trash2,
+                            label: "Xóa dự án",
+                            tone: "danger" as const,
+                            onClick: () => onDelete(project),
+                          },
+                        ]
+                      : []),
+                  ]}
+                />
               </td>
             </tr>
           ))}

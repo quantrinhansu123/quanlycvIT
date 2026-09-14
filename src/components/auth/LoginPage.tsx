@@ -17,7 +17,6 @@ import {
   UserRound,
   Users,
 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
 
 const MODULES = [
   {
@@ -100,31 +99,27 @@ export function LoginPage() {
       const result = (await response.json()) as {
         success: boolean;
         message?: string;
-        data?: { accessToken: string; refreshToken: string };
       };
-      if (!response.ok || !result.success || !result.data) {
+      if (!response.ok || !result.success) {
         setError(result.message ?? `Đăng nhập thất bại (mã lỗi ${response.status}).`);
         return;
       }
 
-      const supabase = createClient();
-      const { error: sessionError } = await supabase.auth.setSession({
-        access_token: result.data.accessToken,
-        refresh_token: result.data.refreshToken,
-      });
-      if (sessionError) {
-        setError("Đăng nhập thành công nhưng không thể lưu phiên làm việc.");
-        return;
-      }
-
+      // API đăng nhập ký trực tiếp trên client SSR gắn cookie và ghi cookie phiên
+      // thẳng vào response — không cần gọi thêm `supabase.auth.setSession()` ở đây
+      // (gọi thêm sẽ tốn 1 network round-trip `_getUser()` để xác thực lại token
+      // vừa nhận, hoàn toàn thừa vì server vừa xác thực xong).
       if (remember) {
         window.localStorage.setItem("goal-app:remember-login", "true");
       } else {
         window.localStorage.removeItem("goal-app:remember-login");
       }
 
+      // Next.js 15+: staleTimes.dynamic mặc định = 0 (không cache), nên
+      // router.replace("/") tới route động (phụ thuộc cookie phiên) đã tự
+      // fetch dữ liệu mới — router.refresh() ở đây chỉ nhân đôi round-trip
+      // và cộng thêm độ trễ cảm nhận sau khi đăng nhập.
       router.replace("/");
-      router.refresh();
     } catch (signInError) {
       setError(
         signInError instanceof TypeError
@@ -137,8 +132,8 @@ export function LoginPage() {
   };
 
   return (
-    <main className="login-page min-h-screen bg-white text-gray-900">
-      <div className="grid min-h-screen lg:grid-cols-[55%_45%]">
+    <main className="login-page min-h-screen max-w-full overflow-x-clip bg-white text-gray-900">
+      <div className="grid min-h-screen min-w-0 lg:grid-cols-[minmax(0,55%)_minmax(0,45%)]">
         <section className="login-intro relative hidden overflow-hidden border-r border-brand-100 px-8 py-8 lg:flex xl:px-14 xl:py-10">
           <div className="login-grid absolute inset-0 opacity-60" aria-hidden="true" />
           <div className="relative z-10 mx-auto flex w-full max-w-[900px] flex-col">

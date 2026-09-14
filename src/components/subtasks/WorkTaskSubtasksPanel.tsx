@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
   Download,
@@ -14,7 +13,7 @@ import {
 import type { ProjectMember } from "@/types/project";
 import type { Subtask } from "@/types/subtask";
 import type { TaskPriority, TaskStatus, WorkTask } from "@/types/task";
-import { TASK_PRIORITY_OPTIONS, TASK_STATUS_OPTIONS } from "@/types/task";
+import { TASK_PRIORITY_OPTIONS, SUBTASK_STATUS_OPTIONS } from "@/types/task";
 import { useCurrentAccount } from "@/hooks/useCurrentAccount";
 import { subtaskService, type SubtaskFilters } from "@/services/subtask-service";
 import { Button } from "@/components/ui/Button";
@@ -30,6 +29,8 @@ import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 import { exportTablePdf } from "@/lib/pdf-export";
 import { cn, formatDateVN } from "@/lib/utils";
+import { useSessionDataCache } from "@/components/providers/SessionDataCacheProvider";
+import { CACHE_RESOURCE } from "@/lib/client-cache/resources";
 
 const SubtaskFormModal = dynamic(
   () => import("@/components/subtasks/SubtaskFormModal").then((mod) => mod.SubtaskFormModal),
@@ -53,18 +54,21 @@ interface WorkTaskSubtasksPanelProps {
   /** Toàn bộ nhân sự, dùng để hiển thị tên trong bảng. */
   members: ProjectMember[];
   onSubtasksChanged: () => void;
+  readOnly?: boolean;
 }
 
 export function WorkTaskSubtasksPanel({
   workTask,
   members,
   onSubtasksChanged,
+  readOnly = false,
 }: WorkTaskSubtasksPanelProps) {
-  const router = useRouter();
   const { confirm, notify } = useFeedback();
   const { account } = useCurrentAccount();
+  const cache = useSessionDataCache();
   const isAdmin = account?.role === "admin";
   const isMember = account?.role === "member";
+  const viewOnly = readOnly || workTask.status === "done";
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -139,14 +143,29 @@ export function WorkTaskSubtasksPanel({
     [currentPage, pageSize, subtasks]
   );
 
+  /**
+   * Panel này tự fetch riêng (không qua SessionDataCache) — mọi thay đổi task con
+   * (tạo/sửa/xóa/duyệt/xác nhận/báo cáo) phải tự xóa cache list task con của trang
+   * chính + list công việc (tiến độ công việc cha tính theo trung bình các task con),
+   * theo ma trận invalidation GĐ6 ("Báo cáo/duyệt task -> công việc cha").
+   */
+  function invalidateSharedCaches() {
+    cache.invalidate(CACHE_RESOURCE.subtasksList);
+    cache.invalidate(CACHE_RESOURCE.tasksList);
+  }
+
   function toggleSelect(id: string) {
+    if (viewOnly || subtasks.some((subtask) => subtask.id === id && subtask.status === "done")) return;
     setSelectedIds((current) =>
       current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
     );
   }
 
   function toggleSelectAll() {
-    const visibleIds = visibleSubtasks.map((subtask) => subtask.id);
+    if (viewOnly) return;
+    const visibleIds = visibleSubtasks
+      .filter((subtask) => subtask.status !== "done")
+      .map((subtask) => subtask.id);
     const allVisibleSelected =
       visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
     setSelectedIds((current) =>
@@ -157,7 +176,7 @@ export function WorkTaskSubtasksPanel({
   }
 
   async function handleDelete(subtask: Subtask) {
-    if (deletingId) return;
+    if (viewOnly || deletingId) return;
     const confirmed = await confirm({
       title: "Xóa task?",
       description: `Task “${subtask.title}” sẽ bị xóa vĩnh viễn. Hành động này không thể hoàn tác.`,
@@ -177,6 +196,7 @@ export function WorkTaskSubtasksPanel({
         title: "Đã xóa task",
         description: `Task “${subtask.title}” đã được xóa.`,
       });
+      invalidateSharedCaches();
       onSubtasksChanged();
     } catch (deleteError) {
       notify({
@@ -190,6 +210,7 @@ export function WorkTaskSubtasksPanel({
   }
 
   async function handleApprove(subtask: Subtask) {
+    if (viewOnly) return;
     try {
       const approved = await subtaskService.approveSubtask(subtask.id);
       if (!approved) throw new Error("Không tìm thấy task.");
@@ -199,6 +220,7 @@ export function WorkTaskSubtasksPanel({
         title: "Đã duyệt task",
         description: `Task “${subtask.title}” đã chuyển sang Đã hoàn thành.`,
       });
+      invalidateSharedCaches();
       onSubtasksChanged();
     } catch (approveError) {
       notify({
@@ -209,8 +231,28 @@ export function WorkTaskSubtasksPanel({
     }
   }
 
+  async function handleTest(subtask: Subtask, passed: boolean) {
+    if (viewOnly) return;
+    const note = passed ? undefined : window.prompt("Mô tả lỗi cần người thực hiện sửa:")?.trim();
+    if (!passed && !note) return;
+    try {
+      const updated = await subtaskService.submitTestResult(subtask.id, { passed, note });
+      setSubtasks((current) => current.map((item) => item.id === updated.id ? updated : item));
+      window.dispatchEvent(new CustomEvent("app:notifications-changed"));
+      notify({
+        type: "success",
+        title: passed ? "Task đã Pass kiểm thử" : "Đã trả Task về người thực hiện",
+        description: passed ? "Task đã chuyển sang Chờ duyệt." : "Tiến độ Task đã được đặt về 99%.",
+      });
+      invalidateSharedCaches();
+      onSubtasksChanged();
+    } catch (testError) {
+      notify({ type: "error", title: "Không thể ghi kết quả test", description: getErrorMessage(testError, "Vui lòng thử lại.") });
+    }
+  }
+
   async function handleAccept(subtask: Subtask) {
-    if (acceptingId) return;
+    if (viewOnly || acceptingId) return;
     setAcceptingId(subtask.id);
     try {
       const accepted = await subtaskService.acceptSubtask(subtask.id);
@@ -221,6 +263,7 @@ export function WorkTaskSubtasksPanel({
         title: "Đã xác nhận nhận Task",
         description: `Task “${subtask.title}” đã chuyển sang Đang làm.`,
       });
+      invalidateSharedCaches();
       onSubtasksChanged();
     } catch (acceptError) {
       notify({
@@ -241,7 +284,7 @@ export function WorkTaskSubtasksPanel({
         formatDateVN(subtask.dueDate),
         `${subtask.progress}%`,
         TASK_PRIORITY_OPTIONS.find((option) => option.value === subtask.priority)?.label ?? "",
-        TASK_STATUS_OPTIONS.find((option) => option.value === subtask.status)?.label ?? "",
+        SUBTASK_STATUS_OPTIONS.find((option) => option.value === subtask.status)?.label ?? "",
       ]);
       await exportTablePdf({
         title: `Task của công việc ${workTask.title}`,
@@ -305,16 +348,16 @@ export function WorkTaskSubtasksPanel({
           label="Trạng thái"
           value={status}
           onChange={(value) => setStatus(value as TaskStatus | "")}
-          options={TASK_STATUS_OPTIONS.map((option) => ({
+          options={SUBTASK_STATUS_OPTIONS.map((option) => ({
             value: option.value,
             label: option.label,
           }))}
         />
         <div className="ml-auto flex items-center gap-2">
-          <Button size="sm" onClick={() => setFormModal({ mode: "create" })}>
+          {!viewOnly && <Button size="sm" onClick={() => setFormModal({ mode: "create" })}>
             <Plus className="h-4 w-4" />
             Thêm mới
-          </Button>
+          </Button>}
           <div className="flex overflow-hidden rounded-lg border border-gray-200 bg-white">
             <button
               type="button"
@@ -353,7 +396,7 @@ export function WorkTaskSubtasksPanel({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
-        <div className="min-h-0 flex-1 overflow-auto">
+        <div className="@container min-h-0 flex-1 overflow-auto">
         {loading ? (
           <TableSkeleton rows={5} />
         ) : error ? (
@@ -363,7 +406,7 @@ export function WorkTaskSubtasksPanel({
             icon={ListTodo}
             title="Chưa có task nào"
             description="Chia nhỏ công việc này thành các task để phân công cho từng thành viên."
-            action={
+            action={viewOnly ? undefined :
               <Button size="sm" onClick={() => setFormModal({ mode: "create" })}>
                 <Plus className="h-4 w-4" />
                 Thêm task
@@ -378,9 +421,6 @@ export function WorkTaskSubtasksPanel({
             selectedIds={selectedIds}
             onToggleSelect={toggleSelect}
             onToggleSelectAll={toggleSelectAll}
-            onOpenSubtask={(subtask) =>
-              router.push(`/quan-ly-cong-viec/danh-sach-task/${subtask.id}`)
-            }
             onReport={setReportDrawer}
             onViewReports={(subtask) => setQuickView({ subtask, tab: "reports" })}
             onEdit={(subtask) => setFormModal({ mode: "edit", subtask })}
@@ -393,6 +433,10 @@ export function WorkTaskSubtasksPanel({
             acceptingId={acceptingId}
             onAccept={handleAccept}
             canReport={!isAdmin}
+            canTest
+            onPassTest={(subtask) => void handleTest(subtask, true)}
+            onFailTest={(subtask) => void handleTest(subtask, false)}
+            readOnly={viewOnly}
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3">
@@ -402,9 +446,6 @@ export function WorkTaskSubtasksPanel({
                 subtask={subtask}
                 workTask={workTask}
                 assignee={membersById.get(subtask.assigneeId)}
-                onOpen={(subtask) =>
-                  router.push(`/quan-ly-cong-viec/danh-sach-task/${subtask.id}`)
-                }
                 onReport={setReportDrawer}
                 onViewReports={(item) => setQuickView({ subtask: item, tab: "reports" })}
                 onEdit={(item) => setFormModal({ mode: "edit", subtask: item })}
@@ -415,6 +456,10 @@ export function WorkTaskSubtasksPanel({
                 currentAccountId={account?.id}
                 acceptingId={acceptingId}
                 onAccept={handleAccept}
+                canTest
+                onPassTest={(subtask) => void handleTest(subtask, true)}
+                onFailTest={(subtask) => void handleTest(subtask, false)}
+                readOnly={viewOnly}
               />
             ))}
           </div>
@@ -435,7 +480,7 @@ export function WorkTaskSubtasksPanel({
         )}
       </div>
 
-      {formModal && (
+      {formModal && !viewOnly && (
         <SubtaskFormModal
           mode={formModal.mode}
           subtask={formModal.mode === "edit" ? formModal.subtask : undefined}
@@ -451,6 +496,7 @@ export function WorkTaskSubtasksPanel({
                 : [saved, ...current];
             });
             setFormModal(null);
+            invalidateSharedCaches();
             onSubtasksChanged();
           }}
         />
@@ -461,16 +507,18 @@ export function WorkTaskSubtasksPanel({
           subtask={quickView.subtask}
           workTask={workTask}
           assignee={membersById.get(quickView.subtask.assigneeId)}
+          testerOptions={members}
           initialTab={quickView.tab}
           onClose={() => setQuickView(null)}
           onReportAdded={() => {
             loadSubtasks(filters);
+            invalidateSharedCaches();
             onSubtasksChanged();
           }}
         />
       )}
 
-      {reportDrawer && !isAdmin && (
+      {reportDrawer && !isAdmin && !viewOnly && (
         <TaskReportDrawer
           task={{
             id: reportDrawer.id,
@@ -479,6 +527,8 @@ export function WorkTaskSubtasksPanel({
             assigneeId: reportDrawer.assigneeId,
           }}
           assignee={membersById.get(reportDrawer.assigneeId)}
+          tester={reportDrawer.tester}
+          testerOptions={members}
           entityLabel="task"
           submitReport={(input) =>
             subtaskService.addSubtaskReport(reportDrawer.id, input)
@@ -486,6 +536,7 @@ export function WorkTaskSubtasksPanel({
           onClose={() => setReportDrawer(null)}
           onSubmitted={() => {
             loadSubtasks(filters);
+            invalidateSharedCaches();
             onSubtasksChanged();
           }}
         />

@@ -1,12 +1,20 @@
 import { ApiException } from "@/lib/api/response";
 import type { ProjectColor, ProjectInput, ProjectStepConfig } from "@/types/project";
-import type { SubtaskInput, TaskFileAttachment, TaskLinkAttachment } from "@/types/subtask";
+import type { SubtaskInput, SubtaskPromptItem, SubtaskUpdateEntry, TaskFileAttachment, TaskLinkAttachment } from "@/types/subtask";
 import type { TaskPriority, TaskStatus, WorkTaskInput } from "@/types/task";
+import type {
+  DutyChecklistTemplateInput,
+  DutyRecurringRuleInput,
+  DutyShiftInput,
+  DutyShiftStatus,
+} from "@/types/duty";
 
 const PROJECT_COLORS = new Set<ProjectColor>(["purple", "green", "orange", "red", "blue"]);
-const TASK_STATUSES = new Set<TaskStatus>(["todo", "inProgress", "review", "done"]);
+const TASK_STATUSES = new Set<TaskStatus>(["todo", "inProgress", "testing", "review", "done"]);
+const WORK_TASK_STATUSES = new Set<TaskStatus>(["todo", "inProgress", "review", "done"]);
 const TASK_PRIORITIES = new Set<TaskPriority>(["low", "medium", "high", "urgent"]);
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const DUTY_SHIFT_STATUSES = new Set<DutyShiftStatus>(["chua_thuc_hien", "dang_thuc_hien", "hoan_thanh"]);
 
 function requiredString(body: Record<string, unknown>, key: string, label: string): string {
   const value = body[key];
@@ -51,8 +59,12 @@ function isHttpUrl(value: string): boolean {
   }
 }
 
-function imageUrls(body: Record<string, unknown>): string[] {
-  const images = stringArray(body, "images");
+function parseImageUrlArray(value: unknown): string[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    throw new ApiException("images phải là một mảng chuỗi.", 400);
+  }
+  const images = [...new Set(value.map((item) => (item as string).trim()).filter(Boolean))];
   if (images.length > 10) {
     throw new ApiException("Mỗi Task chỉ được lưu tối đa 10 ảnh.", 400);
   }
@@ -62,8 +74,11 @@ function imageUrls(body: Record<string, unknown>): string[] {
   return images;
 }
 
-function fileAttachments(body: Record<string, unknown>): TaskFileAttachment[] {
-  const value = body.files;
+function imageUrls(body: Record<string, unknown>): string[] {
+  return parseImageUrlArray(body.images);
+}
+
+function parseFileAttachmentArray(value: unknown): TaskFileAttachment[] {
   if (value === undefined || value === null) return [];
   if (!Array.isArray(value)) {
     throw new ApiException("Danh sách tệp đính kèm phải là một mảng.", 400);
@@ -82,12 +97,19 @@ function fileAttachments(body: Record<string, unknown>): TaskFileAttachment[] {
     if (typeof entry.name !== "string" || !entry.name.trim()) {
       throw new ApiException("Tệp đính kèm phải có tên.", 400);
     }
-    return { name: entry.name.trim(), url: entry.url.trim() };
+    const description =
+      typeof entry.description === "string" && entry.description.trim()
+        ? entry.description.trim()
+        : undefined;
+    return { name: entry.name.trim(), url: entry.url.trim(), description };
   });
 }
 
-function linkAttachments(body: Record<string, unknown>): TaskLinkAttachment[] {
-  const value = body.links;
+function fileAttachments(body: Record<string, unknown>): TaskFileAttachment[] {
+  return parseFileAttachmentArray(body.files);
+}
+
+function parseLinkAttachmentArray(value: unknown): TaskLinkAttachment[] {
   if (value === undefined || value === null) return [];
   if (!Array.isArray(value)) {
     throw new ApiException("Danh sách liên kết phải là một mảng.", 400);
@@ -115,6 +137,107 @@ function linkAttachments(body: Record<string, unknown>): TaskLinkAttachment[] {
   });
 }
 
+function linkAttachments(body: Record<string, unknown>): TaskLinkAttachment[] {
+  return parseLinkAttachmentArray(body.links);
+}
+
+/** Lần bổ sung mô tả + đính kèm (Lần 2 trở đi) gửi kèm khi tạo/sửa Task. */
+function subtaskUpdateEntries(body: Record<string, unknown>): SubtaskUpdateEntry[] {
+  const value = body.updates;
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    throw new ApiException("Danh sách lần bổ sung phải là một mảng.", 400);
+  }
+  if (value.length > 20) {
+    throw new ApiException("Mỗi Task chỉ được có tối đa 20 lần bổ sung.", 400);
+  }
+  return value.map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new ApiException("Lần bổ sung không hợp lệ.", 400);
+    }
+    const entry = item as Record<string, unknown>;
+    const id =
+      typeof entry.id === "string" && entry.id.trim() ? entry.id.trim() : crypto.randomUUID();
+    const description =
+      typeof entry.description === "string" && entry.description.trim()
+        ? entry.description.trim()
+        : undefined;
+    const createdAt =
+      typeof entry.createdAt === "string" && entry.createdAt.trim()
+        ? entry.createdAt.trim()
+        : new Date().toISOString();
+    return {
+      id,
+      description,
+      images: parseImageUrlArray(entry.images),
+      files: parseFileAttachmentArray(entry.files),
+      links: parseLinkAttachmentArray(entry.links),
+      createdAt,
+    };
+  });
+}
+
+export function parseSubtaskPromptItems(body: Record<string, unknown>): SubtaskPromptItem[] {
+  const value = body.items;
+  if (!Array.isArray(value)) {
+    throw new ApiException("Danh sách Prompt phải là một mảng.", 400);
+  }
+  if (value.length > 30) {
+    throw new ApiException("Mỗi Task chỉ được lưu tối đa 30 dòng Prompt.", 400);
+  }
+
+  const ids = new Set<string>();
+  return value.map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new ApiException("Dòng Prompt không hợp lệ.", 400);
+    }
+    const entry = item as Record<string, unknown>;
+    if (typeof entry.id !== "string" || !entry.id.trim() || ids.has(entry.id.trim())) {
+      throw new ApiException("Mã dòng Prompt không hợp lệ hoặc bị trùng.", 400);
+    }
+    ids.add(entry.id.trim());
+
+    if (typeof entry.content !== "string") {
+      throw new ApiException("Nội dung Prompt phải là chuỗi.", 400);
+    }
+    const content = entry.content.trim();
+    if (content.length > 5000) {
+      throw new ApiException("Mỗi nội dung Prompt chỉ được tối đa 5.000 ký tự.", 400);
+    }
+
+    const imageUrls = parsePromptImageUrls(entry);
+    const status = entry.status === "processed" ? "processed" : "unprocessed";
+    return { id: entry.id.trim(), content, imageUrls, status };
+  });
+}
+
+/** Đọc imageUrls[]; tương thích dữ liệu cũ chỉ có imageUrl đơn. */
+function parsePromptImageUrls(entry: Record<string, unknown>): string[] {
+  const urls: string[] = [];
+  if (Array.isArray(entry.imageUrls)) {
+    for (const value of entry.imageUrls) {
+      if (typeof value !== "string" || !value.trim()) {
+        throw new ApiException("Danh sách ảnh Prompt không hợp lệ.", 400);
+      }
+      const url = value.trim();
+      if (!isHttpUrl(url)) {
+        throw new ApiException("Link ảnh trong Prompt không hợp lệ.", 400);
+      }
+      urls.push(url);
+    }
+  } else if (typeof entry.imageUrl === "string" && entry.imageUrl.trim()) {
+    const url = entry.imageUrl.trim();
+    if (!isHttpUrl(url)) {
+      throw new ApiException("Link ảnh trong Prompt không hợp lệ.", 400);
+    }
+    urls.push(url);
+  }
+  if (urls.length > 10) {
+    throw new ApiException("Mỗi dòng Prompt chỉ được tối đa 10 ảnh.", 400);
+  }
+  return urls;
+}
+
 function progressValue(body: Record<string, unknown>): number {
   const value = body.progress;
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 100) {
@@ -129,6 +252,11 @@ function taskStatus(body: Record<string, unknown>): TaskStatus {
     throw new ApiException("Trạng thái không hợp lệ.", 400);
   }
   return value;
+}
+
+function optionalTaskStatus(body: Record<string, unknown>): TaskStatus | undefined {
+  if (body.status === undefined || body.status === null || body.status === "") return undefined;
+  return taskStatus(body);
 }
 
 function taskPriority(body: Record<string, unknown>): TaskPriority {
@@ -217,12 +345,16 @@ export function parseWorkTaskInput(body: Record<string, unknown>): WorkTaskInput
   const dueDate = requiredDate(body, "dueDate", "Ngày hoàn thành");
   validateDateRange(startDate, dueDate);
 
+  const status = taskStatus(body);
+  if (!WORK_TASK_STATUSES.has(status)) {
+    throw new ApiException("Công việc không hỗ trợ trạng thái Chờ test.", 400);
+  }
   return {
     title: requiredString(body, "title", "Tên công việc"),
     description: optionalString(body, "description"),
     projectId: requiredString(body, "projectId", "Dự án"),
     assigneeIds: assigneeIds(body),
-    status: taskStatus(body),
+    status,
     priority: taskPriority(body),
     startDate,
     dueDate,
@@ -291,6 +423,7 @@ export interface TaskReportFields {
   content: string;
   progress: number;
   links: TaskReportLinkInput[];
+  testerId?: string;
 }
 
 export function parseTaskReportFields(fields: {
@@ -298,6 +431,7 @@ export function parseTaskReportFields(fields: {
   progress: FormDataEntryValue | null;
   authorId: FormDataEntryValue | null;
   links: FormDataEntryValue | null;
+  testerId?: FormDataEntryValue | null;
 }): TaskReportFields {
   if (typeof fields.content !== "string" || !fields.content.trim()) {
     throw new ApiException("Nội dung báo cáo là bắt buộc.", 400);
@@ -318,6 +452,86 @@ export function parseTaskReportFields(fields: {
     content: fields.content.trim(),
     progress: Math.round(progress),
     links: reportLinks(fields.links),
+    testerId:
+      typeof fields.testerId === "string" && fields.testerId.trim()
+        ? fields.testerId.trim()
+        : undefined,
+  };
+}
+
+function orderValue(body: Record<string, unknown>): number {
+  const value = body.order;
+  if (value === undefined || value === null || value === "") return 0;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new ApiException("Thứ tự phải là số.", 400);
+  }
+  return Math.round(value);
+}
+
+function activeFlag(body: Record<string, unknown>, defaultValue = true): boolean {
+  const value = body.active;
+  if (value === undefined || value === null) return defaultValue;
+  if (typeof value !== "boolean") {
+    throw new ApiException("Trạng thái hoạt động phải là true/false.", 400);
+  }
+  return value;
+}
+
+function dutyWeekday(body: Record<string, unknown>): number {
+  const value = body.weekday;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 7) {
+    throw new ApiException("Thứ trong tuần phải từ 1 (Thứ 2) đến 7 (Chủ nhật).", 400);
+  }
+  return value;
+}
+
+export function parseDutyChecklistTemplateInput(
+  body: Record<string, unknown>
+): DutyChecklistTemplateInput {
+  return {
+    name: requiredString(body, "name", "Tên đầu việc"),
+    description: optionalString(body, "description"),
+    order: orderValue(body),
+    active: activeFlag(body),
+  };
+}
+
+export function parseDutyRecurringRuleInput(body: Record<string, unknown>): DutyRecurringRuleInput {
+  const startDate = requiredDate(body, "startDate", "Ngày bắt đầu hiệu lực");
+  const endDate = optionalString(body, "endDate");
+  if (endDate) validateDateRange(startDate, endDate);
+
+  const assigneeIdsValue = stringArray(body, "assigneeIds");
+  if (assigneeIdsValue.length === 0) {
+    throw new ApiException("Vui lòng chọn ít nhất một người trực.", 400);
+  }
+
+  return {
+    weekday: dutyWeekday(body),
+    assigneeIds: assigneeIdsValue,
+    startDate,
+    endDate,
+    note: optionalString(body, "note"),
+    active: activeFlag(body),
+  };
+}
+
+export function parseDutyShiftInput(body: Record<string, unknown>): DutyShiftInput {
+  const assigneeIdsValue = stringArray(body, "assigneeIds");
+  if (assigneeIdsValue.length === 0) {
+    throw new ApiException("Vui lòng chọn ít nhất một người trực.", 400);
+  }
+
+  const status = optionalString(body, "status") as DutyShiftStatus | undefined;
+  if (status && !DUTY_SHIFT_STATUSES.has(status)) {
+    throw new ApiException("Trạng thái ca trực không hợp lệ.", 400);
+  }
+
+  return {
+    date: requiredDate(body, "date", "Ngày trực"),
+    assigneeIds: assigneeIdsValue,
+    note: optionalString(body, "note"),
+    status,
   };
 }
 
@@ -331,6 +545,8 @@ export function parseSubtaskInput(body: Record<string, unknown>): SubtaskInput {
     description: optionalString(body, "description"),
     workTaskId: requiredString(body, "workTaskId", "Công việc"),
     assigneeIds: assigneeIds(body),
+    testerId: optionalString(body, "testerId"),
+    status: optionalTaskStatus(body),
     priority: taskPriority(body),
     startDate,
     dueDate,
@@ -339,5 +555,6 @@ export function parseSubtaskInput(body: Record<string, unknown>): SubtaskInput {
     files: fileAttachments(body),
     links: linkAttachments(body),
     images: imageUrls(body),
+    updates: subtaskUpdateEntries(body),
   };
 }

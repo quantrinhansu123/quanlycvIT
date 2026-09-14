@@ -14,7 +14,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { Subtask, SubtaskReport } from "@/types/subtask";
-import type { WorkTask } from "@/types/task";
+import type { WorkTaskDirectoryItem } from "@/types/task";
 import type { ProjectMember } from "@/types/project";
 import { subtaskService } from "@/services/subtask-service";
 import { Button } from "@/components/ui/Button";
@@ -25,13 +25,15 @@ import { formatDateVN, cn } from "@/lib/utils";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 import { useCurrentAccount } from "@/hooks/useCurrentAccount";
+import { DetailAttachments } from "@/components/tasks/DetailAttachments";
 
 type QuickViewTab = "info" | "reports" | "timeline";
 
 interface SubtaskQuickViewModalProps {
   subtask: Subtask;
-  workTask?: WorkTask;
+  workTask?: WorkTaskDirectoryItem;
   assignee?: ProjectMember;
+  testerOptions?: ProjectMember[];
   initialTab?: QuickViewTab;
   onClose: () => void;
   onReportAdded?: () => void;
@@ -41,6 +43,7 @@ export function SubtaskQuickViewModal({
   subtask,
   workTask,
   assignee,
+  testerOptions,
   initialTab = "info",
   onClose,
   onReportAdded,
@@ -178,6 +181,13 @@ export function SubtaskQuickViewModal({
                   <div className="rounded-xl border border-gray-200 px-4 py-3.5 text-sm text-gray-600">
                     {subtask.description || "Chưa có mô tả cho task này."}
                   </div>
+                  {subtask.updates.map((entry, index) => (
+                    <div key={entry.id} className="mt-3 rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-3.5 text-sm text-gray-600">
+                      <p className="mb-2 font-semibold text-gray-700">Lần {index + 2}</p>
+                      <p>{entry.description || "Lần này chưa có mô tả."}</p>
+                      <DetailAttachments entityLabel="Task" files={entry.files} links={entry.links} images={entry.images} />
+                    </div>
+                  ))}
                 </div>
 
                 <div className="rounded-xl border border-gray-200 px-4 py-3.5">
@@ -290,6 +300,8 @@ export function SubtaskQuickViewModal({
             assigneeId: subtask.assigneeId,
           }}
           assignee={assignee}
+          tester={subtask.tester}
+          testerOptions={testerOptions}
           entityLabel="task"
           submitReport={(input) => subtaskService.addSubtaskReport(subtask.id, input)}
           onClose={() => setReportDrawerOpen(false)}

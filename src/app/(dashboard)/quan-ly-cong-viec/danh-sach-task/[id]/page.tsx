@@ -1,11 +1,6 @@
 import { createServerSupabaseClient } from "@/lib/supabase/api";
 import { assertSubtaskReadable, requireRequestAccount } from "@/lib/supabase/authorization";
-import {
-  getSubtask,
-  listDirectory,
-  listSubtaskReports,
-  listWorkTasks,
-} from "@/lib/supabase/data";
+import { getSubtask, getWorkTaskDirectoryItem } from "@/lib/supabase/data";
 import { SubtaskDetailView } from "./SubtaskDetailView";
 
 interface SubtaskDetailPageProps {
@@ -16,25 +11,26 @@ export default async function SubtaskDetailPage({ params }: SubtaskDetailPagePro
   const { id } = await params;
   const supabase = await createServerSupabaseClient();
   const access = await requireRequestAccount(supabase);
-  await assertSubtaskReadable(supabase, access, id);
-  const memberAssigneeIds = access.role === "member" ? [access.id] : undefined;
 
-  const [subtask, workTasks, reports, members] = await Promise.all([
+  // Song song ACL + task; chỉ lấy 1 công việc cha — không tải cả directory/members.
+  const [, subtask] = await Promise.all([
+    assertSubtaskReadable(supabase, access, id),
     getSubtask(supabase, id),
-    listWorkTasks(supabase, { assigneeIds: memberAssigneeIds }),
-    listSubtaskReports(supabase, id),
-    listDirectory(supabase).then((items) => access.role === "member"
-      ? items.filter((item) => item.id === access.employeeCode)
-      : items),
   ]);
+  const parentWorkTask = subtask
+    ? await getWorkTaskDirectoryItem(supabase, subtask.workTaskId)
+    : null;
 
   return (
     <SubtaskDetailView
       subtaskId={id}
       initialSubtask={subtask}
-      initialWorkTasks={workTasks}
-      initialReports={reports}
-      initialMembers={members}
+      initialWorkTasks={parentWorkTask ? [parentWorkTask] : []}
+      initialReports={[]}
+      initialMembers={[]}
+      initialActivity={[]}
+      initialActivityTotal={0}
+      initialTestHistory={[]}
     />
   );
 }

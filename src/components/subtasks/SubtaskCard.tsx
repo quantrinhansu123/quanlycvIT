@@ -3,21 +3,21 @@
 import { CalendarDays, CheckCircle2, LoaderCircle } from "lucide-react";
 import type { Subtask } from "@/types/subtask";
 import { isSubtaskOverdue } from "@/types/subtask";
-import type { WorkTask } from "@/types/task";
+import type { WorkTaskDirectoryItem } from "@/types/task";
 import type { ProjectMember } from "@/types/project";
 import { Avatar, AvatarStack } from "@/components/ui/Avatar";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { TaskPriorityBadge, TaskStatusBadge, OverdueTag } from "@/components/tasks/TaskBadges";
 import { TaskActionMenu } from "@/components/tasks/TaskActionMenu";
 import { formatDateVN } from "@/lib/utils";
+import { IntentPrefetchLink } from "@/components/navigation/IntentPrefetchLink";
 
 interface SubtaskCardProps {
   subtask: Subtask;
-  workTask?: WorkTask;
+  workTask?: WorkTaskDirectoryItem;
   assignee?: ProjectMember;
   /** Chỉ quản trị viên mới thấy thao tác Duyệt khi task đang chờ đánh giá. */
   canApprove?: boolean;
-  onOpen: (subtask: Subtask) => void;
   onReport: (subtask: Subtask) => void;
   onViewReports: (subtask: Subtask) => void;
   onEdit: (subtask: Subtask) => void;
@@ -27,6 +27,10 @@ interface SubtaskCardProps {
   currentAccountId?: string;
   acceptingId?: string | null;
   onAccept?: (subtask: Subtask) => void;
+  canTest?: boolean;
+  onPassTest?: (subtask: Subtask) => void;
+  onFailTest?: (subtask: Subtask) => void;
+  readOnly?: boolean;
 }
 
 export function SubtaskCard({
@@ -35,7 +39,6 @@ export function SubtaskCard({
   assignee,
   canApprove = false,
   onViewReports,
-  onOpen,
   onEdit,
   onDelete,
   onApprove,
@@ -43,11 +46,17 @@ export function SubtaskCard({
   currentAccountId,
   acceptingId,
   onAccept,
+  canTest = false,
+  onPassTest,
+  onFailTest,
+  readOnly = false,
 }: SubtaskCardProps) {
   const overdue = isSubtaskOverdue(subtask);
+  const viewOnly = readOnly || subtask.status === "done";
   const needsAcceptance = Boolean(
     isMember &&
     currentAccountId &&
+    currentAccountId !== subtask.testerId &&
     !subtask.acceptedAssigneeIds.includes(currentAccountId)
   );
 
@@ -59,7 +68,7 @@ export function SubtaskCard({
         ) : (
           <span />
         )}
-        {needsAcceptance && onAccept ? (
+        {viewOnly ? null : needsAcceptance && onAccept ? (
           <button
             type="button"
             onClick={() => onAccept(subtask)}
@@ -80,15 +89,30 @@ export function SubtaskCard({
               ? () => onApprove(subtask)
               : undefined
           }
+          onPassTest={
+            canTest && subtask.status === "testing" &&
+            (canApprove || currentAccountId === subtask.testerId) && onPassTest
+              ? () => onPassTest(subtask)
+              : undefined
+          }
+          onFailTest={
+            canTest && subtask.status === "testing" &&
+            (canApprove || currentAccountId === subtask.testerId) && onFailTest
+              ? () => onFailTest(subtask)
+              : undefined
+          }
           onEdit={() => onEdit(subtask)}
           onDelete={() => onDelete(subtask)}
         />}
       </div>
 
-      <button type="button" onClick={() => onOpen(subtask)} className="text-left">
+      <IntentPrefetchLink
+        href={`/quan-ly-cong-viec/danh-sach-task/${subtask.id}`}
+        className="text-left"
+      >
         <p className="line-clamp-1 text-sm font-semibold text-gray-800 hover:text-brand-600">{subtask.title}</p>
         {subtask.description && <p className="mt-1 line-clamp-2 text-xs text-gray-400">{subtask.description}</p>}
-      </button>
+      </IntentPrefetchLink>
 
       <div className="flex flex-wrap items-center gap-2">
         <TaskStatusBadge status={subtask.status} />

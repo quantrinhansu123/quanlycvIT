@@ -341,6 +341,12 @@ export function Header({ onToggleSidebar, onOpenMobileMenu }: HeaderProps) {
     }
   }
 
+  function prefetchNotification(notification: AppNotification) {
+    if (notification.taskId) {
+      router.prefetch(`/quan-ly-cong-viec/danh-sach-task/${notification.taskId}`);
+    }
+  }
+
   const changeTheme = (mode: ThemeMode) => {
     setThemeMode(mode);
     window.localStorage.setItem("goal-app:theme", mode);
@@ -350,8 +356,9 @@ export function Header({ onToggleSidebar, onOpenMobileMenu }: HeaderProps) {
   const handleLogout = async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
+    // Cùng lý do như LoginPage.tsx: route động không cache theo mặc định
+    // (staleTimes.dynamic = 0) nên router.refresh() sau replace() là thừa.
     router.replace("/dang-nhap");
-    router.refresh();
   };
 
   const roleLabel =
@@ -365,7 +372,7 @@ export function Header({ onToggleSidebar, onOpenMobileMenu }: HeaderProps) {
 
   return (
     <>
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-2 border-b border-gray-100 bg-white px-4 sm:px-5">
+    <header className="sticky top-0 z-30 flex h-16 min-w-0 items-center gap-2 overflow-x-clip border-b border-gray-100 bg-white px-4 sm:px-5">
       <button
         type="button"
         onClick={onOpenMobileMenu}
@@ -413,7 +420,7 @@ export function Header({ onToggleSidebar, onOpenMobileMenu }: HeaderProps) {
           <section
             role="dialog"
             aria-label="Thông báo Task"
-            className="absolute right-0 top-11 z-50 w-[min(380px,calc(100vw-24px))] overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl"
+            className="absolute right-0 top-11 z-50 w-[380px] max-w-[min(380px,calc(100dvw-1.5rem))] overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl"
           >
             <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3.5">
               <div>
@@ -447,6 +454,8 @@ export function Header({ onToggleSidebar, onOpenMobileMenu }: HeaderProps) {
                       <button
                         type="button"
                         onClick={() => void openNotification(notification)}
+                        onPointerEnter={() => prefetchNotification(notification)}
+                        onFocus={() => prefetchNotification(notification)}
                         className={`relative flex w-full gap-3 px-4 py-3.5 text-left transition hover:bg-gray-50 ${notification.read ? "bg-white" : "bg-brand-50/60"}`}
                       >
                         <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-600">

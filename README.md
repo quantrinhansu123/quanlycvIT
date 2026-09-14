@@ -18,7 +18,7 @@ Một số phân hệ trên menu vẫn đang trong giai đoạn phát triển.
 ## Yêu cầu
 
 - Node.js 20 trở lên
-- npm
+- pnpm
 - Một dự án Supabase
 - Tài khoản Cloudinary nếu sử dụng chức năng tải ảnh đại diện
 
@@ -55,9 +55,9 @@ Copy-Item .env.example .env.local
 Liên kết Supabase CLI với dự án, sau đó chạy migration:
 
 ```bash
-npx supabase login
-npx supabase link --project-ref <PROJECT_REF>
-npx supabase db push
+pnpm exec supabase login
+pnpm exec supabase link --project-ref <PROJECT_REF>
+pnpm exec supabase db push
 ```
 
 Nếu cần dữ liệu mẫu cho môi trường phát triển, chạy nội dung file `supabase/seed.sql` trong Supabase Dashboard → SQL Editor.
@@ -65,8 +65,8 @@ Nếu cần dữ liệu mẫu cho môi trường phát triển, chạy nội dun
 ## Cài đặt và chạy
 
 ```bash
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 Mở [http://localhost:3002](http://localhost:3002).
@@ -74,14 +74,14 @@ Mở [http://localhost:3002](http://localhost:3002).
 Chạy bản production:
 
 ```bash
-npm run build
-npm run start
+pnpm build
+pnpm start
 ```
 
 Kiểm tra mã nguồn:
 
 ```bash
-npm run lint
+pnpm lint
 ```
 
 ## Lưu ý triển khai

@@ -1,7 +1,7 @@
 import type { ProjectMember } from "@/types/project";
 import { getAppDateKey } from "@/lib/utils";
 
-export type TaskStatus = "todo" | "inProgress" | "review" | "done";
+export type TaskStatus = "todo" | "inProgress" | "testing" | "review" | "done";
 export type TaskPriority = "low" | "medium" | "high" | "urgent";
 
 export const TASK_STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
@@ -11,9 +11,19 @@ export const TASK_STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
   { value: "done", label: "Đã hoàn thành" },
 ];
 
+/** Trạng thái riêng của Task con; Công việc cha không dùng bước kiểm thử. */
+export const SUBTASK_STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
+  { value: "todo", label: "Cần làm" },
+  { value: "inProgress", label: "Đang làm" },
+  { value: "testing", label: "Chờ test" },
+  { value: "review", label: "Chờ duyệt" },
+  { value: "done", label: "Đã hoàn thành" },
+];
+
 export const TASK_STATUS_META: Record<TaskStatus, { label: string; badge: string; dot: string }> = {
   todo: { label: "Cần làm", badge: "bg-gray-100 text-gray-600", dot: "bg-gray-400" },
   inProgress: { label: "Đang làm", badge: "bg-sky-100 text-sky-600", dot: "bg-sky-500" },
+  testing: { label: "Chờ test", badge: "bg-violet-100 text-violet-700", dot: "bg-violet-500" },
   review: { label: "Chờ duyệt", badge: "bg-amber-100 text-amber-600", dot: "bg-amber-500" },
   done: { label: "Đã hoàn thành", badge: "bg-emerald-100 text-emerald-600", dot: "bg-emerald-500" },
 };
@@ -57,6 +67,8 @@ export const TASK_PRIORITY_META: Record<TaskPriority, { label: string; badge: st
 export interface TaskFileAttachment {
   name: string;
   url: string;
+  /** Mô tả ngắn về nội dung hoặc mục đích của tệp. */
+  description?: string;
 }
 
 /** Liên kết ngoài đính kèm. */
@@ -97,6 +109,12 @@ export interface WorkTask {
   /** Danh sách URL ảnh minh họa của công việc. */
   images: string[];
 }
+
+/** Payload tối giản để chọn công việc/quan hệ tiền đề. */
+export type WorkTaskDirectoryItem = Pick<
+  WorkTask,
+  "id" | "title" | "projectId" | "startDate" | "dueDate" | "assignees"
+>;
 
 export interface WorkTaskInput {
   title: string;
@@ -159,6 +177,8 @@ export interface ProgressReportSubmission {
   images: File[];
   files: File[];
   links: Omit<TaskReportLink, "id">[];
+  /** Chỉ dùng khi báo cáo Task con đạt 100%. */
+  testerId?: string;
 }
 
 /** Tối đa 10MB cho mỗi ảnh tiến độ hoặc file đính kèm. */

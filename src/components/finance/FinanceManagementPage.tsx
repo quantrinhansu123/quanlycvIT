@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownCircle, ArrowDownUp, ArrowUpCircle, CalendarDays,
-  CircleDollarSign, Download, Eye, FilterX, Gauge,
+  CircleDollarSign, Download, Eye, FilterX, Gauge, Landmark,
   Pencil, Plus, ReceiptText, RefreshCw, Search, Tags, Trash2,
   WalletCards, X,
 } from "lucide-react";
@@ -28,10 +28,11 @@ import type {
 const FinanceTransactionModal = dynamic(() => import("./FinanceTransactionModal").then((mod) => mod.FinanceTransactionModal), { ssr: false, loading: () => <ModalLoadingFallback /> });
 const FinanceTransactionDetailModal = dynamic(() => import("./FinanceTransactionDetailModal").then((mod) => mod.FinanceTransactionDetailModal), { ssr: false, loading: () => <ModalLoadingFallback /> });
 const FinanceCategoryModal = dynamic(() => import("./FinanceCategoryModal").then((mod) => mod.FinanceCategoryModal), { ssr: false, loading: () => <ModalLoadingFallback /> });
+const TransferQrModal = dynamic(() => import("./TransferQrModal").then((mod) => mod.TransferQrModal), { ssr: false, loading: () => <ModalLoadingFallback /> });
 
 type SortKey = "date" | "amount" | "createdAt";
 type DatePreset = "month" | "lastMonth" | "quarter" | "year";
-const EMPTY_SUMMARY: FinanceSummary = { income: 0, expense: 0, balance: 0, series: [], budgets: [] };
+const EMPTY_SUMMARY: FinanceSummary = { income: 0, expense: 0, series: [], budgets: [] };
 const money = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 });
 const compactMoney = new Intl.NumberFormat("vi-VN", { notation: "compact", maximumFractionDigits: 1 });
 const dateFormatter = new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
@@ -47,6 +48,7 @@ export function FinanceManagementPage() {
   const [end, setEnd] = useState(initial.end);
   const [preset, setPreset] = useState<DatePreset | "custom">("month");
   const [summary, setSummary] = useState<FinanceSummary>(EMPTY_SUMMARY);
+  const [currentBalance, setCurrentBalance] = useState(0);
   const [categories, setCategories] = useState<FinanceCategory[]>([]);
   const [transactions, setTransactions] = useState<FinanceTransaction[]>([]);
   const [total, setTotal] = useState(0);
@@ -58,6 +60,7 @@ export function FinanceManagementPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [loadingSummary, setLoadingSummary] = useState(true);
+  const [loadingCurrentBalance, setLoadingCurrentBalance] = useState(true);
   const [loadingTransactions, setLoadingTransactions] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [bootstrapped, setBootstrapped] = useState(false);
@@ -65,6 +68,7 @@ export function FinanceManagementPage() {
   const [viewing, setViewing] = useState<FinanceTransaction | null>(null);
   const [defaultType, setDefaultType] = useState<FinanceType>("chi");
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [transferModalOpen, setTransferModalOpen] = useState(false);
   const lastTransactionQuery = useRef("");
   const lastSummaryRange = useRef("");
 
@@ -105,6 +109,16 @@ export function FinanceManagementPage() {
       if (showLoading) setLoadingTransactions(false);
     }
   }, [notify]);
+  const loadCurrentBalance = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoadingCurrentBalance(true);
+    try {
+      setCurrentBalance(await apiClient.get<number>("/thu-chi/so-du"));
+    } catch (error) {
+      notify({ type: "error", title: "Không thể tải ngân sách hiện tại", description: getErrorMessage(error, "Vui lòng thử lại.") });
+    } finally {
+      if (showLoading) setLoadingCurrentBalance(false);
+    }
+  }, [notify]);
 
   useEffect(() => { const timer = window.setTimeout(() => { setSearch(searchInput.trim()); setPage(1); }, 250); return () => window.clearTimeout(timer); }, [searchInput]);
   useEffect(() => {
@@ -114,6 +128,7 @@ export function FinanceManagementPage() {
     // Một request duy nhất lấy tổng quan, danh mục và giao dịch lần đầu.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadDashboard(query).finally(() => setBootstrapped(true));
+    void loadCurrentBalance();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!bootstrapped) return;
@@ -150,7 +165,7 @@ export function FinanceManagementPage() {
     setPreset(next); setStart(dateKey(rangeStart)); setEnd(dateKey(rangeEnd)); setPage(1);
   }
   function openNew(nextType: FinanceType) { setDefaultType(nextType); setEditing("new"); }
-  async function refreshAll() { setRefreshing(true); try { await loadDashboard(transactionQuery(), false); } finally { setRefreshing(false); } }
+  async function refreshAll() { setRefreshing(true); try { await Promise.all([loadDashboard(transactionQuery(), false), loadCurrentBalance(false)]); } finally { setRefreshing(false); } }
   function matchesCurrentFilters(item: FinanceTransaction) {
     const normalizedSearch = search.toLocaleLowerCase("vi");
     return item.date >= start && item.date <= end
@@ -172,10 +187,19 @@ export function FinanceManagementPage() {
     if (isNew && matchesCurrentFilters(saved)) setTotal((current) => current + 1);
     notify({ type: "success", title: isNew ? "Đã thêm giao dịch" : "Đã cập nhật giao dịch", description: `${input.type === "thu" ? "Thu" : "Chi"} ${money.format(input.amount)}` });
     void loadDashboard(transactionQuery(), false);
+    void loadCurrentBalance(false);
+  }
+  async function confirmTransfer(input: FinanceInput) {
+    const saved = await apiClient.post<FinanceTransaction>("/thu-chi", input);
+    setTransactions((current) => (page !== 1 || !matchesCurrentFilters(saved)) ? current : [saved, ...current].slice(0, pageSize));
+    if (matchesCurrentFilters(saved)) setTotal((current) => current + 1);
+    notify({ type: "success", title: "Đã ghi nhận khoản chi chuyển khoản", description: money.format(input.amount) });
+    void loadDashboard(transactionQuery(), false);
+    void loadCurrentBalance(false);
   }
   async function removeTransaction(item: FinanceTransaction) {
     if (!await confirm({ title: "Xóa giao dịch này?", description: `${item.description || item.category?.name || "Giao dịch"} · ${money.format(item.amount)}. Thao tác này không thể hoàn tác.`, confirmLabel: "Xóa giao dịch" })) return;
-    try { await apiClient.delete<boolean>(`/thu-chi/${item.id}`); setTransactions((current) => current.filter((transaction) => transaction.id !== item.id)); setTotal((current) => Math.max(0, current - 1)); notify({ type: "success", title: "Đã xóa giao dịch" }); void loadDashboard(transactionQuery(), false); }
+    try { await apiClient.delete<boolean>(`/thu-chi/${item.id}`); setTransactions((current) => current.filter((transaction) => transaction.id !== item.id)); setTotal((current) => Math.max(0, current - 1)); notify({ type: "success", title: "Đã xóa giao dịch" }); void loadDashboard(transactionQuery(), false); void loadCurrentBalance(false); }
     catch (error) { notify({ type: "error", title: "Không thể xóa", description: getErrorMessage(error, "Vui lòng thử lại.") }); }
   }
   async function saveCategory(input: FinanceCategoryInput, id?: string) {
@@ -222,7 +246,7 @@ export function FinanceManagementPage() {
       <div className="mx-auto max-w-[1600px] space-y-5">
         <header className="flex flex-col justify-between gap-4 xl:flex-row xl:items-center">
           <div><div className="flex items-center gap-2"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-600 text-white shadow-sm"><WalletCards className="h-5 w-5" /></span><div><h1 className="text-xl font-bold tracking-tight text-gray-950 sm:text-2xl">Quản lý thu chi</h1><p className="text-xs text-gray-500 sm:text-sm">Theo dõi dòng tiền và kiểm soát ngân sách văn phòng</p></div></div></div>
-          <div className="flex flex-wrap items-center gap-2"><Button variant="secondary" onClick={() => setCategoryModalOpen(true)}><Tags className="h-4 w-4" />Danh mục</Button><Button variant="secondary" onClick={() => openNew("thu")} className="text-emerald-700"><ArrowUpCircle className="h-4 w-4" />Thêm khoản thu</Button><Button onClick={() => openNew("chi")}><Plus className="h-4 w-4" />Thêm khoản chi</Button></div>
+          <div className="flex flex-wrap items-center gap-2"><Button variant="secondary" onClick={() => setTransferModalOpen(true)}><Landmark className="h-4 w-4" />Chuyển khoản</Button><Button variant="secondary" onClick={() => setCategoryModalOpen(true)}><Tags className="h-4 w-4" />Danh mục</Button><Button variant="secondary" onClick={() => openNew("thu")} className="text-emerald-700"><ArrowUpCircle className="h-4 w-4" />Thêm khoản thu</Button><Button onClick={() => openNew("chi")}><Plus className="h-4 w-4" />Thêm khoản chi</Button></div>
         </header>
 
         <section className="flex flex-wrap items-center gap-2 rounded-2xl border border-gray-200 bg-white p-2.5 shadow-sm" aria-label="Khoảng thời gian báo cáo">
@@ -237,16 +261,16 @@ export function FinanceManagementPage() {
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Tổng quan thu chi">
           <SummaryCard loading={loadingSummary} icon={ArrowUpCircle} label="Tổng thu" value={summary.income} tone="income" note={`${chartData.filter((item) => item.income > 0).length} ngày có khoản thu`} />
           <SummaryCard loading={loadingSummary} icon={ArrowDownCircle} label="Tổng chi" value={summary.expense} tone="expense" note={`${chartData.filter((item) => item.expense > 0).length} ngày có khoản chi`} />
-          <SummaryCard loading={loadingSummary} icon={WalletCards} label="Số dư kỳ này" value={summary.balance} tone={summary.balance >= 0 ? "balance" : "expense"} note={summary.balance >= 0 ? "Dòng tiền đang dương" : "Chi đang vượt thu"} />
           <SummaryCard loading={loadingSummary} icon={Gauge} label="Chi trung bình/ngày" value={averageExpense} tone="neutral" note={`Tính trên ${days} ngày`} />
+          <SummaryCard loading={loadingCurrentBalance} icon={WalletCards} label="Ngân sách hiện tại" value={currentBalance} tone="balance" note="Số dư toàn thời gian · Không theo bộ lọc" />
         </section>
 
         <section className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,.75fr)]">
-          <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
+          <div className="min-w-0 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
             <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-sm font-bold text-gray-900">Dòng tiền theo ngày</h2><p className="mt-1 text-xs text-gray-500">So sánh thu và chi trong khoảng đã chọn</p></div><div className="flex gap-3 text-[11px] text-gray-500"><span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full bg-emerald-500" />Thu</span><span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full bg-rose-500" />Chi</span></div></div>
             {loadingSummary ? <div className="mt-5 h-48 animate-pulse rounded-xl bg-gray-100" /> : chartData.length ? <div className="account-table-scroll mt-5 overflow-x-auto pb-1"><div className="flex h-48 min-w-[520px] items-end gap-2 border-b border-gray-200 px-1">{chartData.map((item) => <div key={item.date} className="group flex min-w-7 flex-1 flex-col items-center justify-end gap-1 self-stretch" title={`${formatDate(item.date)} · Thu ${money.format(item.income)} · Chi ${money.format(item.expense)}`}><div className="flex w-full flex-1 items-end justify-center gap-1"><span className="w-[38%] max-w-4 rounded-t bg-emerald-500/80 transition-all duration-300 group-hover:bg-emerald-500" style={{ height: `${Math.max(item.income ? 4 : 0, (item.income / chartMax) * 100)}%` }} /><span className="w-[38%] max-w-4 rounded-t bg-rose-500/80 transition-all duration-300 group-hover:bg-rose-500" style={{ height: `${Math.max(item.expense ? 4 : 0, (item.expense / chartMax) * 100)}%` }} /></div><span className="pb-1 text-[9px] text-gray-400">{item.date.slice(8,10)}/{item.date.slice(5,7)}</span></div>)}</div></div> : <div className="flex h-52 items-center justify-center text-center"><div><CircleDollarSign className="mx-auto h-8 w-8 text-gray-300" /><p className="mt-2 text-sm font-medium text-gray-500">Chưa có dữ liệu dòng tiền</p></div></div>}
           </div>
-          <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
+          <div className="min-w-0 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
             <div className="flex items-start justify-between"><div><h2 className="text-sm font-bold text-gray-900">Ngân sách chi</h2><p className="mt-1 text-xs text-gray-500">Mức sử dụng trong kỳ đã chọn</p></div><button type="button" onClick={() => setCategoryModalOpen(true)} className="text-xs font-semibold text-brand-600 hover:text-brand-700">Thiết lập</button></div>
             {loadingSummary ? <div className="mt-5 space-y-4">{[1,2,3].map((item) => <div key={item} className="h-10 animate-pulse rounded-lg bg-gray-100" />)}</div> : budgeted.length ? <div className="mt-4 space-y-4">{budgeted.map(({ category, spent }) => { const budget = (category.monthlyBudget ?? 0) * budgetMonths; const percent = budget ? Math.round(spent / budget * 100) : 0; return <div key={category.id} className="group"><div className="mb-1.5 flex items-center justify-between gap-3 text-xs"><span className="truncate font-medium text-gray-700 group-hover:text-brand-600">{category.name}</span><span className={cn("shrink-0 font-semibold", percent > 100 ? "text-rose-600" : "text-gray-600")}>{compactMoney.format(spent)}{budget ? ` / ${compactMoney.format(budget)}` : ""}</span></div><div className="h-2 overflow-hidden rounded-full bg-gray-100"><div className={cn("h-full rounded-full transition-all duration-500", percent > 100 ? "bg-rose-500" : percent >= 80 ? "bg-amber-500" : "bg-brand-600")} style={{ width: `${Math.min(percent || (spent ? 8 : 0), 100)}%` }} /></div>{budget > 0 && <p className={cn("mt-1 text-[10px]", percent > 100 ? "text-rose-500" : "text-gray-400")}>{percent > 100 ? `Vượt ${money.format(spent - budget)}` : `Đã dùng ${percent}% ngân sách${budgetMonths > 1 ? ` của ${budgetMonths} tháng` : ""}`}</p>}</div>; })}</div> : <div className="flex h-44 flex-col items-center justify-center text-center"><Gauge className="h-8 w-8 text-gray-300" /><p className="mt-2 text-sm font-medium text-gray-500">Chưa thiết lập ngân sách</p><button type="button" onClick={() => setCategoryModalOpen(true)} className="mt-2 text-xs font-semibold text-brand-600 hover:underline">Quản lý danh mục</button></div>}
           </div>
@@ -301,12 +325,13 @@ export function FinanceManagementPage() {
       {editing && <FinanceTransactionModal transaction={editing === "new" ? undefined : editing} categories={categories} defaultType={defaultType} onClose={() => setEditing(null)} onSave={saveTransaction} />}
       {viewing && <FinanceTransactionDetailModal transaction={viewing} onClose={() => setViewing(null)} onEdit={() => { setViewing(null); setEditing(viewing); }} />}
       {categoryModalOpen && <FinanceCategoryModal categories={categories} onClose={() => setCategoryModalOpen(false)} onSave={saveCategory} onDelete={removeCategory} />}
+      {transferModalOpen && <TransferQrModal categories={categories} onClose={() => setTransferModalOpen(false)} onConfirm={confirmTransfer} />}
     </div>
   );
 }
 
-function SummaryCard({ icon: Icon, label, value, note, tone, loading }: { icon: React.ElementType; label: string; value: number; note: string; tone: "income" | "expense" | "balance" | "neutral"; loading: boolean }) {
-  const styles = { income: "bg-emerald-50 text-emerald-600", expense: "bg-rose-50 text-rose-600", balance: "bg-brand-50 text-brand-600", neutral: "bg-amber-50 text-amber-600" }[tone];
+function SummaryCard({ icon: Icon, label, value, note, tone, loading }: { icon: React.ElementType; label: string; value: number; note: string; tone: "income" | "expense" | "neutral" | "balance"; loading: boolean }) {
+  const styles = { income: "bg-emerald-50 text-emerald-600", expense: "bg-rose-50 text-rose-600", neutral: "bg-amber-50 text-amber-600", balance: "bg-brand-50 text-brand-600" }[tone];
   return <div className="group rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-md"><div className="flex items-start justify-between"><span className={cn("flex h-10 w-10 items-center justify-center rounded-xl transition-transform duration-200 group-hover:scale-105", styles)}><Icon className="h-5 w-5" /></span><span className="text-[10px] font-medium uppercase tracking-wider text-gray-400">{label}</span></div>{loading ? <div className="mt-4 h-7 w-36 animate-pulse rounded bg-gray-100" /> : <p className={cn("mt-3 truncate text-xl font-bold tracking-tight text-gray-950", value < 0 && "text-rose-600")} title={money.format(value)}>{money.format(value)}</p>}<p className="mt-1 text-[11px] text-gray-400">{note}</p></div>;
 }
 

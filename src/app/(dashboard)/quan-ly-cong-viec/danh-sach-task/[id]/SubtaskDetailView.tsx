@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -15,10 +15,13 @@ import {
   Flag,
   History,
   Info,
-  ListTodo,
+  Maximize2,
+  Minimize2,
+  PanelRightClose,
   Pencil,
   Plus,
   RotateCcw,
+  TestTube2,
   UsersRound,
   type LucideIcon,
 } from "lucide-react";
@@ -26,12 +29,13 @@ import { projectService } from "@/services/project-service";
 import { taskService } from "@/services/task-service";
 import { subtaskService } from "@/services/subtask-service";
 import type { ProjectMember } from "@/types/project";
-import type { WorkTask } from "@/types/task";
-import { TASK_PRIORITY_OPTIONS } from "@/types/task";
-import type { Subtask, SubtaskReport } from "@/types/subtask";
+import type { TaskFileAttachment, TaskLinkAttachment, WorkTaskDirectoryItem } from "@/types/task";
+import { SUBTASK_STATUS_OPTIONS, TASK_PRIORITY_OPTIONS } from "@/types/task";
+import type { Subtask, SubtaskReport, SubtaskTestHistoryEntry } from "@/types/subtask";
 import { isSubtaskOverdue } from "@/types/subtask";
+import type { TaskActivityEvent } from "@/types/activity";
 import { AvatarStack } from "@/components/ui/Avatar";
-import { TaskStatusBadge } from "@/components/tasks/TaskBadges";
+import { TaskActivityTimeline } from "@/components/timeline/TaskActivityTimeline";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -41,9 +45,17 @@ import { ModalLoadingFallback } from "@/components/ui/ModalLoadingFallback";
 import { cn, formatDateVN } from "@/lib/utils";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
+import { InlineTaskAttachmentEditor } from "@/components/tasks/InlineTaskAttachmentEditor";
 import { DetailAttachments } from "@/components/tasks/DetailAttachments";
 import { useCurrentAccount } from "@/hooks/useCurrentAccount";
+import { useSessionDataCache } from "@/components/providers/SessionDataCacheProvider";
+import { CACHE_RESOURCE } from "@/lib/client-cache/resources";
+import { useSplitView } from "@/components/layout/SplitViewShell";
 
+const SubtaskPromptPanel = dynamic(
+  () => import("@/components/subtasks/SubtaskPromptPanel").then((mod) => mod.SubtaskPromptPanel),
+  { ssr: false, loading: () => <div className="h-40 animate-pulse rounded-2xl bg-gray-100" /> }
+);
 const SubtaskFormModal = dynamic(
   () => import("@/components/subtasks/SubtaskFormModal").then((mod) => mod.SubtaskFormModal),
   { ssr: false, loading: () => <ModalLoadingFallback /> }
@@ -68,10 +80,16 @@ function getDayDistance(date: string): number {
 interface SubtaskDetailViewProps {
   subtaskId: string;
   initialSubtask: Subtask | null;
-  initialWorkTasks: WorkTask[];
+  initialWorkTasks: WorkTaskDirectoryItem[];
   initialReports: SubtaskReport[];
   initialMembers: ProjectMember[];
+  initialActivity: TaskActivityEvent[];
+  initialActivityTotal: number;
+  initialTestHistory: SubtaskTestHistoryEntry[];
 }
+
+const ACTIVITY_PAGE_SIZE = 20;
+const SUBTASK_ACCEPTED_EVENT = "app:subtask-accepted";
 
 export function SubtaskDetailView({
   subtaskId,
@@ -79,34 +97,57 @@ export function SubtaskDetailView({
   initialWorkTasks,
   initialReports,
   initialMembers,
+  initialActivity,
+  initialActivityTotal,
+  initialTestHistory,
 }: SubtaskDetailViewProps) {
   const router = useRouter();
   const { notify } = useFeedback();
   const { account } = useCurrentAccount();
+  const cache = useSessionDataCache();
+  const splitView = useSplitView();
   const [subtask, setSubtask] = useState<Subtask | null>(initialSubtask);
-  const [workTasks, setWorkTasks] = useState<WorkTask[]>(initialWorkTasks);
+  const [workTasks, setWorkTasks] = useState<WorkTaskDirectoryItem[]>(initialWorkTasks);
   const [reports, setReports] = useState<SubtaskReport[]>(initialReports);
   const [members, setMembers] = useState<ProjectMember[]>(initialMembers);
+  const [activity, setActivity] = useState<TaskActivityEvent[]>(initialActivity);
+  const [activityTotal, setActivityTotal] = useState(initialActivityTotal);
+  const [testHistory, setTestHistory] = useState<SubtaskTestHistoryEntry[]>(initialTestHistory);
+  const [activityLoadingMore, setActivityLoadingMore] = useState(false);
+  const [secondaryLoading, setSecondaryLoading] = useState(false);
+  const [directoryReady, setDirectoryReady] = useState(initialMembers.length > 0);
   const [error, setError] = useState(false);
   const [tab, setTab] = useState<Tab>("info");
   const [editing, setEditing] = useState(false);
   const [reportDrawerOpen, setReportDrawerOpen] = useState(false);
+  const [reportAtCompletion, setReportAtCompletion] = useState(false);
   const [quickUpdating, setQuickUpdating] = useState(false);
   const [accepting, setAccepting] = useState(false);
+
+  /**
+   * Nhật ký hoạt động được ghi bằng trigger DB ngay khi mutation ghi xong nên chỉ cần
+   * đọc lại trang đầu — không cần full reload 4 nguồn dữ liệu như `load()`.
+   */
+  const refreshActivity = useCallback(async () => {
+    try {
+      const activityPage = await subtaskService.getSubtaskActivity(subtaskId, 1, ACTIVITY_PAGE_SIZE);
+      setActivity(activityPage.items);
+      setActivityTotal(activityPage.total);
+    } catch {
+      // Bỏ qua lỗi làm mới timeline — không chặn luồng thao tác chính.
+    }
+  }, [subtaskId]);
+
   const load = useCallback(async () => {
     try {
-      const [subtaskData, workTaskList, reportData, memberData] =
-        await Promise.all([
-          subtaskService.getSubtaskById(subtaskId),
-          taskService.getTasks(),
-          subtaskService.getSubtaskReports(subtaskId),
-          projectService.getDirectory(),
-        ]);
+      const subtaskData = await subtaskService.getSubtaskById(subtaskId);
       setSubtask(subtaskData);
-      setWorkTasks(workTaskList);
-      setReports(reportData);
-      setMembers(memberData);
       setError(false);
+      void refreshActivity();
+      if (tab === "reports") {
+        const reportData = await subtaskService.getSubtaskReports(subtaskId);
+        setReports(reportData);
+      }
     } catch (loadError) {
       setError(true);
       notify({
@@ -118,10 +159,162 @@ export function SubtaskDetailView({
         ),
       });
     }
-  }, [subtaskId, notify]);
+  }, [subtaskId, notify, tab, refreshActivity]);
+
+  /** Directory đầy đủ chỉ cần khi mở form sửa / báo cáo. */
+  const ensureDirectory = useCallback(async () => {
+    if (directoryReady) return;
+    const [workTaskList, memberData] = await Promise.all([
+      taskService.getTaskDirectory(),
+      projectService.getDirectory(),
+    ]);
+    setWorkTasks(workTaskList);
+    setMembers(memberData);
+    setDirectoryReady(true);
+  }, [directoryReady]);
+
+  // Timeline: trì hoãn sau paint để không tranh băng thông với hydrate UI.
+  useEffect(() => {
+    let active = true;
+    const timer = window.setTimeout(() => {
+      void Promise.all([
+        subtaskService.getSubtaskActivity(subtaskId, 1, ACTIVITY_PAGE_SIZE),
+        subtaskService.getSubtaskTestHistory(subtaskId),
+      ])
+        .then(([activityPage, historyData]) => {
+          if (!active) return;
+          setActivity(activityPage.items);
+          setActivityTotal(activityPage.total);
+          setTestHistory(historyData);
+        })
+        .catch(() => undefined);
+    }, 400);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [subtaskId]);
+
+  // Báo cáo chỉ tải khi mở tab lịch sử.
+  useEffect(() => {
+    if (tab !== "reports") return;
+    let active = true;
+    setSecondaryLoading(true);
+    void subtaskService.getSubtaskReports(subtaskId)
+      .then((reportData) => {
+        if (active) setReports(reportData);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setSecondaryLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [tab, subtaskId]);
+
+  const handleAttachmentSave = useCallback(async (value: {
+    files: TaskFileAttachment[];
+    links: TaskLinkAttachment[];
+    images: string[];
+  }) => {
+    if (!subtask) return;
+    try {
+      const updated = await subtaskService.updateSubtask(subtask.id, {
+        title: subtask.title,
+        description: subtask.description,
+        workTaskId: subtask.workTaskId,
+        assigneeIds: subtask.assignees.map((member) => member.id),
+        testerId: subtask.tester?.id,
+        priority: subtask.priority,
+        startDate: subtask.startDate,
+        dueDate: subtask.dueDate,
+        progress: subtask.progress,
+        tags: subtask.tags,
+        files: value.files,
+        links: value.links,
+        images: value.images,
+        updates: subtask.updates,
+      });
+      if (!updated) throw new Error("Task không tồn tại hoặc đã bị xóa.");
+      setSubtask(updated);
+      void refreshActivity();
+    } catch (updateError) {
+      notify({
+        type: "error",
+        title: "Không thể cập nhật tài liệu Task",
+        description: getErrorMessage(updateError, "Vui lòng thử lại."),
+      });
+      throw updateError;
+    }
+  }, [notify, refreshActivity, subtask]);
+
+  const handleUpdateAttachmentSave = useCallback(async (
+    updateId: string,
+    value: {
+      files: TaskFileAttachment[];
+      links: TaskLinkAttachment[];
+      images: string[];
+    }
+  ) => {
+    if (!subtask) return;
+    try {
+      const updated = await subtaskService.updateSubtask(subtask.id, {
+        title: subtask.title,
+        description: subtask.description,
+        workTaskId: subtask.workTaskId,
+        assigneeIds: subtask.assignees.map((member) => member.id),
+        testerId: subtask.tester?.id,
+        priority: subtask.priority,
+        startDate: subtask.startDate,
+        dueDate: subtask.dueDate,
+        progress: subtask.progress,
+        tags: subtask.tags,
+        files: subtask.files,
+        links: subtask.links,
+        images: subtask.images,
+        updates: subtask.updates.map((entry) =>
+          entry.id === updateId ? { ...entry, ...value } : entry
+        ),
+      });
+      if (!updated) throw new Error("Task không tồn tại hoặc đã bị xóa.");
+      setSubtask(updated);
+      void refreshActivity();
+    } catch (updateError) {
+      notify({
+        type: "error",
+        title: "Không thể cập nhật tài liệu Task",
+        description: getErrorMessage(updateError, "Vui lòng thử lại."),
+      });
+      throw updateError;
+    }
+  }, [notify, refreshActivity, subtask]);
+
+  async function handleLoadMoreActivity() {
+    if (activityLoadingMore || activity.length >= activityTotal) return;
+    setActivityLoadingMore(true);
+    try {
+      const nextPage = Math.floor(activity.length / ACTIVITY_PAGE_SIZE) + 1;
+      const activityPage = await subtaskService.getSubtaskActivity(
+        subtaskId,
+        nextPage,
+        ACTIVITY_PAGE_SIZE
+      );
+      setActivity((current) => [...current, ...activityPage.items]);
+      setActivityTotal(activityPage.total);
+    } catch (loadMoreError) {
+      notify({
+        type: "error",
+        title: "Không thể tải thêm hoạt động",
+        description: getErrorMessage(loadMoreError, "Vui lòng thử lại."),
+      });
+    } finally {
+      setActivityLoadingMore(false);
+    }
+  }
 
   async function handleQuickUpdate(
-    patch: Partial<Pick<Subtask, "priority">> & {
+    patch: Partial<Pick<Subtask, "priority" | "status">> & {
       assigneeIds?: string[];
     }
   ) {
@@ -133,6 +326,7 @@ export function SubtaskDetailView({
         description: subtask.description,
         workTaskId: subtask.workTaskId,
         assigneeIds: subtask.assignees.map((member) => member.id),
+        testerId: subtask.tester?.id,
         priority: subtask.priority,
         startDate: subtask.startDate,
         dueDate: subtask.dueDate,
@@ -141,11 +335,17 @@ export function SubtaskDetailView({
         files: subtask.files,
         links: subtask.links,
         images: subtask.images,
+        updates: subtask.updates,
         ...patch,
       });
       if (!updated) throw new Error("Task không tồn tại hoặc đã bị xóa.");
       setSubtask(updated);
       notify({ type: "success", title: "Đã cập nhật Task" });
+      // Đổi ưu tiên/người thực hiện nhanh không đi qua load() — xóa cache list task
+      // con + list công việc (tiến độ công việc cha tính từ trung bình các task con).
+      cache.invalidate(CACHE_RESOURCE.subtasksList);
+      cache.invalidate(CACHE_RESOURCE.tasksList);
+      void refreshActivity();
     } catch (updateError) {
       notify({
         type: "error",
@@ -167,6 +367,11 @@ export function SubtaskDetailView({
       const accepted = await subtaskService.acceptSubtask(subtask.id);
       setSubtask(accepted);
       window.dispatchEvent(new CustomEvent("app:notifications-changed"));
+      // Layout danh sách/chi tiết giữ danh sách mount khi mở Task. Patch ngay
+      // bản ghi hiện tại thay vì xóa cache khiến danh sách chớp thành rỗng.
+      window.dispatchEvent(new CustomEvent<Subtask>(SUBTASK_ACCEPTED_EVENT, { detail: accepted }));
+      cache.invalidate(CACHE_RESOURCE.tasksList);
+      void refreshActivity();
       notify({
         type: "success",
         title: "Đã xác nhận nhận Task",
@@ -183,9 +388,36 @@ export function SubtaskDetailView({
     }
   }
 
+  async function handleTest(passed: boolean) {
+    if (!subtask) return;
+    const note = passed ? undefined : window.prompt("Mô tả lỗi cần người thực hiện sửa:")?.trim();
+    if (!passed && !note) return;
+    try {
+      const updated = await subtaskService.submitTestResult(subtask.id, { passed, note });
+      setSubtask(updated);
+      const history = await subtaskService.getSubtaskTestHistory(subtask.id);
+      setTestHistory(history);
+      window.dispatchEvent(new CustomEvent("app:notifications-changed"));
+      cache.invalidate(CACHE_RESOURCE.subtasksList);
+      cache.invalidate(CACHE_RESOURCE.tasksList);
+      void refreshActivity();
+      notify({
+        type: "success",
+        title: passed ? "Task đã Pass kiểm thử" : "Đã trả Task về người thực hiện",
+        description: passed ? "Task đã chuyển sang Chờ duyệt." : "Tiến độ Task đã được đặt về 99%.",
+      });
+    } catch (testError) {
+      notify({
+        type: "error",
+        title: "Không thể ghi kết quả test",
+        description: getErrorMessage(testError, "Vui lòng thử lại."),
+      });
+    }
+  }
+
   if (error) {
     return (
-      <div className="mx-auto max-w-[1080px] px-4 py-10 sm:px-6">
+      <div className="mx-auto max-w-[1080px] px-4 py-10 @sm/detail:px-6">
         <ErrorState onRetry={load} />
       </div>
     );
@@ -193,7 +425,7 @@ export function SubtaskDetailView({
 
   if (subtask === null) {
     return (
-      <div className="mx-auto max-w-[1080px] px-4 py-10 sm:px-6">
+      <div className="mx-auto max-w-[1080px] px-4 py-10 @sm/detail:px-6">
         <EmptyState
           icon={AlertCircle}
           title="Không tìm thấy Task"
@@ -204,86 +436,151 @@ export function SubtaskDetailView({
   }
 
   const workTask = workTasks.find((item) => item.id === subtask.workTaskId);
-  const assignee = members.find((member) => member.id === subtask.assigneeId);
+  const assignee =
+    subtask.assignees.find((member) => member.id === subtask.assigneeId) ??
+    subtask.assignees[0] ??
+    members.find((member) => member.id === subtask.assigneeId);
   const dueDistance = getDayDistance(subtask.dueDate);
   const overdue = isSubtaskOverdue(subtask);
   const needsAcceptance = Boolean(
     account?.role === "member" &&
+    account.id !== subtask.testerId &&
     !subtask.acceptedAssigneeIds.includes(account.id)
   );
+  const isTester = Boolean(account && account.id === subtask.testerId);
+  const canTest = subtask.status === "testing" && (isTester || account?.role === "admin");
+  const statusLocked = subtask.status === "done";
+  const canUpdateStatus = account?.role === "admin" || (account?.role === "member" && !isTester);
+  const statusOptions = account?.role === "member" && !statusLocked
+    ? SUBTASK_STATUS_OPTIONS.filter((option) => option.value !== "done")
+    : SUBTASK_STATUS_OPTIONS;
 
   return (
-    <div className="min-h-full bg-white pb-2">
+    <div className="min-h-full min-w-0 max-w-full overflow-x-clip bg-white pb-2 [contain:inline-size]">
       <div className="border-b border-gray-100 bg-white">
-        <div className="mx-auto flex w-full max-w-none items-center justify-between gap-4 px-3 py-3 sm:px-5">
-          <div className="flex min-w-0 items-center gap-3">
-            <button
-              type="button"
-              onClick={() => router.back()}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50"
-              aria-label="Quay lại"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </button>
-            <nav className="flex min-w-0 items-center gap-2 text-sm text-gray-400">
+        <div className="mx-auto flex w-full min-w-0 max-w-full flex-wrap items-start justify-between gap-3 px-3 py-3 @sm/detail:px-5">
+          <div className="flex min-w-0 flex-1 items-start gap-3">
+            {splitView && !splitView.maximized ? (
+              <>
+                <button
+                  type="button"
+                  onClick={splitView.toggleDetailCollapsed}
+                  className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 xl:flex"
+                  aria-label="Thu panel chi tiết"
+                  title="Thu panel chi tiết"
+                >
+                  <PanelRightClose className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.back()}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 xl:hidden"
+                  aria-label="Quay lại"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => router.back()}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50"
+                aria-label="Quay lại"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+            )}
+            <nav className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 pt-0.5 text-xs leading-4 text-gray-400 @xl/detail:text-sm @xl/detail:leading-5">
               <Link
                 href="/quan-ly-cong-viec/danh-sach-task"
                 className="shrink-0 font-semibold text-gray-600 hover:text-brand-600"
               >
                 Quản lý công việc
               </Link>
-              <span>&gt;</span>
               {workTask && (
-                <>
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="shrink-0">&gt;</span>
                   <Link
                     href={`/quan-ly-cong-viec/danh-sach-cong-viec/${workTask.id}`}
-                    className="shrink-0 font-semibold text-gray-500 hover:text-brand-600"
+                    className="min-w-0 break-words font-semibold text-gray-500 hover:text-brand-600"
                   >
                     Công việc {workTask.title}
                   </Link>
-                  <span>&gt;</span>
-                </>
+                </span>
               )}
-              <span className="truncate font-semibold text-gray-500">
-                {subtask.title}
+              <span className="flex min-w-0 items-start gap-2">
+                <span className="shrink-0">&gt;</span>
+                <span className="min-w-0 break-words font-semibold text-gray-500">
+                  {subtask.title}
+                </span>
               </span>
             </nav>
           </div>
 
-          {needsAcceptance ? (
-            <Button
-              onClick={() => void handleAccept()}
-              disabled={accepting}
-              className="shrink-0 rounded-full bg-emerald-600 hover:bg-emerald-700"
-            >
-              <CircleCheck className="h-4 w-4" />
-              <span className="hidden sm:inline">{accepting ? "Đang xác nhận..." : "Xác nhận nhận Task"}</span>
-            </Button>
-          ) : (
-            <Button
-              onClick={() => setEditing(true)}
-              className="shrink-0 rounded-full bg-brand-600 hover:bg-brand-700"
-            >
-              <Pencil className="h-4 w-4" />
-              <span className="hidden sm:inline">Chỉnh sửa Task</span>
-            </Button>
-          )}
+          <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
+            {statusLocked && (
+              <span className="inline-flex h-9 items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700">
+                <CircleCheck className="h-4 w-4" />
+                Chỉ xem
+              </span>
+            )}
+            {splitView && (
+              <button
+                type="button"
+                onClick={splitView.toggleMaximized}
+                className="hidden h-9 w-9 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 xl:flex"
+                aria-label={splitView.maximized ? "Thu nhỏ về chia đôi màn hình" : "Phóng to toàn màn hình"}
+                title={splitView.maximized ? "Thu nhỏ về chia đôi màn hình" : "Phóng to toàn màn hình"}
+              >
+                {splitView.maximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              </button>
+            )}
+            {canTest ? (
+              <>
+                <Button onClick={() => void handleTest(false)} variant="secondary" className="rounded-full border-rose-200 text-rose-600 hover:bg-rose-50">
+                  Fail
+                </Button>
+                <Button onClick={() => void handleTest(true)} className="rounded-full bg-emerald-600 hover:bg-emerald-700">
+                  <CircleCheck className="h-4 w-4" /> Pass
+                </Button>
+              </>
+            ) : needsAcceptance ? (
+              <Button
+                onClick={() => void handleAccept()}
+                disabled={accepting}
+                className="rounded-full bg-emerald-600 hover:bg-emerald-700"
+              >
+                <CircleCheck className="h-4 w-4" />
+                <span className="hidden @xl/detail:inline">{accepting ? "Đang xác nhận..." : "Xác nhận nhận Task"}</span>
+              </Button>
+            ) : !isTester && !statusLocked ? (
+              <Button
+                onClick={() => {
+                  void ensureDirectory().then(() => setEditing(true));
+                }}
+                className="rounded-full bg-brand-600 hover:bg-brand-700"
+              >
+                <Pencil className="h-4 w-4" />
+                <span className="hidden @xl/detail:inline">Chỉnh sửa Task</span>
+              </Button>
+            ) : null}
+          </div>
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-none px-3 pb-8 pt-4 sm:px-5">
+      <div className="mx-auto w-full max-w-none px-3 pb-8 pt-4 @sm/detail:px-5">
         {tab === "info" ? (
-          <div className="space-y-5">
-            <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="space-y-3">
+            <section className="grid grid-cols-2 gap-2 @3xl/detail:grid-cols-4">
               <OverviewCard
                 label="Tiến độ thực tế"
                 icon={CircleCheck}
                 iconClassName="bg-violet-50 text-violet-600"
               >
-                <strong className="text-2xl font-bold text-gray-950">
+                <strong className="text-lg font-bold text-gray-950">
                   {subtask.progress}%
                 </strong>
-                <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-gray-100">
+                <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-gray-100">
                   <div
                     className="h-full rounded-full bg-violet-600"
                     style={{ width: `${subtask.progress}%` }}
@@ -298,7 +595,7 @@ export function SubtaskDetailView({
               >
                 <p
                   className={cn(
-                    "text-sm font-bold",
+                    "text-sm font-bold leading-snug",
                     overdue ? "text-rose-500" : "text-gray-900"
                   )}
                 >
@@ -308,7 +605,7 @@ export function SubtaskDetailView({
                       ? "Hạn hôm nay"
                       : `Còn ${dueDistance} ngày`}
                 </p>
-                <p className="mt-2 text-xs text-gray-400">
+                <p className="mt-1 text-[11px] text-gray-400">
                   {formatDateVN(subtask.dueDate)}
                 </p>
               </OverviewCard>
@@ -320,7 +617,7 @@ export function SubtaskDetailView({
               >
                 <QuickSelect
                   value={subtask.priority}
-                  disabled={quickUpdating}
+                  disabled={quickUpdating || statusLocked}
                   options={TASK_PRIORITY_OPTIONS}
                   onChange={(value) =>
                     handleQuickUpdate({
@@ -335,35 +632,107 @@ export function SubtaskDetailView({
                 icon={CircleAlert}
                 iconClassName="bg-teal-50 text-teal-600"
               >
-                <TaskStatusBadge status={subtask.status} />
-                <p className="mt-2 text-[11px] text-gray-400">
-                  Tự động theo tiến độ; Hoàn thành cần quản trị viên duyệt.
-                </p>
+                <QuickSelect
+                  value={subtask.status}
+                  disabled={quickUpdating || statusLocked || !canUpdateStatus}
+                  options={statusOptions}
+                  onChange={(value) => {
+                    if (value === "testing" && subtask.status !== "testing" && account?.role === "member") {
+                      setReportAtCompletion(true);
+                      void ensureDirectory().then(() => setReportDrawerOpen(true));
+                      return;
+                    }
+                    handleQuickUpdate({ status: value as Subtask["status"] });
+                  }}
+                />
               </OverviewCard>
             </section>
 
-            <section className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+            <SubtaskPromptPanel
+              key={`${subtask.id}-${subtask.updatedAt ?? ""}`}
+              subtaskId={subtask.id}
+              initialItems={subtask.promptItems}
+            />
+
+            <section className="grid grid-cols-1 gap-5 @3xl/detail:grid-cols-3">
               <Panel
-                className="lg:col-span-2"
+                className="@3xl/detail:col-span-2"
                 accentClassName="bg-violet-600"
                 icon={Info}
                 iconClassName="text-violet-600"
                 title="Chi tiết Task"
                 subtitle="Mô tả Task và thời hạn thực hiện chi tiết"
               >
-                <div className="max-w-full overflow-x-auto rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-4 text-sm leading-6 text-gray-700">
-                  <DetailDescription
-                    description={subtask.description}
-                    emptyText="Chưa có mô tả cho Task này."
-                  />
+                <div className="space-y-3">
+                  <div className="rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-4">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <span className="text-sm font-semibold text-gray-700">Lần 1</span>
+                      {subtask.createdAt && (
+                        <span className="text-xs text-gray-400">{formatDateVN(subtask.createdAt)}</span>
+                      )}
+                    </div>
+                    <div className="max-w-full overflow-x-auto text-sm leading-6 text-gray-700">
+                      <DetailDescription
+                        description={subtask.description}
+                        emptyText="Chưa có mô tả cho Task này."
+                      />
+                    </div>
+                    {statusLocked ? (
+                      <DetailAttachments
+                        entityLabel="Task"
+                        files={subtask.files}
+                        links={subtask.links}
+                        images={subtask.images}
+                      />
+                    ) : (
+                      <InlineTaskAttachmentEditor
+                        key={subtask.id}
+                        entityLabel="Task"
+                        files={subtask.files}
+                        links={subtask.links}
+                        images={subtask.images}
+                        onUploadFile={subtaskService.uploadFile}
+                        onUploadImage={subtaskService.uploadImage}
+                        onSave={handleAttachmentSave}
+                      />
+                    )}
+                  </div>
+                  {subtask.updates.length > 0 && (
+                    <div className="space-y-3">
+                      {subtask.updates.map((entry, index) => (
+                        <div key={entry.id} className="rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-4">
+                          <div className="mb-2 flex items-center justify-between gap-3">
+                            <span className="text-sm font-semibold text-gray-700">Lần {index + 2}</span>
+                            <span className="text-xs text-gray-400">{formatDateVN(entry.createdAt)}</span>
+                          </div>
+                          <div className="max-w-full overflow-x-auto text-sm leading-6 text-gray-700">
+                            <DetailDescription description={entry.description} emptyText="Lần này chưa có mô tả." />
+                          </div>
+                          {statusLocked ? (
+                            <DetailAttachments
+                              entityLabel="Task"
+                              files={entry.files}
+                              links={entry.links}
+                              images={entry.images}
+                            />
+                          ) : (
+                            <InlineTaskAttachmentEditor
+                              key={entry.id}
+                              entityLabel="Task"
+                              files={entry.files}
+                              links={entry.links}
+                              images={entry.images}
+                              onUploadFile={subtaskService.uploadFile}
+                              onUploadImage={subtaskService.uploadImage}
+                              onSave={(value) => handleUpdateAttachmentSave(entry.id, value)}
+                            />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <DetailAttachments
-                  entityLabel="Task"
-                  files={subtask.files}
-                  links={subtask.links}
-                  images={subtask.images}
-                />
-                <div className="mt-6 grid grid-cols-1 gap-5 border-t border-gray-100 pt-4 sm:grid-cols-2">
+                <div className="mt-6 grid grid-cols-1 gap-5 border-t border-gray-100 pt-4 @md/detail:grid-cols-2">
                   <DateInfo
                     label="Thời gian bắt đầu:"
                     value={formatDateVN(subtask.startDate)}
@@ -381,8 +750,8 @@ export function SubtaskDetailView({
                 accentClassName="bg-violet-600"
                 icon={UsersRound}
                 iconClassName="text-violet-600"
-                title="Nhân sự & Công việc"
-                subtitle="Người thực hiện và công việc trực thuộc"
+                title="Nhân sự"
+                subtitle="Người thực hiện và người test"
               >
                 <p className="mb-2 text-xs font-medium text-gray-400">
                   Người thực hiện:
@@ -394,30 +763,33 @@ export function SubtaskDetailView({
                     if (ids.length > 0) handleQuickUpdate({ assigneeIds: ids });
                   }}
                   emptyHint="Công việc chưa có người phụ trách"
-                  disabled={quickUpdating}
+                  disabled={quickUpdating || statusLocked}
                 />
 
-                <p className="mb-2 mt-5 text-xs font-medium text-gray-400">
-                  Thuộc công việc:
-                </p>
-                {workTask ? (
-                  <Link
-                    href={`/quan-ly-cong-viec/danh-sach-cong-viec/${workTask.id}`}
-                    className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50/80 p-3 transition-colors hover:bg-gray-100"
-                  >
-                    <FileClock className="h-5 w-5 shrink-0 text-brand-500" />
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-bold text-gray-900">
-                        {workTask.title}
+                <div className="mt-5 border-t border-gray-100 pt-4">
+                  <p className="mb-2 text-xs font-medium text-gray-400">
+                    Người test:
+                  </p>
+                  {subtask.tester ? (
+                    <div className="flex items-center gap-3 rounded-xl border border-violet-100 bg-violet-50/60 p-3">
+                      <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-600">
+                        <TestTube2 className="h-4 w-4" />
                       </span>
-                      <span className="block text-xs text-gray-400">
-                        Hạn: {formatDateVN(workTask.dueDate)}
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-bold text-gray-900">
+                          {subtask.tester.name}
+                        </span>
+                        <span className="block truncate text-xs text-gray-500">
+                          {subtask.tester.role ?? "Tester được phân công"}
+                        </span>
                       </span>
-                    </span>
-                  </Link>
-                ) : (
-                  <p className="text-sm text-gray-400">Không xác định</p>
-                )}
+                    </div>
+                  ) : (
+                    <p className="rounded-xl border border-dashed border-gray-200 px-3 py-3 text-sm text-gray-400">
+                      Chưa phân công người test.
+                    </p>
+                  )}
+                </div>
 
                 {subtask.assignees.length > 1 && (
                   <div className="mt-4 flex items-center gap-2 text-xs text-gray-400">
@@ -425,50 +797,68 @@ export function SubtaskDetailView({
                     {subtask.assignees.length} người thực hiện
                   </div>
                 )}
-              </Panel>
-            </section>
 
-            <section className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-              <Panel
-                accentClassName="bg-orange-500"
-                icon={ListTodo}
-                iconClassName="text-orange-500"
-                title="Công việc trực thuộc"
-                subtitle="Công việc cha chứa Task này"
-              >
-                <div className="flex min-h-36 items-center justify-center text-center">
-                  {workTask ? (
-                    <Link
-                      href={`/quan-ly-cong-viec/danh-sach-cong-viec/${workTask.id}`}
-                      className="rounded-xl bg-orange-50 px-4 py-3 text-sm font-semibold text-orange-700 hover:bg-orange-100"
-                    >
-                      {workTask.title}
-                    </Link>
-                  ) : (
-                    <p className="text-sm italic text-gray-400">
-                      Không xác định công việc
+                <div className="mt-5 border-t border-gray-100 pt-4">
+                  <p className="mb-3 text-xs font-medium text-gray-400">
+                    Lịch sử kiểm thử:
+                  </p>
+                  {testHistory.length === 0 ? (
+                    <p className="rounded-xl border border-dashed border-gray-200 px-3 py-3 text-sm text-gray-400">
+                      Chưa có kết quả kiểm thử.
                     </p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {testHistory.map((entry) => {
+                        const passed = entry.result === "passed";
+                        return (
+                          <li
+                            key={entry.id}
+                            className={cn(
+                              "rounded-xl border px-3 py-3",
+                              passed
+                                ? "border-emerald-100 bg-emerald-50/60"
+                                : "border-rose-100 bg-rose-50/60"
+                            )}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <span className={cn("text-sm font-bold", passed ? "text-emerald-700" : "text-rose-700")}>
+                                {passed ? "Pass kiểm thử" : "Fail kiểm thử"}
+                              </span>
+                              <span className="shrink-0 text-[11px] text-gray-400">
+                                {formatDateVN(entry.createdAt)}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-xs text-gray-600">
+                              Tester: {entry.tester?.name ?? "Không xác định"}
+                            </p>
+                            {entry.note && (
+                              <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-gray-700">
+                                {entry.note}
+                              </p>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
                   )}
                 </div>
               </Panel>
+            </section>
 
+            <section className="grid grid-cols-1 gap-5">
               <Panel
-                className="lg:col-span-2"
                 accentClassName="bg-emerald-500"
                 icon={RotateCcw}
                 iconClassName="text-emerald-500"
                 title="Timeline hoạt động Task"
                 subtitle="Nhật ký lịch trình xử lý & báo cáo"
               >
-                <div className="flex min-h-36 flex-col items-center justify-center rounded-2xl border border-dashed border-gray-200 px-6 text-center">
-                  <CalendarDays className="h-9 w-9 text-gray-300" />
-                  <p className="mt-3 text-sm font-bold text-gray-800">
-                    Chưa có lịch sử hoạt động
-                  </p>
-                  <p className="mt-1 text-xs text-gray-400">
-                    Các cập nhật trạng thái, phân công và báo cáo
-                  </p>
-                </div>
+                <TaskActivityTimeline
+                  events={activity}
+                  hasMore={activity.length < activityTotal}
+                  loadingMore={activityLoadingMore}
+                  onLoadMore={handleLoadMoreActivity}
+                />
               </Panel>
             </section>
           </div>
@@ -484,12 +874,21 @@ export function SubtaskDetailView({
                   Các báo cáo tiến độ đã gửi cho Task
                 </p>
               </div>
-              {account?.role !== "admin" && <Button onClick={() => setReportDrawerOpen(true)}>
+              {account?.role !== "admin" && !isTester && (subtask.status === "todo" || subtask.status === "inProgress") && <Button onClick={() => {
+                setReportAtCompletion(false);
+                void ensureDirectory().then(() => setReportDrawerOpen(true));
+              }}>
                 <Plus className="h-4 w-4" />
                 Báo cáo tiến độ
               </Button>}
             </div>
-            {reports.length === 0 ? (
+            {secondaryLoading && reports.length === 0 ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((item) => (
+                  <div key={item} className="h-20 animate-pulse rounded-xl bg-gray-100" />
+                ))}
+              </div>
+            ) : reports.length === 0 ? (
               <EmptyState
                 icon={FileClock}
                 title="Chưa có báo cáo nào"
@@ -506,8 +905,8 @@ export function SubtaskDetailView({
         )}
       </div>
 
-      <div className="sticky bottom-0 z-20 border-t border-gray-200 bg-white/95 px-4 py-2 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-none gap-2">
+      <div className="sticky bottom-0 z-20 max-w-full border-t border-gray-200 bg-white/95 px-4 py-2 backdrop-blur">
+        <div className="mx-auto flex w-full min-w-0 max-w-full gap-2">
           <BottomTab
             active={tab === "info"}
             onClick={() => setTab("info")}
@@ -524,7 +923,7 @@ export function SubtaskDetailView({
         </div>
       </div>
 
-      {editing && (
+      {editing && !statusLocked && (
         <SubtaskFormModal
           mode="edit"
           subtask={subtask}
@@ -534,6 +933,8 @@ export function SubtaskDetailView({
           onSaved={() => {
             setEditing(false);
             load();
+            cache.invalidate(CACHE_RESOURCE.subtasksList);
+            cache.invalidate(CACHE_RESOURCE.tasksList);
           }}
         />
       )}
@@ -546,15 +947,23 @@ export function SubtaskDetailView({
             progress: subtask.progress,
             assigneeId: subtask.assigneeId,
           }}
+          initialProgress={reportAtCompletion ? 100 : undefined}
           assignee={assignee}
+          tester={subtask.tester}
+          testerOptions={members}
           entityLabel="task"
           submitReport={(input) =>
             subtaskService.addSubtaskReport(subtask.id, input)
           }
-          onClose={() => setReportDrawerOpen(false)}
+          onClose={() => {
+            setReportDrawerOpen(false);
+            setReportAtCompletion(false);
+          }}
           onSubmitted={() => {
             setTab("reports");
             load();
+            cache.invalidate(CACHE_RESOURCE.subtasksList);
+            cache.invalidate(CACHE_RESOURCE.tasksList);
           }}
         />
       )}
@@ -607,18 +1016,18 @@ function OverviewCard({
   children: React.ReactNode;
 }) {
   return (
-    <article className="relative min-h-32 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-400">
+    <article className="relative rounded-xl border border-gray-100 bg-white px-3 py-2.5 shadow-sm">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-gray-400">
         {label}
       </p>
-      <div className="mt-2 pr-12">{children}</div>
+      <div className="mt-1 pr-8">{children}</div>
       <span
         className={cn(
-          "absolute right-4 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full",
+          "absolute right-2.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full",
           iconClassName
         )}
       >
-        <Icon className="h-4 w-4" />
+        <Icon className="h-3.5 w-3.5" />
       </span>
     </article>
   );
@@ -640,7 +1049,7 @@ function QuickSelect({
       value={value}
       disabled={disabled}
       onChange={(event) => onChange(event.target.value)}
-      className="h-9 max-w-full rounded-xl border border-gray-200 bg-white px-3 text-xs font-bold text-gray-800 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+      className="h-8 max-w-full rounded-lg border border-gray-200 bg-white px-2 text-xs font-bold text-gray-800 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
     >
       {options.map((option) => (
         <option key={option.value} value={option.value}>
@@ -726,7 +1135,7 @@ function BottomTab({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex min-w-[190px] flex-1 items-center justify-center gap-2 rounded-lg px-5 py-2 text-sm font-semibold transition-colors",
+        "flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors sm:px-5",
         active
           ? "bg-brand-600 text-white shadow-sm"
           : "bg-gray-50 text-gray-500 hover:bg-gray-100"

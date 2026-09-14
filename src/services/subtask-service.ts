@@ -1,18 +1,24 @@
 import { apiClient } from "@/services/api-client";
-import type { Subtask, SubtaskInput, SubtaskReport } from "@/types/subtask";
+import type { Subtask, SubtaskInput, SubtaskPromptItem, SubtaskReport, SubtaskTestHistoryEntry, SubtaskTestResult } from "@/types/subtask";
 import type {
   ProgressReportSubmission,
   TaskPriority,
   TaskStatus,
 } from "@/types/task";
+import type { TaskActivityEvent } from "@/types/activity";
 
 export interface SubtaskFilters {
   search?: string;
   workTaskId?: string;
   assigneeId?: string;
   priority?: TaskPriority;
+  /** Lọc đồng thời nhiều mức ưu tiên; `priority` được giữ cho các màn hình cũ. */
+  priorities?: TaskPriority[];
   status?: TaskStatus;
+  /** Lọc đồng thời nhiều trạng thái; `status` được giữ cho các màn hình cũ. */
+  statuses?: TaskStatus[];
   overdueOnly?: boolean;
+  needsTesting?: boolean;
 }
 
 function buildQuery(filters: SubtaskFilters): string {
@@ -21,8 +27,11 @@ function buildQuery(filters: SubtaskFilters): string {
   if (filters.workTaskId) params.set("workTaskId", filters.workTaskId);
   if (filters.assigneeId) params.set("assigneeId", filters.assigneeId);
   if (filters.priority) params.set("priority", filters.priority);
+  if (filters.priorities && filters.priorities.length > 0) params.set("priorities", filters.priorities.join(","));
   if (filters.status) params.set("status", filters.status);
+  if (filters.statuses && filters.statuses.length > 0) params.set("statuses", filters.statuses.join(","));
   if (filters.overdueOnly) params.set("overdueOnly", "true");
+  if (filters.needsTesting) params.set("needsTesting", "true");
   const query = params.toString();
   return query ? `?${query}` : "";
 }
@@ -37,6 +46,11 @@ export interface SubtaskListFilters extends SubtaskFilters {
 
 export interface SubtaskPage {
   items: Subtask[];
+  total: number;
+}
+
+export interface TaskActivityPage {
+  items: TaskActivityEvent[];
   total: number;
 }
 
@@ -66,7 +80,10 @@ export const subtaskService = {
   },
 
   /** Tải một trang task từ server, có thể lọc theo dự án và nhiều người thực hiện. */
-  async getSubtasksPage(filters: SubtaskListFilters): Promise<SubtaskPage> {
+  async getSubtasksPage(
+    filters: SubtaskListFilters,
+    options?: { signal?: AbortSignal }
+  ): Promise<SubtaskPage> {
     const params = new URLSearchParams();
     if (filters.search) params.set("search", filters.search);
     if (filters.workTaskId) params.set("workTaskId", filters.workTaskId);
@@ -79,11 +96,20 @@ export const subtaskService = {
       params.set("assigneeIds", filters.assigneeIds.join(","));
     }
     if (filters.priority) params.set("priority", filters.priority);
+    if (filters.priorities && filters.priorities.length > 0) {
+      params.set("priorities", filters.priorities.join(","));
+    }
     if (filters.status) params.set("status", filters.status);
+    if (filters.statuses && filters.statuses.length > 0) {
+      params.set("statuses", filters.statuses.join(","));
+    }
     if (filters.overdueOnly) params.set("overdueOnly", "true");
+    if (filters.needsTesting) params.set("needsTesting", "true");
     params.set("page", String(filters.page));
     params.set("pageSize", String(filters.pageSize));
-    return apiClient.get<SubtaskPage>(`/subtasks?${params.toString()}`);
+    return apiClient.get<SubtaskPage>(`/subtasks?${params.toString()}`, {
+      signal: options?.signal,
+    });
   },
 
   async getSubtaskById(id: string): Promise<Subtask | null> {
@@ -94,8 +120,10 @@ export const subtaskService = {
     return apiClient.get<Subtask[]>(`/tasks/${workTaskId}/subtasks`);
   },
 
-  async createSubtask(input: SubtaskInput): Promise<Subtask> {
-    return apiClient.post<Subtask>("/subtasks", input);
+  async createSubtask(input: SubtaskInput, options?: { idempotencyKey?: string }): Promise<Subtask> {
+    return apiClient.post<Subtask>("/subtasks", input, {
+      headers: options?.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : undefined,
+    });
   },
 
   async updateSubtask(
@@ -103,6 +131,14 @@ export const subtaskService = {
     input: SubtaskInput
   ): Promise<Subtask | null> {
     return apiClient.put<Subtask>(`/subtasks/${id}`, input);
+  },
+
+  async updatePromptItems(id: string, items: SubtaskPromptItem[]): Promise<SubtaskPromptItem[]> {
+    return apiClient.put<SubtaskPromptItem[]>(`/subtasks/${id}/prompts`, { items });
+  },
+
+  async getPromptItems(id: string): Promise<SubtaskPromptItem[]> {
+    return apiClient.get<SubtaskPromptItem[]>(`/subtasks/${id}/prompts`);
   },
 
   async deleteSubtask(id: string): Promise<boolean> {
@@ -114,12 +150,30 @@ export const subtaskService = {
     return apiClient.post<Subtask>(`/subtasks/${id}/approve`);
   },
 
+  async submitTestResult(id: string, result: SubtaskTestResult): Promise<Subtask> {
+    return apiClient.post<Subtask>(`/subtasks/${id}/test-result`, result);
+  },
+
   async acceptSubtask(id: string): Promise<Subtask> {
     return apiClient.post<Subtask>(`/subtasks/${id}/accept`);
   },
 
   async getSubtaskReports(subtaskId: string): Promise<SubtaskReport[]> {
     return apiClient.get<SubtaskReport[]>(`/subtasks/${subtaskId}/reports`);
+  },
+
+  async getSubtaskTestHistory(subtaskId: string): Promise<SubtaskTestHistoryEntry[]> {
+    return apiClient.get<SubtaskTestHistoryEntry[]>(`/subtasks/${subtaskId}/test-history`);
+  },
+
+  async getSubtaskActivity(
+    subtaskId: string,
+    page = 1,
+    pageSize = 20
+  ): Promise<TaskActivityPage> {
+    return apiClient.get<TaskActivityPage>(
+      `/subtasks/${subtaskId}/activity?page=${page}&pageSize=${pageSize}`
+    );
   },
 
   async addSubtaskReport(
@@ -130,6 +184,7 @@ export const subtaskService = {
     formData.set("content", input.content);
     formData.set("progress", String(input.progress));
     if (input.authorId) formData.set("authorId", input.authorId);
+    if (input.testerId) formData.set("testerId", input.testerId);
     if (input.links.length > 0) {
       formData.set("links", JSON.stringify(input.links));
     }

@@ -1,10 +1,11 @@
 import type { ApiSupabaseClient } from "@/lib/supabase/api";
 import { ApiException, throwDatabaseError } from "@/lib/api/response";
-import { resolveAuthUserId } from "@/lib/supabase/authorization";
+import { resolveAuthUserId, type RequestAccountAccess } from "@/lib/supabase/authorization";
 import {
   DEFAULT_PROJECT_STEPS,
   type Project,
   type ProjectColor,
+  type ProjectDirectoryItem,
   type ProjectInput,
   type ProjectMember,
   type ProjectOption,
@@ -13,10 +14,15 @@ import {
 import type {
   Subtask,
   SubtaskInput,
+  SubtaskPromptItem,
   SubtaskReport,
+  SubtaskTestHistoryEntry,
+  SubtaskTestResult,
+  SubtaskUpdateEntry,
   TaskFileAttachment,
   TaskLinkAttachment,
 } from "@/types/subtask";
+import type { TaskActivityEvent, TaskActivityType } from "@/types/activity";
 import type {
   TaskPriority,
   TaskReport,
@@ -24,12 +30,26 @@ import type {
   TaskReportLink,
   TaskStatus,
   WorkTask,
+  WorkTaskDirectoryItem,
   WorkTaskInput,
   WorkTaskOption,
 } from "@/types/task";
 import { deriveWorkTaskStatus } from "@/types/task";
+import type {
+  DutyChecklistItem,
+  DutyChecklistToggleResult,
+  DutyChecklistTemplate,
+  DutyChecklistTemplateInput,
+  DutyRecurringRule,
+  DutyRecurringRuleInput,
+  DutyShift,
+  DutyShiftInput,
+  DutyShiftStatus,
+  DutySource,
+} from "@/types/duty";
 import type { ProjectTask } from "@/services/mock-data";
 import { getAppDateKey } from "@/lib/utils";
+import { measureApiTiming } from "@/lib/api/observability";
 
 interface AccountRow {
   id: string;
@@ -116,25 +136,53 @@ interface WorkTaskRow {
 interface SubtaskRow {
   id: string;
   ten_task: string;
-  mo_ta: string | null;
+  mo_ta?: string | null;
   created_at: string;
   updated_at: string;
   ngay_bat_dau: string | null;
   ngay_ket_thuc: string | null;
   nguoi_phu_trach_id: string | null;
+  nguoi_test_id: string | null;
+  ghi_chu_test: string | null;
   trang_thai: string;
   uu_tien: string;
   tien_do_thuc_te: number;
   nhan_tag: string[] | null;
-  hinh_anh: string[] | null;
-  tep_dinh_kem: TaskFileAttachment[] | null;
-  lien_ket_dinh_kem: TaskLinkAttachment[] | null;
-  task_tien_de_id: string | null;
+  hinh_anh?: string[] | null;
+  tep_dinh_kem?: TaskFileAttachment[] | null;
+  lien_ket_dinh_kem?: TaskLinkAttachment[] | null;
+  cap_nhat_bo_sung?: SubtaskUpdateEntry[] | null;
+  task_tien_de_id?: string | null;
   cong_viec_id: string;
+  nguoi_tao_id: string | null;
   /** Người phụ trách chính "cũ" (cột nguoi_phu_trach_id), lấy kèm qua embed. */
   legacy_assignee: AccountRow | null;
   /** Danh sách người phụ trách đầy đủ, lấy kèm qua embed thay vì round-trip riêng. */
   task_phu_trach: AssignmentEmbedRow[];
+  /** Người tạo Task, lấy kèm để hiển thị trong danh sách. */
+  creator: AccountRow | null;
+  tester: AccountRow | null;
+  /** Chỉ có khi select chi tiết (`SUBTASK_DETAIL_SELECT`). */
+  prompt_items?: unknown;
+}
+
+interface TaskActivityRow {
+  id: string;
+  task_id: string;
+  loai: TaskActivityType;
+  tieu_de: string;
+  chi_tiet: Record<string, unknown> | null;
+  created_at: string;
+  tac_gia: AccountRow | null;
+}
+
+interface SubtaskTestHistoryRow {
+  id: string;
+  task_id: string;
+  ket_qua: "passed" | "failed";
+  ghi_chu: string | null;
+  created_at: string;
+  tester: AccountRow | null;
 }
 
 export interface WorkTaskFilters {
@@ -163,6 +211,7 @@ export interface TaskReportInput {
   progress: number;
   attachments: TaskReportAttachmentInput[];
   links: Omit<TaskReportLink, "id">[];
+  testerId?: string;
 }
 
 export interface SubtaskFilters {
@@ -171,8 +220,14 @@ export interface SubtaskFilters {
   assigneeId?: string;
   assigneeIds?: string[];
   priority?: TaskPriority;
+  /** Lọc đồng thời nhiều mức ưu tiên; `priority` được giữ cho các nơi gọi cũ. */
+  priorities?: TaskPriority[];
   status?: TaskStatus;
+  /** Lọc đồng thời nhiều trạng thái; `status` được giữ cho các nơi gọi cũ. */
+  statuses?: TaskStatus[];
   overdueOnly?: boolean;
+  /** UUID tài khoản tester; chỉ API nội bộ gán sau khi xác thực request. */
+  testerId?: string;
 }
 
 /** Bộ lọc cho trang danh sách task: thêm lọc theo dự án và nhiều người thực hiện, có phân trang. */
@@ -211,15 +266,41 @@ const PROJECT_FORM_SELECT =
   `du_an_quan_ly(tai_khoan_id,la_chinh,tai_khoan(${ACCOUNT_SELECT})),` +
   `du_an_thanh_vien(tai_khoan_id,tai_khoan(${ACCOUNT_SELECT}))`;
 const PROJECT_OPTION_SELECT = "id,ma_da,ten_da";
+const PROJECT_DIRECTORY_SELECT =
+  "id,ma_da,ten_da,hop_mau,ngay_bd,ngay_kt,nguoi_ql_id," +
+  `legacy_manager:tai_khoan!nguoi_ql_id(${ACCOUNT_SELECT}),` +
+  `du_an_quan_ly(tai_khoan_id,la_chinh,tai_khoan(${ACCOUNT_SELECT})),` +
+  `du_an_thanh_vien(tai_khoan_id,tai_khoan(${ACCOUNT_SELECT}))`;
 const WORK_TASK_SELECT =
   "id,ten_cv,mo_ta,created_at,updated_at,du_an_id,nguoi_phu_trach_id,trang_thai,uu_tien,ngay_bat_dau,ngay_hoan_thanh,tien_do_thuc_te,nhan_tag,cong_viec_tien_de_id,hinh_anh,tep_dinh_kem,lien_ket_dinh_kem," +
   `legacy_assignee:tai_khoan!nguoi_phu_trach_id(${ACCOUNT_SELECT}),` +
   `cong_viec_phu_trach(tai_khoan_id,la_chinh,tai_khoan(${ACCOUNT_SELECT})),` +
   "task(tien_do_thuc_te,trang_thai)";
-const SUBTASK_SELECT =
-  "id,ten_task,mo_ta,created_at,updated_at,ngay_bat_dau,ngay_ket_thuc,nguoi_phu_trach_id,trang_thai,uu_tien,tien_do_thuc_te,nhan_tag,hinh_anh,tep_dinh_kem,lien_ket_dinh_kem,task_tien_de_id,cong_viec_id," +
+const WORK_TASK_DIRECTORY_SELECT =
+  "id,ten_cv,du_an_id,ngay_bat_dau,ngay_hoan_thanh,nguoi_phu_trach_id," +
   `legacy_assignee:tai_khoan!nguoi_phu_trach_id(${ACCOUNT_SELECT}),` +
+  `cong_viec_phu_trach(tai_khoan_id,la_chinh,tai_khoan(${ACCOUNT_SELECT}))`;
+const SUBTASK_SELECT =
+  "id,ten_task,mo_ta,created_at,updated_at,ngay_bat_dau,ngay_ket_thuc,nguoi_phu_trach_id,nguoi_tao_id,nguoi_test_id,ghi_chu_test,trang_thai,uu_tien,tien_do_thuc_te,nhan_tag,hinh_anh,tep_dinh_kem,lien_ket_dinh_kem,cap_nhat_bo_sung,task_tien_de_id,cong_viec_id," +
+  `legacy_assignee:tai_khoan!nguoi_phu_trach_id(${ACCOUNT_SELECT}),` +
+  `creator:tai_khoan!nguoi_tao_id(${ACCOUNT_SELECT}),` +
+  `tester:tai_khoan!nguoi_test_id(${ACCOUNT_SELECT}),` +
   `task_phu_trach(tai_khoan_id,la_chinh,xac_nhan_luc,tai_khoan(${ACCOUNT_SELECT}))`;
+/** Chi tiết Task cần thêm prompt_items; danh sách bỏ qua để tránh JSON nặng. */
+const SUBTASK_DETAIL_SELECT = `${SUBTASK_SELECT},prompt_items`;
+/** Danh sách bảng: bỏ mô tả/đính kèm/cập nhật bổ sung để giảm payload. */
+const SUBTASK_LIST_SELECT =
+  "id,ten_task,created_at,updated_at,ngay_bat_dau,ngay_ket_thuc,nguoi_phu_trach_id,nguoi_tao_id,nguoi_test_id,ghi_chu_test,trang_thai,uu_tien,tien_do_thuc_te,nhan_tag,cong_viec_id," +
+  `legacy_assignee:tai_khoan!nguoi_phu_trach_id(${ACCOUNT_SELECT}),` +
+  `creator:tai_khoan!nguoi_tao_id(${ACCOUNT_SELECT}),` +
+  `tester:tai_khoan!nguoi_test_id(${ACCOUNT_SELECT}),` +
+  `task_phu_trach(tai_khoan_id,la_chinh,xac_nhan_luc,tai_khoan(${ACCOUNT_SELECT}))`;
+const TASK_ACTIVITY_SELECT =
+  "id,task_id,loai,tieu_de,chi_tiet,created_at," + `tac_gia:tai_khoan(${ACCOUNT_SELECT})`;
+const SUBTASK_TEST_HISTORY_SELECT =
+  "id,task_id,ket_qua,ghi_chu,created_at," + `tester:tai_khoan!nguoi_test_id(${ACCOUNT_SELECT})`;
+/** Trang mặc định cho timeline hoạt động — panel nhỏ, không cần tải nhiều mỗi lần. */
+const TASK_ACTIVITY_PAGE_SIZE = 20;
 
 function avatarColor(value: string): string {
   const colors = ["#F59E0B", "#1F2937", "#DC2626", "#0EA5E9", "#16A34A", "#7C5CFC"];
@@ -257,20 +338,36 @@ function toDatabaseStatus(status: TaskStatus): string {
   return status === "inProgress" ? "in_progress" : status;
 }
 
-/**
- * Trạng thái Task con luôn được suy ra từ tiến độ, không nhận từ form.
- * "done" chỉ đạt được qua hành động Duyệt của quản trị viên (xem approveSubtask).
- */
+/** Trạng thái mặc định khi nhân viên gửi báo cáo tiến độ. */
 function deriveSubtaskStatus(progress: number): TaskStatus {
-  if (progress >= 100) return "review";
+  if (progress >= 100) return "testing";
   if (progress > 0) return "inProgress";
   return "todo";
 }
 
+/**
+ * Đồng bộ tiến độ khi quản trị viên đổi trạng thái trực tiếp:
+ * - Cần làm: chưa bắt đầu (0%).
+ * - Đang làm: giữ tiến độ hợp lệ hiện tại; nếu đang ở biên 0/100 thì bắt đầu ở 1%.
+ * - Chờ duyệt/Đã hoàn thành: công việc đã đạt 100%.
+ */
+function progressForSubtaskStatus(status: TaskStatus, currentProgress: number): number {
+  if (status === "todo") return 0;
+  if (status === "testing" || status === "review" || status === "done") return 100;
+  return currentProgress > 0 && currentProgress < 100 ? currentProgress : 1;
+}
+
 function normalizeSubtaskStatus(status: string, progress: number): TaskStatus {
   const normalized = toApiStatus(status);
-  if (normalized === "done" && progress === 100) return "done";
-  if (normalized === "inProgress" && progress < 100) return "inProgress";
+  if (
+    normalized === "todo" ||
+    normalized === "inProgress" ||
+    normalized === "testing" ||
+    normalized === "review" ||
+    normalized === "done"
+  ) {
+    return normalized;
+  }
   return deriveSubtaskStatus(progress);
 }
 
@@ -650,6 +747,56 @@ export async function listProjects(
   return hydrateProjects((data ?? []) as unknown as ProjectRow[]);
 }
 
+/** Danh sách dự án tối giản cho dropdown/form, không tải mô tả, tệp hay thống kê. */
+export async function listProjectDirectory(
+  supabase: ApiSupabaseClient,
+  participantAccountId?: string
+): Promise<ProjectDirectoryItem[]> {
+  const visibleProjectIds = participantAccountId
+    ? await listProjectIdsForParticipant(supabase, participantAccountId)
+    : undefined;
+  if (visibleProjectIds?.length === 0) return [];
+
+  let query = supabase
+    .from("du_an")
+    .select(PROJECT_DIRECTORY_SELECT)
+    .order("ten_da");
+  if (visibleProjectIds) query = query.in("id", visibleProjectIds);
+  const { data, error } = await query;
+  throwDatabaseError(error);
+
+  return (data ?? []).map((raw) => {
+    const row = raw as unknown as Pick<ProjectRow,
+      "id" | "ma_da" | "ten_da" | "hop_mau" | "ngay_bd" | "ngay_kt" | "nguoi_ql_id" |
+      "legacy_manager" | "du_an_quan_ly" | "du_an_thanh_vien">;
+    const managerAssignments = row.du_an_quan_ly ?? [];
+    const managers = managerAssignments
+      .slice()
+      .sort((a, b) => Number(b.la_chinh) - Number(a.la_chinh))
+      .map((assignment) => assignment.tai_khoan)
+      .filter((account): account is AccountRow => Boolean(account))
+      .map(toProjectMember);
+    if (managers.length === 0 && row.legacy_manager) managers.push(toProjectMember(row.legacy_manager));
+    const managerIds = new Set(managerAssignments.map((assignment) => assignment.tai_khoan_id));
+    if (row.nguoi_ql_id) managerIds.add(row.nguoi_ql_id);
+    const members = (row.du_an_thanh_vien ?? [])
+      .filter((membership) => !managerIds.has(membership.tai_khoan_id))
+      .map((membership) => membership.tai_khoan)
+      .filter((account): account is AccountRow => Boolean(account))
+      .map(toProjectMember);
+    return {
+      id: row.id,
+      code: row.ma_da,
+      name: row.ten_da,
+      color: projectColor(row.hop_mau),
+      startDate: row.ngay_bd ?? "",
+      endDate: row.ngay_kt ?? "",
+      managers,
+      members,
+    };
+  });
+}
+
 /** Giống `listProjects` nhưng chỉ tải một trang kết quả. */
 export async function listProjectsPage(
   supabase: ApiSupabaseClient,
@@ -950,6 +1097,68 @@ export async function listWorkTasks(
   return hydrateWorkTasks((data ?? []) as unknown as WorkTaskRow[]);
 }
 
+/** Danh sách công việc tối giản cho dropdown và quan hệ tiền đề. */
+export async function listWorkTaskDirectory(
+  supabase: ApiSupabaseClient,
+  assigneeIds?: string[]
+): Promise<WorkTaskDirectoryItem[]> {
+  let visibleTaskIds: string[] | undefined;
+  if (assigneeIds && assigneeIds.length > 0) {
+    const accountIds = await resolveAccountIds(supabase, assigneeIds, "Người phụ trách");
+    const { data, error } = await supabase
+      .from("cong_viec_phu_trach")
+      .select("cong_viec_id")
+      .in("tai_khoan_id", accountIds);
+    throwDatabaseError(error);
+    visibleTaskIds = uniqueValues((data ?? []).map((row) => row.cong_viec_id as string));
+    if (visibleTaskIds.length === 0) return [];
+  }
+
+  let query = supabase
+    .from("cong_viec")
+    .select(WORK_TASK_DIRECTORY_SELECT)
+    .order("ten_cv");
+  if (visibleTaskIds) query = query.in("id", visibleTaskIds);
+  const { data, error } = await query;
+  throwDatabaseError(error);
+  return (data ?? []).map((raw) => mapWorkTaskDirectoryItem(raw));
+}
+
+/** Một công việc tối giản — dùng trang chi tiết Task thay vì tải cả directory. */
+export async function getWorkTaskDirectoryItem(
+  supabase: ApiSupabaseClient,
+  id: string
+): Promise<WorkTaskDirectoryItem | null> {
+  const { data, error } = await supabase
+    .from("cong_viec")
+    .select(WORK_TASK_DIRECTORY_SELECT)
+    .eq("id", id)
+    .maybeSingle();
+  throwDatabaseError(error);
+  return data ? mapWorkTaskDirectoryItem(data) : null;
+}
+
+function mapWorkTaskDirectoryItem(raw: unknown): WorkTaskDirectoryItem {
+  const row = raw as unknown as Pick<WorkTaskRow,
+    "id" | "ten_cv" | "du_an_id" | "ngay_bat_dau" | "ngay_hoan_thanh" |
+    "legacy_assignee" | "cong_viec_phu_trach">;
+  const assignees = (row.cong_viec_phu_trach ?? [])
+    .slice()
+    .sort((a, b) => Number(b.la_chinh) - Number(a.la_chinh))
+    .map((assignment) => assignment.tai_khoan)
+    .filter((account): account is AccountRow => Boolean(account))
+    .map(toProjectMember);
+  if (assignees.length === 0 && row.legacy_assignee) assignees.push(toProjectMember(row.legacy_assignee));
+  return {
+    id: row.id,
+    title: row.ten_cv,
+    projectId: row.du_an_id,
+    startDate: row.ngay_bat_dau ?? "",
+    dueDate: row.ngay_hoan_thanh ?? "",
+    assignees,
+  };
+}
+
 /**
  * Giống `listWorkTasks` nhưng chỉ tải một trang kết quả (dùng cho trang danh sách
  * dạng bảng có phân trang) thay vì hydrate toàn bộ tập kết quả khớp bộ lọc.
@@ -1054,8 +1263,8 @@ export async function getWorkTask(
 /** Đồng bộ bảng nối người phụ trách; phần tử đầu của `accountIds` là người chính. */
 async function syncAssignments(
   supabase: ApiSupabaseClient,
-  table: "cong_viec_phu_trach" | "task_phu_trach",
-  ownerColumn: "cong_viec_id" | "task_id",
+  table: "cong_viec_phu_trach" | "task_phu_trach" | "truc_nhat_lich_lap_phu_trach" | "truc_nhat_ca_phu_trach",
+  ownerColumn: "cong_viec_id" | "task_id" | "lich_lap_id" | "ca_id",
   ownerId: string,
   accountIds: string[]
 ): Promise<void> {
@@ -1272,13 +1481,21 @@ export async function createWorkTask(
   const taskRow = data as unknown as WorkTaskRow;
 
   const taskId = taskRow.id;
-  await syncAssignments(
-    supabase,
-    "cong_viec_phu_trach",
-    "cong_viec_id",
-    taskId,
-    assigneeIds
-  );
+  try {
+    await syncAssignments(
+      supabase,
+      "cong_viec_phu_trach",
+      "cong_viec_id",
+      taskId,
+      assigneeIds
+    );
+  } catch (syncError) {
+    // Không phải RPC transaction thật (2 round-trip riêng) — nhưng bù lại bằng
+    // compensating delete, cùng mẫu đã dùng ở createProject(), để không để lại
+    // công việc không có người phụ trách khi bước gán lỗi.
+    await supabase.from("cong_viec").delete().eq("id", taskId);
+    throw syncError;
+  }
 
   const [task] = hydrateWorkTasks([
     withWorkTaskAssignees(taskRow, assigneeIds, accountsById),
@@ -1293,6 +1510,12 @@ export async function updateWorkTask(
 ): Promise<WorkTask | null> {
   const current = await getWorkTask(supabase, id);
   if (!current) return null;
+  if (current.status === "done") {
+    throw new ApiException(
+      "Công việc đã hoàn thành nên chỉ có thể xem, không thể chỉnh sửa.",
+      409
+    );
+  }
 
   const [{ ids: assigneeIds, accountsById }] = await Promise.all([
     resolveAccounts(supabase, input.assigneeIds, "Người phụ trách"),
@@ -1312,6 +1535,7 @@ export async function updateWorkTask(
     .from("cong_viec")
     .update(payload)
     .eq("id", id)
+    .neq("trang_thai", "done")
     .select(WORK_TASK_SELECT)
     .maybeSingle();
   throwDatabaseError(error);
@@ -1430,6 +1654,10 @@ function hydrateSubtasks(rows: SubtaskRow[]): Subtask[] {
       workTaskId: row.cong_viec_id,
       assigneeId: primary?.id ?? "",
       assignees: assignees.length > 0 ? assignees : primary ? [primary] : [],
+      creator: row.creator ? toProjectMember(row.creator) : undefined,
+      testerId: row.nguoi_test_id ?? undefined,
+      tester: row.tester ? toProjectMember(row.tester) : undefined,
+      testNote: row.ghi_chu_test ?? undefined,
       acceptedAssigneeIds: (row.task_phu_trach ?? [])
         .filter((assignment) => Boolean(assignment.xac_nhan_luc))
         .map((assignment) => assignment.tai_khoan_id),
@@ -1442,6 +1670,10 @@ function hydrateSubtasks(rows: SubtaskRow[]): Subtask[] {
       files: row.tep_dinh_kem ?? [],
       links: row.lien_ket_dinh_kem ?? [],
       images: row.hinh_anh ?? [],
+      updates: row.cap_nhat_bo_sung ?? [],
+      promptItems: row.prompt_items !== undefined
+        ? normalizeSubtaskPromptItems(row.prompt_items)
+        : [],
     };
   });
 }
@@ -1480,8 +1712,11 @@ export async function listSubtasks(
     );
     query = query.eq("nguoi_phu_trach_id", accountId);
   }
-  if (filters.priority) query = query.eq("uu_tien", filters.priority);
-  if (filters.status) query = query.eq("trang_thai", toDatabaseStatus(filters.status));
+  if (filters.testerId) query = query.eq("nguoi_test_id", filters.testerId);
+  if (filters.priorities?.length) query = query.in("uu_tien", filters.priorities);
+  else if (filters.priority) query = query.eq("uu_tien", filters.priority);
+  if (filters.statuses?.length) query = query.in("trang_thai", filters.statuses.map(toDatabaseStatus));
+  else if (filters.status) query = query.eq("trang_thai", toDatabaseStatus(filters.status));
   if (filters.overdueOnly) {
     query = query
       .neq("trang_thai", "done")
@@ -1535,7 +1770,7 @@ export async function listSubtasksPage(
 
   let query = supabase
     .from("task")
-    .select(SUBTASK_SELECT, { count: "exact" })
+    .select(SUBTASK_LIST_SELECT, { count: "exact" })
     .order("created_at", { ascending: false });
 
   if (filters.search?.trim()) {
@@ -1552,8 +1787,11 @@ export async function listSubtasksPage(
     );
     query = query.eq("nguoi_phu_trach_id", accountId);
   }
-  if (filters.priority) query = query.eq("uu_tien", filters.priority);
-  if (filters.status) query = query.eq("trang_thai", toDatabaseStatus(filters.status));
+  if (filters.testerId) query = query.eq("nguoi_test_id", filters.testerId);
+  if (filters.priorities?.length) query = query.in("uu_tien", filters.priorities);
+  else if (filters.priority) query = query.eq("uu_tien", filters.priority);
+  if (filters.statuses?.length) query = query.in("trang_thai", filters.statuses.map(toDatabaseStatus));
+  else if (filters.status) query = query.eq("trang_thai", toDatabaseStatus(filters.status));
   if (filters.overdueOnly) {
     query = query
       .neq("trang_thai", "done")
@@ -1571,20 +1809,95 @@ export async function getSubtask(
   supabase: ApiSupabaseClient,
   id: string
 ): Promise<Subtask | null> {
-  const { data, error } = await supabase
+  const detailed = await supabase
     .from("task")
-    .select(SUBTASK_SELECT)
+    .select(SUBTASK_DETAIL_SELECT)
     .eq("id", id)
     .maybeSingle();
+
+  // Deployment chưa có cột prompt_items: fallback select danh sách.
+  if (detailed.error?.code === "42703" || detailed.error?.code === "PGRST204") {
+    const fallback = await supabase
+      .from("task")
+      .select(SUBTASK_SELECT)
+      .eq("id", id)
+      .maybeSingle();
+    throwDatabaseError(fallback.error);
+    if (!fallback.data) return null;
+    const [subtask] = hydrateSubtasks([fallback.data as unknown as SubtaskRow]);
+    return subtask;
+  }
+
+  throwDatabaseError(detailed.error);
+  if (!detailed.data) return null;
+  const [subtask] = hydrateSubtasks([detailed.data as unknown as SubtaskRow]);
+  return subtask;
+}
+
+export async function updateSubtaskPromptItems(
+  supabase: ApiSupabaseClient,
+  id: string,
+  items: SubtaskPromptItem[]
+): Promise<SubtaskPromptItem[] | null> {
+  const { data, error } = await supabase
+    .from("task")
+    .update({ prompt_items: items })
+    .eq("id", id)
+    .select("prompt_items")
+    .maybeSingle();
+  if (error?.code === "42703" || error?.code === "PGRST204") {
+    throw new ApiException(
+      "Cơ sở dữ liệu chưa được cập nhật cho tính năng Prompt.",
+      503
+    );
+  }
   throwDatabaseError(error);
   if (!data) return null;
-  const [subtask] = hydrateSubtasks([data as unknown as SubtaskRow]);
-  return subtask;
+  return normalizeSubtaskPromptItems(data.prompt_items);
+}
+
+function normalizeSubtaskPromptItems(value: unknown): SubtaskPromptItem[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const entry = item as Record<string, unknown>;
+    if (typeof entry.id !== "string" || typeof entry.content !== "string") return [];
+    const imageUrls: string[] = [];
+    if (Array.isArray(entry.imageUrls)) {
+      for (const url of entry.imageUrls) {
+        if (typeof url === "string" && url.trim()) imageUrls.push(url.trim());
+      }
+    } else if (typeof entry.imageUrl === "string" && entry.imageUrl.trim()) {
+      imageUrls.push(entry.imageUrl.trim());
+    }
+    return [{
+      id: entry.id,
+      content: entry.content,
+      imageUrls: imageUrls.slice(0, 10),
+      status: entry.status === "processed" ? "processed" as const : "unprocessed" as const,
+    }];
+  });
+}
+
+export async function getSubtaskPromptItems(
+  supabase: ApiSupabaseClient,
+  id: string
+): Promise<SubtaskPromptItem[]> {
+  const { data, error } = await supabase
+    .from("task")
+    .select("prompt_items")
+    .eq("id", id)
+    .maybeSingle();
+  // Giữ trang chi tiết hoạt động trong lúc deployment chưa chạy migration mới.
+  if (error?.code === "42703" || error?.code === "PGRST204") return [];
+  throwDatabaseError(error);
+  return data ? normalizeSubtaskPromptItems(data.prompt_items) : [];
 }
 
 function subtaskPayload(
   input: SubtaskInput,
   primaryAccountId: string,
+  testerAccountId: string | null,
   progress: number,
   status: TaskStatus
 ) {
@@ -1594,6 +1907,7 @@ function subtaskPayload(
     ngay_bat_dau: input.startDate,
     ngay_ket_thuc: input.dueDate,
     nguoi_phu_trach_id: primaryAccountId,
+    nguoi_test_id: testerAccountId,
     trang_thai: toDatabaseStatus(status),
     uu_tien: input.priority,
     tien_do_thuc_te: progress,
@@ -1601,16 +1915,24 @@ function subtaskPayload(
     hinh_anh: input.images,
     tep_dinh_kem: input.files,
     lien_ket_dinh_kem: input.links,
+    cap_nhat_bo_sung: input.updates,
     cong_viec_id: input.workTaskId,
   };
 }
 
 export async function createSubtask(
   supabase: ApiSupabaseClient,
-  input: SubtaskInput
+  input: SubtaskInput,
+  creatorAccountId: string
 ): Promise<Subtask> {
-  const [{ ids: assigneeIds }] = await Promise.all([
+  const parentWorkTask = await getWorkTask(supabase, input.workTaskId);
+  if (!parentWorkTask) throw new ApiException("Không tìm thấy công việc.", 404);
+
+  const [{ ids: assigneeIds }, testerAccountId] = await Promise.all([
     resolveAccounts(supabase, input.assigneeIds, "Người phụ trách"),
+    input.testerId
+      ? resolveAccountId(supabase, input.testerId, "Người test")
+      : Promise.resolve(null),
     assertSubtaskScheduleWithinWorkTask(
       supabase,
       input.workTaskId,
@@ -1622,7 +1944,10 @@ export async function createSubtask(
 
   const { data, error } = await supabase
     .from("task")
-    .insert(subtaskPayload(input, assigneeIds[0], 0, "todo"))
+    .insert({
+      ...subtaskPayload(input, assigneeIds[0], testerAccountId, 0, "todo"),
+      nguoi_tao_id: creatorAccountId,
+    })
     .select(SUBTASK_SELECT)
     .single();
   throwDatabaseError(error);
@@ -1630,13 +1955,20 @@ export async function createSubtask(
   const subtaskRow = data as unknown as SubtaskRow;
 
   const subtaskId = subtaskRow.id;
-  await syncAssignments(
-    supabase,
-    "task_phu_trach",
-    "task_id",
-    subtaskId,
-    assigneeIds
-  );
+  try {
+    await syncAssignments(
+      supabase,
+      "task_phu_trach",
+      "task_id",
+      subtaskId,
+      assigneeIds
+    );
+  } catch (syncError) {
+    // Xem chú thích tương ứng trong createWorkTask() — compensating delete, không
+    // phải RPC transaction thật.
+    await supabase.from("task").delete().eq("id", subtaskId);
+    throw syncError;
+  }
 
   const subtask = await getSubtask(supabase, subtaskId);
   if (!subtask) throw new ApiException("Không thể đọc lại task vừa tạo.", 500);
@@ -1656,8 +1988,28 @@ export async function updateSubtask(
   throwDatabaseError(currentError);
   if (!currentRow) return null;
 
-  const [{ ids: assigneeIds }] = await Promise.all([
+  const currentProgress = Number(currentRow.tien_do_thuc_te);
+  const currentStatus = normalizeSubtaskStatus(
+    String(currentRow.trang_thai),
+    currentProgress
+  );
+  if (currentStatus === "done") {
+    throw new ApiException(
+      "Task đã hoàn thành nên chỉ có thể xem, không thể chỉnh sửa.",
+      409
+    );
+  }
+  const nextStatus =
+    input.status ?? currentStatus;
+  const nextProgress = input.status
+    ? progressForSubtaskStatus(input.status, currentProgress)
+    : currentProgress;
+
+  const [{ ids: assigneeIds }, testerAccountId] = await Promise.all([
     resolveAccounts(supabase, input.assigneeIds, "Người phụ trách"),
+    input.testerId
+      ? resolveAccountId(supabase, input.testerId, "Người test")
+      : Promise.resolve(null),
     assertSubtaskScheduleWithinWorkTask(
       supabase,
       input.workTaskId,
@@ -1665,6 +2017,9 @@ export async function updateSubtask(
       input.dueDate
     ),
   ]);
+  if (nextStatus === "testing" && !testerAccountId) {
+    throw new ApiException("Task ở trạng thái Chờ test phải có người test.", 400);
+  }
   await assertWorkTaskAssignees(supabase, input.workTaskId, assigneeIds);
 
   const { data, error } = await supabase
@@ -1673,8 +2028,9 @@ export async function updateSubtask(
       subtaskPayload(
         input,
         assigneeIds[0],
-        Number(currentRow.tien_do_thuc_te),
-        normalizeSubtaskStatus(String(currentRow.trang_thai), Number(currentRow.tien_do_thuc_te))
+        testerAccountId,
+        nextProgress,
+        nextStatus
       )
     )
     .eq("id", id)
@@ -1747,14 +2103,82 @@ export async function deleteSubtask(
   supabase: ApiSupabaseClient,
   id: string
 ): Promise<boolean> {
+  const current = await getSubtask(supabase, id);
+  if (!current) return false;
+  if (current.status === "done") {
+    throw new ApiException(
+      "Task đã hoàn thành nên chỉ có thể xem, không thể xóa.",
+      409
+    );
+  }
+
   const { data, error } = await supabase
     .from("task")
     .delete()
     .eq("id", id)
+    .neq("trang_thai", "done")
     .select("id")
     .maybeSingle();
   throwDatabaseError(error);
   return Boolean(data);
+}
+
+function hydrateTaskActivity(rows: TaskActivityRow[]): TaskActivityEvent[] {
+  return rows.map((row) => ({
+    id: row.id,
+    taskId: row.task_id,
+    type: row.loai,
+    title: row.tieu_de,
+    detail: row.chi_tiet ?? undefined,
+    actorId: row.tac_gia ? accountReference(row.tac_gia) : undefined,
+    actorName: row.tac_gia?.ten_nv,
+    actorColor: row.tac_gia ? avatarColor(row.tac_gia.id) : undefined,
+    createdAt: row.created_at,
+  }));
+}
+
+/**
+ * Nhật ký hoạt động Task (tạo, xác nhận, đổi trạng thái, báo cáo, duyệt, sửa) — được ghi
+ * bằng trigger ở tầng database (xem migration `task_activity_log`), API chỉ đọc lại.
+ * Có phân trang vì Task hoạt động lâu ngày có thể phát sinh rất nhiều sự kiện.
+ */
+export async function listSubtaskActivity(
+  supabase: ApiSupabaseClient,
+  subtaskId: string,
+  page = 1,
+  pageSize = TASK_ACTIVITY_PAGE_SIZE
+): Promise<PagedResult<TaskActivityEvent>> {
+  const { from, to } = pageRange(page, pageSize);
+  const { data, error, count } = await supabase
+    .from("task_hoat_dong")
+    .select(TASK_ACTIVITY_SELECT, { count: "exact" })
+    .eq("task_id", subtaskId)
+    .order("created_at", { ascending: false })
+    .range(from, to);
+  throwDatabaseError(error);
+  const items = hydrateTaskActivity((data ?? []) as unknown as TaskActivityRow[]);
+  return { items, total: count ?? 0 };
+}
+
+/** Lấy các lần Pass/Fail theo thứ tự mới nhất trước. */
+export async function listSubtaskTestHistory(
+  supabase: ApiSupabaseClient,
+  subtaskId: string
+): Promise<SubtaskTestHistoryEntry[]> {
+  const { data, error } = await supabase
+    .from("task_lich_su_test")
+    .select(SUBTASK_TEST_HISTORY_SELECT)
+    .eq("task_id", subtaskId)
+    .order("created_at", { ascending: false });
+  throwDatabaseError(error);
+  return ((data ?? []) as unknown as SubtaskTestHistoryRow[]).map((row) => ({
+    id: row.id,
+    subtaskId: row.task_id,
+    tester: row.tester ? toProjectMember(row.tester) : undefined,
+    result: row.ket_qua,
+    note: row.ghi_chu ?? undefined,
+    createdAt: row.created_at,
+  }));
 }
 
 const TASK_REPORT_SELECT =
@@ -2026,6 +2450,15 @@ export async function uploadTaskReportFile(
   return path;
 }
 
+export async function removeTaskReportFiles(
+  supabase: ApiSupabaseClient,
+  paths: string[]
+): Promise<void> {
+  if (paths.length === 0) return;
+  const { error } = await supabase.storage.from(TASK_REPORT_BUCKET).remove(paths);
+  throwDatabaseError(error);
+}
+
 const SUBTASK_REPORT_SELECT =
   "id,task_id,nguoi_bao_cao_id,noi_dung,tien_do,created_at";
 
@@ -2140,6 +2573,19 @@ export async function createSubtaskReport(
 ): Promise<SubtaskReport> {
   const subtask = await getSubtask(supabase, subtaskId);
   if (!subtask) throw new ApiException("Không tìm thấy task.", 404);
+  if (subtask.status === "done") {
+    throw new ApiException(
+      "Task đã hoàn thành nên chỉ có thể xem, không thể gửi thêm báo cáo.",
+      409
+    );
+  }
+
+  const testerAccountId = input.testerId
+    ? await resolveAccountId(supabase, input.testerId, "Người test")
+    : subtask.testerId;
+  if (input.progress === 100 && !testerAccountId) {
+    throw new ApiException("Vui lòng chọn người test trước khi gửi báo cáo 100%.", 400);
+  }
 
   const authorId = input.authorId
     ? await resolveAccountId(supabase, input.authorId, "Người báo cáo")
@@ -2187,13 +2633,13 @@ export async function createSubtaskReport(
     throwDatabaseError(linkError);
   }
 
-  if (input.progress !== subtask.progress) {
-    // Báo cáo đạt 100% chuyển sang "Chờ duyệt"; chỉ approveSubtask mới đưa về "Hoàn thành".
+  if (input.progress === 100 || input.progress !== subtask.progress) {
     const { error: progressError } = await supabase
       .from("task")
       .update({
         tien_do_thuc_te: input.progress,
-        trang_thai: toDatabaseStatus(normalizeSubtaskStatus(subtask.status, input.progress)),
+        ...(testerAccountId ? { nguoi_test_id: testerAccountId } : {}),
+        trang_thai: toDatabaseStatus(deriveSubtaskStatus(input.progress)),
       })
       .eq("id", subtaskId);
     throwDatabaseError(progressError);
@@ -2204,26 +2650,84 @@ export async function createSubtaskReport(
   return report;
 }
 
-/** Xác thực người gọi API hiện tại có role admin trong bảng tài khoản. */
-export async function assertAdminAccount(supabase: ApiSupabaseClient): Promise<void> {
+/** Chỉ tester được gán hoặc admin được ghi kết quả kiểm thử. */
+export async function assertTesterOfSubtask(
+  supabase: ApiSupabaseClient,
+  taskId: string
+): Promise<void> {
   const authUserId = await resolveAuthUserId(supabase);
   if (!authUserId) throw new ApiException("Bạn cần đăng nhập để thực hiện thao tác này.", 401);
-
-  const { data, error } = await supabase
+  const { data: account, error: accountError } = await supabase
     .from("tai_khoan")
-    .select("role")
+    .select("id,role")
     .eq("auth_user_id", authUserId)
     .maybeSingle();
-  throwDatabaseError(error);
-
-  if (!data || data.role !== "admin") {
-    throw new ApiException("Chỉ quản trị viên mới được thực hiện thao tác này.", 403);
+  throwDatabaseError(accountError);
+  if (!account) throw new ApiException("Không tìm thấy tài khoản.", 403);
+  if (account.role === "admin") return;
+  const { data: task, error: taskError } = await supabase
+    .from("task")
+    .select("nguoi_test_id")
+    .eq("id", taskId)
+    .maybeSingle();
+  throwDatabaseError(taskError);
+  if (!task || task.nguoi_test_id !== account.id) {
+    throw new ApiException("Chỉ người được gán test Task này mới được thao tác.", 403);
   }
+}
+
+export async function submitSubtaskTestResult(
+  supabase: ApiSupabaseClient,
+  id: string,
+  result: SubtaskTestResult
+): Promise<Subtask | null> {
+  const subtask = await getSubtask(supabase, id);
+  if (!subtask) return null;
+  if (subtask.status !== "testing") {
+    throw new ApiException("Chỉ có thể ghi kết quả khi Task đang Chờ test.", 400);
+  }
+  const note = result.note?.trim();
+  if (!result.passed && !note) {
+    throw new ApiException("Cần ghi rõ lỗi khi báo Fail.", 400);
+  }
+  const update = result.passed
+    ? { trang_thai: toDatabaseStatus("review"), ghi_chu_test: null }
+    : { trang_thai: toDatabaseStatus("inProgress"), tien_do_thuc_te: 99, ghi_chu_test: note };
+  const { data, error } = await supabase
+    .from("task")
+    .update(update)
+    .eq("id", id)
+    .eq("trang_thai", "testing")
+    .select(SUBTASK_SELECT)
+    .maybeSingle();
+  throwDatabaseError(error);
+  if (!data) throw new ApiException("Task đã được xử lý bởi một người khác.", 409);
+  const [updated] = hydrateSubtasks([data as unknown as SubtaskRow]);
+  return updated;
+}
+
+/** Xác thực người gọi API hiện tại có role admin trong bảng tài khoản. */
+export async function assertAdminAccount(supabase: ApiSupabaseClient): Promise<void> {
+  await measureApiTiming("auth", async () => {
+    const authUserId = await resolveAuthUserId(supabase);
+    if (!authUserId) throw new ApiException("Bạn cần đăng nhập để thực hiện thao tác này.", 401);
+
+    const { data, error } = await supabase
+      .from("tai_khoan")
+      .select("role")
+      .eq("auth_user_id", authUserId)
+      .maybeSingle();
+    throwDatabaseError(error);
+
+    if (!data || data.role !== "admin") {
+      throw new ApiException("Chỉ quản trị viên mới được thực hiện thao tác này.", 403);
+    }
+  });
 }
 
 /**
  * Duyệt Task con đã báo cáo tiến độ 100% ("Chờ duyệt") sang "Hoàn thành".
- * Đây là con đường duy nhất để một task đạt trạng thái "done".
+ * Quản trị viên cũng có thể chỉnh trạng thái trực tiếp trong form chỉnh sửa Task.
  */
 export async function approveSubtask(
   supabase: ApiSupabaseClient,
@@ -2249,4 +2753,910 @@ export async function approveSubtask(
 
   const [approved] = hydrateSubtasks([data as unknown as SubtaskRow]);
   return approved;
+}
+
+// ---- Trực nhật ----
+// Cơ chế "lịch ảo + chốt cụ thể": truc_nhat_lich_lap là quy tắc lặp theo thứ
+// trong tuần; truc_nhat_ca là bản ghi đã "chốt" cho 1 ngày cụ thể. Ngày nào
+// chưa chốt sẽ được tính "ảo" từ quy tắc lặp khi đọc theo khoảng ngày, và chỉ
+// được ghi xuống DB khi có thao tác ghi (chỉnh sửa riêng ngày đó, hoặc mở chi
+// tiết 1 ngày có quy tắc áp dụng, hoặc tick 1 đầu việc).
+
+/** Số ngày mặc định sinh trước lịch trực khi tạo/sửa 1 quy tắc lặp. */
+const DUTY_AUTO_GENERATE_DAYS = 56;
+
+const DUTY_TEMPLATE_SELECT = "id,ten,mo_ta,thu_tu,dang_hoat_dong,created_at,updated_at";
+const DUTY_RULE_SELECT =
+  "id,thu_trong_tuan,ngay_bat_dau,ngay_ket_thuc,ghi_chu,dang_hoat_dong,created_at,updated_at," +
+  `truc_nhat_lich_lap_phu_trach(tai_khoan_id,la_chinh,tai_khoan(${ACCOUNT_SELECT}))`;
+const DUTY_SHIFT_SELECT =
+  "id,ngay_truc,nguon,lich_lap_id,trang_thai,ghi_chu,created_at,updated_at," +
+  `truc_nhat_ca_phu_trach(tai_khoan_id,la_chinh,tai_khoan(${ACCOUNT_SELECT})),` +
+  "truc_nhat_ca_dau_viec(id,dau_viec_mau_id,ten,thu_tu,hoan_thanh,hoan_thanh_luc,hoan_thanh_boi," +
+  `nguoi_hoan_thanh:tai_khoan!hoan_thanh_boi(${ACCOUNT_SELECT}))`;
+const DUTY_CHECKLIST_ITEM_SELECT =
+  "id,dau_viec_mau_id,ten,thu_tu,hoan_thanh,hoan_thanh_luc,hoan_thanh_boi," +
+  `nguoi_hoan_thanh:tai_khoan!hoan_thanh_boi(${ACCOUNT_SELECT})`;
+
+interface DutyTemplateRow {
+  id: string;
+  ten: string;
+  mo_ta: string | null;
+  thu_tu: number;
+  dang_hoat_dong: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+interface DutyAssignmentEmbedRow {
+  tai_khoan_id: string;
+  la_chinh: boolean;
+  tai_khoan: AccountRow | null;
+}
+
+interface DutyRuleRow {
+  id: string;
+  thu_trong_tuan: number;
+  ngay_bat_dau: string;
+  ngay_ket_thuc: string | null;
+  ghi_chu: string | null;
+  dang_hoat_dong: boolean;
+  created_at: string;
+  updated_at: string;
+  truc_nhat_lich_lap_phu_trach: DutyAssignmentEmbedRow[] | null;
+}
+
+interface DutyChecklistItemRow {
+  id: string;
+  dau_viec_mau_id: string | null;
+  ten: string;
+  thu_tu: number;
+  hoan_thanh: boolean;
+  hoan_thanh_luc: string | null;
+  hoan_thanh_boi: string | null;
+  nguoi_hoan_thanh: AccountRow | null;
+}
+
+interface DutyShiftRow {
+  id: string;
+  ngay_truc: string;
+  nguon: DutySource;
+  lich_lap_id: string | null;
+  trang_thai: DutyShiftStatus;
+  ghi_chu: string | null;
+  created_at: string;
+  updated_at: string;
+  truc_nhat_ca_phu_trach: DutyAssignmentEmbedRow[] | null;
+  truc_nhat_ca_dau_viec: DutyChecklistItemRow[] | null;
+}
+
+/** Quy tắc lặp ở dạng "thô" (id tài khoản thật) dùng nội bộ để chốt lịch. */
+interface DutyRuleRawRow {
+  id: string;
+  thu_trong_tuan: number;
+  ngay_bat_dau: string;
+  ngay_ket_thuc: string | null;
+  assigneeIds: string[];
+}
+
+function toDutyChecklistTemplate(row: DutyTemplateRow): DutyChecklistTemplate {
+  return {
+    id: row.id,
+    name: row.ten,
+    description: row.mo_ta ?? undefined,
+    order: row.thu_tu,
+    active: row.dang_hoat_dong,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function toDutyAssignees(rows: DutyAssignmentEmbedRow[] | null): ProjectMember[] {
+  return (rows ?? [])
+    .slice()
+    .sort((a, b) => Number(b.la_chinh) - Number(a.la_chinh))
+    .map((row) => row.tai_khoan)
+    .filter((account): account is AccountRow => Boolean(account))
+    .map(toProjectMember);
+}
+
+function toDutyRecurringRule(row: DutyRuleRow): DutyRecurringRule {
+  return {
+    id: row.id,
+    weekday: row.thu_trong_tuan,
+    assignees: toDutyAssignees(row.truc_nhat_lich_lap_phu_trach),
+    startDate: row.ngay_bat_dau,
+    endDate: row.ngay_ket_thuc ?? undefined,
+    note: row.ghi_chu ?? undefined,
+    active: row.dang_hoat_dong,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function toDutyChecklistItem(row: DutyChecklistItemRow): DutyChecklistItem {
+  return {
+    id: row.id,
+    templateId: row.dau_viec_mau_id ?? undefined,
+    name: row.ten,
+    order: row.thu_tu,
+    done: row.hoan_thanh,
+    doneAt: row.hoan_thanh_luc ?? undefined,
+    doneBy: row.nguoi_hoan_thanh ? toProjectMember(row.nguoi_hoan_thanh) : undefined,
+  };
+}
+
+function toDutyShift(row: DutyShiftRow): DutyShift {
+  return {
+    id: row.id,
+    date: row.ngay_truc,
+    status: row.trang_thai,
+    source: row.nguon,
+    ruleId: row.lich_lap_id ?? undefined,
+    assignees: toDutyAssignees(row.truc_nhat_ca_phu_trach),
+    note: row.ghi_chu ?? undefined,
+    checklist: (row.truc_nhat_ca_dau_viec ?? [])
+      .slice()
+      .sort((a, b) => a.thu_tu - b.thu_tu)
+      .map(toDutyChecklistItem),
+  };
+}
+
+function deriveDutyShiftStatus(doneStates: readonly boolean[]): DutyShiftStatus {
+  if (doneStates.length === 0 || !doneStates.some(Boolean)) return "chua_thuc_hien";
+  return doneStates.every(Boolean) ? "hoan_thanh" : "dang_thuc_hien";
+}
+
+async function syncDutyShiftStatus(
+  supabase: ApiSupabaseClient,
+  caId: string,
+  doneStates: readonly boolean[]
+): Promise<DutyShiftStatus> {
+  const status = deriveDutyShiftStatus(doneStates);
+
+  const { error } = await supabase
+    .from("truc_nhat_ca")
+    .update({ trang_thai: status })
+    .eq("id", caId);
+  throwDatabaseError(error);
+  return status;
+}
+
+function emptyDutyShift(date: string): DutyShift {
+  return { id: null, date, status: "chua_thuc_hien", source: "thu_cong", assignees: [], checklist: [] };
+}
+
+function virtualDutyShiftFromRule(
+  date: string,
+  rule: DutyRuleRawRow,
+  accountsById: Map<string, AccountRow>,
+  templates: DutyChecklistTemplate[]
+): DutyShift {
+  return {
+    id: null,
+    date,
+    status: "chua_thuc_hien",
+    source: "lap_lich",
+    ruleId: rule.id,
+    assignees: rule.assigneeIds
+      .map((accountId) => accountsById.get(accountId))
+      .filter((account): account is AccountRow => Boolean(account))
+      .map(toProjectMember),
+    checklist: templates.map((template) => ({
+      id: template.id,
+      templateId: template.id,
+      name: template.name,
+      order: template.order,
+      done: false,
+    })),
+  };
+}
+
+/** YYYY-MM-DD → 1 (Thứ 2) .. 7 (Chủ nhật), tính theo UTC vì date-key không mang giờ. */
+function isoWeekday(dateKey: string): number {
+  const day = new Date(`${dateKey}T00:00:00Z`).getUTCDay();
+  return day === 0 ? 7 : day;
+}
+
+function enumerateDateKeys(from: string, to: string): string[] {
+  const keys: string[] = [];
+  let cursor = new Date(`${from}T00:00:00Z`).getTime();
+  const end = new Date(`${to}T00:00:00Z`).getTime();
+  while (cursor <= end) {
+    keys.push(new Date(cursor).toISOString().slice(0, 10));
+    cursor += 86_400_000;
+  }
+  return keys;
+}
+
+function findRuleForDate(rules: DutyRuleRawRow[], dateKey: string): DutyRuleRawRow | undefined {
+  const weekday = isoWeekday(dateKey);
+  return rules.find(
+    (rule) =>
+      rule.thu_trong_tuan === weekday &&
+      rule.ngay_bat_dau <= dateKey &&
+      (!rule.ngay_ket_thuc || rule.ngay_ket_thuc >= dateKey)
+  );
+}
+
+/** Quy tắc lặp đang hoạt động, có hiệu lực chồng lấn khoảng [from, to]. */
+async function listActiveDutyRulesRaw(
+  supabase: ApiSupabaseClient,
+  from: string,
+  to: string
+): Promise<DutyRuleRawRow[]> {
+  const { data, error } = await supabase
+    .from("truc_nhat_lich_lap")
+    .select("id,thu_trong_tuan,ngay_bat_dau,ngay_ket_thuc,truc_nhat_lich_lap_phu_trach(tai_khoan_id,la_chinh)")
+    .eq("dang_hoat_dong", true)
+    .lte("ngay_bat_dau", to)
+    .or(`ngay_ket_thuc.is.null,ngay_ket_thuc.gte.${from}`);
+  throwDatabaseError(error);
+
+  return ((data ?? []) as unknown as Array<{
+    id: string;
+    thu_trong_tuan: number;
+    ngay_bat_dau: string;
+    ngay_ket_thuc: string | null;
+    truc_nhat_lich_lap_phu_trach: { tai_khoan_id: string; la_chinh: boolean }[] | null;
+  }>).map((row) => ({
+    id: row.id,
+    thu_trong_tuan: row.thu_trong_tuan,
+    ngay_bat_dau: row.ngay_bat_dau,
+    ngay_ket_thuc: row.ngay_ket_thuc,
+    assigneeIds: (row.truc_nhat_lich_lap_phu_trach ?? [])
+      .slice()
+      .sort((a, b) => Number(b.la_chinh) - Number(a.la_chinh))
+      .map((assignment) => assignment.tai_khoan_id),
+  }));
+}
+
+async function copyChecklistTemplatesToShift(
+  supabase: ApiSupabaseClient,
+  caId: string,
+  templates: DutyChecklistTemplate[]
+): Promise<void> {
+  if (templates.length === 0) return;
+  const { error } = await supabase.from("truc_nhat_ca_dau_viec").insert(
+    templates.map((template) => ({
+      ca_id: caId,
+      dau_viec_mau_id: template.id,
+      ten: template.name,
+      thu_tu: template.order,
+    }))
+  );
+  throwDatabaseError(error);
+}
+
+/**
+ * Bổ sung các đầu việc mẫu đang hoạt động được tạo sau khi ca đã được chốt.
+ * Các mục đã có (kể cả đã hoàn thành) được giữ nguyên để không mất lịch sử.
+ */
+async function syncMissingChecklistTemplatesToShift(
+  supabase: ApiSupabaseClient,
+  caId: string,
+  checklist: DutyChecklistItemRow[] | null
+): Promise<boolean> {
+  const templates = await listDutyChecklistTemplates(supabase, true);
+  const existingTemplateIds = new Set(
+    (checklist ?? [])
+      .map((item) => item.dau_viec_mau_id)
+      .filter((templateId): templateId is string => Boolean(templateId))
+  );
+  const missingTemplates = templates.filter((template) => !existingTemplateIds.has(template.id));
+  if (missingTemplates.length === 0) return false;
+
+  await copyChecklistTemplatesToShift(supabase, caId, missingTemplates);
+  return true;
+}
+
+/**
+ * Đồng bộ checklist của những ca từ hôm nay trở đi với cấu hình đầu việc hiện tại.
+ * Mục đã hoàn thành được giữ làm lịch sử; mục chưa hoàn thành sẽ nhận tên/thứ tự
+ * mới, được thêm khi có mẫu mới, hoặc bị bỏ khi mẫu đã tắt/xóa.
+ */
+async function syncChecklistTemplatesToUpcomingShifts(supabase: ApiSupabaseClient): Promise<void> {
+  const [{ data: shifts, error: shiftsError }, templates] = await Promise.all([
+    supabase.from("truc_nhat_ca").select("id").gte("ngay_truc", getAppDateKey()),
+    listDutyChecklistTemplates(supabase, true),
+  ]);
+  throwDatabaseError(shiftsError);
+
+  const shiftIds = (shifts ?? []).map((shift) => shift.id as string);
+  if (shiftIds.length === 0) return;
+
+  const { data: checklist, error: checklistError } = await supabase
+    .from("truc_nhat_ca_dau_viec")
+    .select("ca_id,dau_viec_mau_id")
+    .in("ca_id", shiftIds);
+  throwDatabaseError(checklistError);
+
+  const activeTemplateIds = new Set(templates.map((template) => template.id));
+  const existingTemplateKeys = new Set(
+    (checklist ?? [])
+      .filter((item) => item.dau_viec_mau_id)
+      .map((item) => `${item.ca_id as string}:${item.dau_viec_mau_id as string}`)
+  );
+  const newChecklistRows = shiftIds.flatMap((caId) =>
+    templates
+      .filter((template) => !existingTemplateKeys.has(`${caId}:${template.id}`))
+      .map((template) => ({
+        ca_id: caId,
+        dau_viec_mau_id: template.id,
+        ten: template.name,
+        thu_tu: template.order,
+      }))
+  );
+  if (newChecklistRows.length > 0) {
+    const { error } = await supabase.from("truc_nhat_ca_dau_viec").insert(newChecklistRows);
+    throwDatabaseError(error);
+  }
+
+  const existingTemplateIds = [...new Set(
+    (checklist ?? [])
+      .map((item) => item.dau_viec_mau_id)
+      .filter((templateId): templateId is string => Boolean(templateId))
+  )];
+  const inactiveTemplateIds = existingTemplateIds.filter((templateId) => !activeTemplateIds.has(templateId));
+  if (inactiveTemplateIds.length > 0) {
+    const { error } = await supabase
+      .from("truc_nhat_ca_dau_viec")
+      .delete()
+      .in("ca_id", shiftIds)
+      .in("dau_viec_mau_id", inactiveTemplateIds)
+      .eq("hoan_thanh", false);
+    throwDatabaseError(error);
+  }
+
+  for (const template of templates) {
+    const { error } = await supabase
+      .from("truc_nhat_ca_dau_viec")
+      .update({ ten: template.name, thu_tu: template.order })
+      .in("ca_id", shiftIds)
+      .eq("dau_viec_mau_id", template.id)
+      .eq("hoan_thanh", false);
+    throwDatabaseError(error);
+  }
+
+  const { data: syncedChecklist, error: syncedChecklistError } = await supabase
+    .from("truc_nhat_ca_dau_viec")
+    .select("ca_id,hoan_thanh")
+    .in("ca_id", shiftIds);
+  throwDatabaseError(syncedChecklistError);
+  const doneStatesByShift = new Map<string, boolean[]>();
+  for (const caId of shiftIds) doneStatesByShift.set(caId, []);
+  for (const item of syncedChecklist ?? []) {
+    const caId = item.ca_id as string;
+    doneStatesByShift.get(caId)?.push(item.hoan_thanh as boolean);
+  }
+  const shiftIdsByStatus = new Map<DutyShiftStatus, string[]>();
+  for (const [caId, doneStates] of doneStatesByShift) {
+    const status = deriveDutyShiftStatus(doneStates);
+    const ids = shiftIdsByStatus.get(status) ?? [];
+    ids.push(caId);
+    shiftIdsByStatus.set(status, ids);
+  }
+  for (const [status, ids] of shiftIdsByStatus) {
+    const { error } = await supabase.from("truc_nhat_ca").update({ trang_thai: status }).in("id", ids);
+    throwDatabaseError(error);
+  }
+}
+
+/** Chốt các ngày trong `dateKeys` chưa có `truc_nhat_ca` nhưng có quy tắc lặp áp dụng. */
+async function materializeMissingShifts(
+  supabase: ApiSupabaseClient,
+  dateKeys: string[],
+  rules: DutyRuleRawRow[],
+  templates: DutyChecklistTemplate[]
+): Promise<void> {
+  const toCreate = dateKeys
+    .map((date) => ({ date, rule: findRuleForDate(rules, date) }))
+    .filter((entry): entry is { date: string; rule: DutyRuleRawRow } => Boolean(entry.rule));
+  if (toCreate.length === 0) return;
+
+  const { data, error } = await supabase
+    .from("truc_nhat_ca")
+    .insert(
+      toCreate.map(({ date, rule }) => ({
+        ngay_truc: date,
+        nguon: "lap_lich",
+        lich_lap_id: rule.id,
+      }))
+    )
+    .select("id,ngay_truc");
+  throwDatabaseError(error);
+
+  const createdIdByDate = new Map(
+    ((data ?? []) as { id: string; ngay_truc: string }[]).map((row) => [row.ngay_truc, row.id])
+  );
+
+  const phuTrachRows: { ca_id: string; tai_khoan_id: string; la_chinh: boolean }[] = [];
+  const checklistRows: { ca_id: string; dau_viec_mau_id: string; ten: string; thu_tu: number }[] = [];
+  for (const { date, rule } of toCreate) {
+    const caId = createdIdByDate.get(date);
+    if (!caId) continue;
+    rule.assigneeIds.forEach((accountId, index) => {
+      phuTrachRows.push({ ca_id: caId, tai_khoan_id: accountId, la_chinh: index === 0 });
+    });
+    for (const template of templates) {
+      checklistRows.push({ ca_id: caId, dau_viec_mau_id: template.id, ten: template.name, thu_tu: template.order });
+    }
+  }
+
+  if (phuTrachRows.length > 0) {
+    const { error: assignError } = await supabase.from("truc_nhat_ca_phu_trach").insert(phuTrachRows);
+    throwDatabaseError(assignError);
+  }
+  if (checklistRows.length > 0) {
+    const { error: checklistError } = await supabase.from("truc_nhat_ca_dau_viec").insert(checklistRows);
+    throwDatabaseError(checklistError);
+  }
+}
+
+async function generateShiftsForRules(
+  supabase: ApiSupabaseClient,
+  rules: DutyRuleRawRow[],
+  from: string,
+  to: string
+): Promise<void> {
+  if (rules.length === 0 || to < from) return;
+
+  const { data: existing, error } = await supabase
+    .from("truc_nhat_ca")
+    .select("ngay_truc")
+    .gte("ngay_truc", from)
+    .lte("ngay_truc", to);
+  throwDatabaseError(error);
+
+  const existingDates = new Set((existing ?? []).map((row) => row.ngay_truc as string));
+  const missingDates = enumerateDateKeys(from, to).filter((date) => !existingDates.has(date));
+  if (missingDates.length === 0) return;
+
+  const templates = await listDutyChecklistTemplates(supabase, true);
+  await materializeMissingShifts(supabase, missingDates, rules, templates);
+}
+
+/** Sinh lịch trực từ 1 quy tắc lặp tới ngày `toDate` (bỏ qua ngày đã chốt). */
+export async function generateDutyShiftsForRule(
+  supabase: ApiSupabaseClient,
+  ruleId: string,
+  toDate: string
+): Promise<void> {
+  const from = getAppDateKey();
+  const rules = await listActiveDutyRulesRaw(supabase, from, toDate);
+  const rule = rules.find((item) => item.id === ruleId);
+  if (!rule) return;
+  await generateShiftsForRules(supabase, [rule], from, toDate);
+}
+
+/** Đồng bộ người trực cho các ca chưa bị chỉnh thủ công, đã sinh từ quy tắc lặp. */
+async function syncUpcomingGeneratedShiftAssignees(
+  supabase: ApiSupabaseClient,
+  ruleId: string,
+  input: DutyRecurringRuleInput,
+  assigneeIds: string[]
+): Promise<void> {
+  const from = getAppDateKey() > input.startDate ? getAppDateKey() : input.startDate;
+  if (input.endDate && input.endDate < from) return;
+
+  let query = supabase
+    .from("truc_nhat_ca")
+    .select("id,ngay_truc")
+    .eq("lich_lap_id", ruleId)
+    .eq("nguon", "lap_lich")
+    .gte("ngay_truc", from);
+  if (input.endDate) query = query.lte("ngay_truc", input.endDate);
+  const { data: shifts, error } = await query;
+  throwDatabaseError(error);
+
+  const matchingShiftIds = (shifts ?? [])
+    .filter((shift) => isoWeekday(shift.ngay_truc as string) === input.weekday)
+    .map((shift) => shift.id as string);
+  for (const shiftId of matchingShiftIds) {
+    await syncAssignments(supabase, "truc_nhat_ca_phu_trach", "ca_id", shiftId, assigneeIds);
+  }
+}
+
+/** Sinh lịch trực cho tất cả quy tắc đang hoạt động tới ngày `toDate`. */
+export async function generateDutySchedule(supabase: ApiSupabaseClient, toDate: string): Promise<void> {
+  const from = getAppDateKey();
+  const rules = await listActiveDutyRulesRaw(supabase, from, toDate);
+  await generateShiftsForRules(supabase, rules, from, toDate);
+}
+
+function defaultDutyGenerateToDate(ruleEndDate?: string): string {
+  const from = new Date(`${getAppDateKey()}T00:00:00Z`).getTime();
+  const defaultTo = new Date(from + DUTY_AUTO_GENERATE_DAYS * 86_400_000).toISOString().slice(0, 10);
+  return ruleEndDate && ruleEndDate < defaultTo ? ruleEndDate : defaultTo;
+}
+
+export async function listDutyChecklistTemplates(
+  supabase: ApiSupabaseClient,
+  activeOnly = false
+): Promise<DutyChecklistTemplate[]> {
+  let query = supabase.from("truc_nhat_dau_viec_mau").select(DUTY_TEMPLATE_SELECT).order("thu_tu");
+  if (activeOnly) query = query.eq("dang_hoat_dong", true);
+  const { data, error } = await query;
+  throwDatabaseError(error);
+  return ((data ?? []) as DutyTemplateRow[]).map(toDutyChecklistTemplate);
+}
+
+export async function createDutyChecklistTemplate(
+  supabase: ApiSupabaseClient,
+  input: DutyChecklistTemplateInput
+): Promise<DutyChecklistTemplate> {
+  const { data, error } = await supabase
+    .from("truc_nhat_dau_viec_mau")
+    .insert({
+      ten: input.name,
+      mo_ta: input.description ?? null,
+      thu_tu: input.order,
+      dang_hoat_dong: input.active,
+    })
+    .select(DUTY_TEMPLATE_SELECT)
+    .single();
+  throwDatabaseError(error);
+  if (!data) throw new ApiException("Supabase không trả về đầu việc mẫu vừa tạo.", 500);
+  await syncChecklistTemplatesToUpcomingShifts(supabase);
+  return toDutyChecklistTemplate(data as DutyTemplateRow);
+}
+
+export async function updateDutyChecklistTemplate(
+  supabase: ApiSupabaseClient,
+  id: string,
+  input: DutyChecklistTemplateInput
+): Promise<DutyChecklistTemplate | null> {
+  const { data, error } = await supabase
+    .from("truc_nhat_dau_viec_mau")
+    .update({
+      ten: input.name,
+      mo_ta: input.description ?? null,
+      thu_tu: input.order,
+      dang_hoat_dong: input.active,
+    })
+    .eq("id", id)
+    .select(DUTY_TEMPLATE_SELECT)
+    .maybeSingle();
+  throwDatabaseError(error);
+  if (data) await syncChecklistTemplatesToUpcomingShifts(supabase);
+  return data ? toDutyChecklistTemplate(data as DutyTemplateRow) : null;
+}
+
+export async function deleteDutyChecklistTemplate(supabase: ApiSupabaseClient, id: string): Promise<boolean> {
+  // Xóa các mục chưa hoàn thành trước, vì sau khi xóa mẫu khóa ngoại sẽ thành null
+  // và không còn biết mục nào cần được bỏ khỏi checklist ca trực.
+  const { data: shifts, error: shiftsError } = await supabase
+    .from("truc_nhat_ca")
+    .select("id")
+    .gte("ngay_truc", getAppDateKey());
+  throwDatabaseError(shiftsError);
+  const shiftIds = (shifts ?? []).map((shift) => shift.id as string);
+  if (shiftIds.length > 0) {
+    const { error } = await supabase
+      .from("truc_nhat_ca_dau_viec")
+      .delete()
+      .in("ca_id", shiftIds)
+      .eq("dau_viec_mau_id", id)
+      .eq("hoan_thanh", false);
+    throwDatabaseError(error);
+  }
+
+  const { data, error } = await supabase
+    .from("truc_nhat_dau_viec_mau")
+    .delete()
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
+  throwDatabaseError(error);
+  return Boolean(data);
+}
+
+async function getDutyRecurringRule(supabase: ApiSupabaseClient, id: string): Promise<DutyRecurringRule | null> {
+  const { data, error } = await supabase
+    .from("truc_nhat_lich_lap")
+    .select(DUTY_RULE_SELECT)
+    .eq("id", id)
+    .maybeSingle();
+  throwDatabaseError(error);
+  return data ? toDutyRecurringRule(data as unknown as DutyRuleRow) : null;
+}
+
+export async function listDutyRecurringRules(supabase: ApiSupabaseClient): Promise<DutyRecurringRule[]> {
+  const { data, error } = await supabase
+    .from("truc_nhat_lich_lap")
+    .select(DUTY_RULE_SELECT)
+    .order("thu_trong_tuan");
+  throwDatabaseError(error);
+  return ((data ?? []) as unknown as DutyRuleRow[]).map(toDutyRecurringRule);
+}
+
+export async function createDutyRecurringRule(
+  supabase: ApiSupabaseClient,
+  input: DutyRecurringRuleInput,
+  access: RequestAccountAccess
+): Promise<DutyRecurringRule> {
+  const { ids: assigneeIds } = await resolveAccounts(supabase, input.assigneeIds, "Người trực");
+
+  const { data, error } = await supabase
+    .from("truc_nhat_lich_lap")
+    .insert({
+      thu_trong_tuan: input.weekday,
+      ngay_bat_dau: input.startDate,
+      ngay_ket_thuc: input.endDate ?? null,
+      ghi_chu: input.note ?? null,
+      dang_hoat_dong: input.active,
+      created_by: access.id,
+    })
+    .select("id")
+    .single();
+  throwDatabaseError(error);
+  if (!data) throw new ApiException("Supabase không trả về quy tắc lịch trực vừa tạo.", 500);
+  const ruleId = data.id as string;
+
+  const { error: assignError } = await supabase.from("truc_nhat_lich_lap_phu_trach").insert(
+    assigneeIds.map((accountId, index) => ({
+      lich_lap_id: ruleId,
+      tai_khoan_id: accountId,
+      la_chinh: index === 0,
+    }))
+  );
+  throwDatabaseError(assignError);
+
+  if (input.active) {
+    await generateDutyShiftsForRule(supabase, ruleId, defaultDutyGenerateToDate(input.endDate));
+  }
+
+  const rule = await getDutyRecurringRule(supabase, ruleId);
+  if (!rule) throw new ApiException("Không tìm thấy quy tắc lịch trực vừa tạo.", 500);
+  return rule;
+}
+
+export async function updateDutyRecurringRule(
+  supabase: ApiSupabaseClient,
+  id: string,
+  input: DutyRecurringRuleInput
+): Promise<DutyRecurringRule | null> {
+  const { ids: assigneeIds } = await resolveAccounts(supabase, input.assigneeIds, "Người trực");
+
+  const { data, error } = await supabase
+    .from("truc_nhat_lich_lap")
+    .update({
+      thu_trong_tuan: input.weekday,
+      ngay_bat_dau: input.startDate,
+      ngay_ket_thuc: input.endDate ?? null,
+      ghi_chu: input.note ?? null,
+      dang_hoat_dong: input.active,
+    })
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
+  throwDatabaseError(error);
+  if (!data) return null;
+
+  await syncAssignments(supabase, "truc_nhat_lich_lap_phu_trach", "lich_lap_id", id, assigneeIds);
+
+  if (input.active) {
+    await generateDutyShiftsForRule(supabase, id, defaultDutyGenerateToDate(input.endDate));
+    await syncUpcomingGeneratedShiftAssignees(supabase, id, input, assigneeIds);
+  }
+
+  return getDutyRecurringRule(supabase, id);
+}
+
+export async function deleteDutyRecurringRule(supabase: ApiSupabaseClient, id: string): Promise<boolean> {
+  // Ca sinh từ lịch lặp phải bị gỡ cùng quy tắc; nếu không lịch sẽ tiếp tục hiển thị
+  // dữ liệu đã "chốt" dù quản trị viên đã xóa cấu hình. Ca đã chỉnh riêng giữ nguồn
+  // "thu_cong" nên không bị ảnh hưởng.
+  const { error: shiftsError } = await supabase
+    .from("truc_nhat_ca")
+    .delete()
+    .eq("lich_lap_id", id)
+    .eq("nguon", "lap_lich");
+  throwDatabaseError(shiftsError);
+
+  const { data, error } = await supabase
+    .from("truc_nhat_lich_lap")
+    .delete()
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
+  throwDatabaseError(error);
+  return Boolean(data);
+}
+
+async function getDutyShiftById(supabase: ApiSupabaseClient, id: string): Promise<DutyShift | null> {
+  const { data, error } = await supabase.from("truc_nhat_ca").select(DUTY_SHIFT_SELECT).eq("id", id).maybeSingle();
+  throwDatabaseError(error);
+  return data ? toDutyShift(data as unknown as DutyShiftRow) : null;
+}
+
+/** Lịch trực cho 1 khoảng ngày, merge giữa ca đã chốt và ca "ảo" tính từ quy tắc lặp. Không ghi DB. */
+export async function getDutyRosterRange(
+  supabase: ApiSupabaseClient,
+  from: string,
+  to: string
+): Promise<DutyShift[]> {
+  const [{ data: shiftData, error: shiftError }, rules, templates] = await Promise.all([
+    supabase.from("truc_nhat_ca").select(DUTY_SHIFT_SELECT).gte("ngay_truc", from).lte("ngay_truc", to).order("ngay_truc"),
+    listActiveDutyRulesRaw(supabase, from, to),
+    listDutyChecklistTemplates(supabase, true),
+  ]);
+  throwDatabaseError(shiftError);
+
+  const shiftsByDate = new Map<string, DutyShift>();
+  for (const row of (shiftData ?? []) as unknown as DutyShiftRow[]) {
+    shiftsByDate.set(row.ngay_truc, toDutyShift(row));
+  }
+
+  const accountsById = await loadAccounts(supabase, uniqueValues(rules.flatMap((rule) => rule.assigneeIds)));
+
+  return enumerateDateKeys(from, to).map((date) => {
+    const existing = shiftsByDate.get(date);
+    if (existing) return existing;
+    const rule = findRuleForDate(rules, date);
+    return rule ? virtualDutyShiftFromRule(date, rule, accountsById, templates) : emptyDutyShift(date);
+  });
+}
+
+/**
+ * Ca trực của 1 ngày cụ thể. Nếu ngày đó chưa chốt nhưng có quy tắc lặp áp
+ * dụng, sẽ chốt luôn (khác `getDutyRosterRange` — trang xem theo tháng chỉ
+ * hiển thị "ảo", không ghi DB) vì người dùng đang thực sự mở ngày đó ra để
+ * quản lý/tick checklist.
+ */
+export async function getDutyShiftByDate(supabase: ApiSupabaseClient, date: string): Promise<DutyShift> {
+  const { data, error } = await supabase
+    .from("truc_nhat_ca")
+    .select(DUTY_SHIFT_SELECT)
+    .eq("ngay_truc", date)
+    .maybeSingle();
+  throwDatabaseError(error);
+  if (data) {
+    const row = data as unknown as DutyShiftRow;
+    const changed = await syncMissingChecklistTemplatesToShift(
+      supabase,
+      row.id,
+      row.truc_nhat_ca_dau_viec
+    );
+    const shift = changed ? await getDutyShiftById(supabase, row.id) : toDutyShift(row);
+    if (!shift) throw new ApiException("Không tìm thấy ca trực sau khi đồng bộ đầu việc.", 500);
+
+    const status = await syncDutyShiftStatus(
+      supabase,
+      row.id,
+      shift.checklist.map((item) => item.done)
+    );
+    return status === shift.status ? shift : { ...shift, status };
+  }
+
+  const rules = await listActiveDutyRulesRaw(supabase, date, date);
+  const rule = findRuleForDate(rules, date);
+  if (!rule) return emptyDutyShift(date);
+
+  const templates = await listDutyChecklistTemplates(supabase, true);
+  // Ca trong quá khứ chỉ để xem. Không chốt ngược vào DB vì checklist đã bị
+  // khóa ngoài ngày trực; nhờ đó vẫn mở được các lịch cũ chưa từng được tạo ca.
+  if (date < getAppDateKey()) {
+    const accountsById = await loadAccounts(supabase, rule.assigneeIds);
+    return virtualDutyShiftFromRule(date, rule, accountsById, templates);
+  }
+
+  await materializeMissingShifts(supabase, [date], rules, templates);
+
+  const shift = await supabase.from("truc_nhat_ca").select(DUTY_SHIFT_SELECT).eq("ngay_truc", date).maybeSingle();
+  throwDatabaseError(shift.error);
+  if (!shift.data) throw new ApiException("Không thể tạo ca trực từ lịch lặp.", 500);
+  return toDutyShift(shift.data as unknown as DutyShiftRow);
+}
+
+/** Chốt (tạo mới hoặc ghi đè) ca trực cho 1 ngày cụ thể — admin giao/sửa lịch trực riêng ngày đó. */
+export async function upsertDutyShift(
+  supabase: ApiSupabaseClient,
+  input: DutyShiftInput,
+  access: RequestAccountAccess
+): Promise<DutyShift> {
+  const { ids: assigneeIds } = await resolveAccounts(supabase, input.assigneeIds, "Người trực");
+
+  const { data: existing, error: existingError } = await supabase
+    .from("truc_nhat_ca")
+    .select("id")
+    .eq("ngay_truc", input.date)
+    .maybeSingle();
+  throwDatabaseError(existingError);
+
+  let caId: string;
+  if (existing) {
+    caId = existing.id as string;
+    const { error } = await supabase
+      .from("truc_nhat_ca")
+      .update({
+        nguon: "thu_cong",
+        ghi_chu: input.note ?? null,
+        ...(input.status ? { trang_thai: input.status } : {}),
+      })
+      .eq("id", caId);
+    throwDatabaseError(error);
+  } else {
+    const { data, error } = await supabase
+      .from("truc_nhat_ca")
+      .insert({
+        ngay_truc: input.date,
+        nguon: "thu_cong",
+        ghi_chu: input.note ?? null,
+        created_by: access.id,
+        ...(input.status ? { trang_thai: input.status } : {}),
+      })
+      .select("id")
+      .single();
+    throwDatabaseError(error);
+    if (!data) throw new ApiException("Supabase không trả về ca trực vừa tạo.", 500);
+    caId = data.id as string;
+    const templates = await listDutyChecklistTemplates(supabase, true);
+    await copyChecklistTemplatesToShift(supabase, caId, templates);
+  }
+
+  await syncAssignments(supabase, "truc_nhat_ca_phu_trach", "ca_id", caId, assigneeIds);
+
+  const shift = await getDutyShiftById(supabase, caId);
+  if (!shift) throw new ApiException("Không tìm thấy ca trực vừa lưu.", 500);
+  return shift;
+}
+
+/** ca_id của 1 đầu việc checklist — dùng để kiểm tra quyền trước khi cho tick. */
+export async function getDutyChecklistItemShiftId(
+  supabase: ApiSupabaseClient,
+  itemId: string
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("truc_nhat_ca_dau_viec")
+    .select("ca_id")
+    .eq("id", itemId)
+    .maybeSingle();
+  throwDatabaseError(error);
+  return data ? (data.ca_id as string) : null;
+}
+
+/** Ngày trực của ca, dùng để chỉ cho phép xác nhận checklist đúng ngày trực. */
+export async function getDutyShiftDate(
+  supabase: ApiSupabaseClient,
+  caId: string
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("truc_nhat_ca")
+    .select("ngay_truc")
+    .eq("id", caId)
+    .maybeSingle();
+  throwDatabaseError(error);
+  return data ? (data.ngay_truc as string) : null;
+}
+
+export async function toggleDutyChecklistItem(
+  supabase: ApiSupabaseClient,
+  caId: string,
+  itemId: string,
+  done: boolean,
+  access: RequestAccountAccess
+): Promise<DutyChecklistToggleResult> {
+  const { data, error } = await supabase
+    .from("truc_nhat_ca_dau_viec")
+    .update({
+      hoan_thanh: done,
+      hoan_thanh_luc: done ? new Date().toISOString() : null,
+      hoan_thanh_boi: done ? access.id : null,
+    })
+    .eq("id", itemId)
+    .select(DUTY_CHECKLIST_ITEM_SELECT)
+    .maybeSingle();
+  throwDatabaseError(error);
+  if (!data) throw new ApiException("Không tìm thấy đầu việc.", 404);
+  const { data: checklist, error: checklistError } = await supabase
+    .from("truc_nhat_ca_dau_viec")
+    .select("hoan_thanh")
+    .eq("ca_id", caId);
+  throwDatabaseError(checklistError);
+
+  const doneStates = (checklist ?? []).map((row) => row.hoan_thanh as boolean);
+  const status = await syncDutyShiftStatus(supabase, caId, doneStates);
+
+  return { item: toDutyChecklistItem(data as unknown as DutyChecklistItemRow), status };
 }

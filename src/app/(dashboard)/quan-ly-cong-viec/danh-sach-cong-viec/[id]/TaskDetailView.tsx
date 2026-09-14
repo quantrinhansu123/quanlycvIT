@@ -16,8 +16,12 @@ import {
   History,
   Info,
   ListTodo,
+  Maximize2,
+  Minimize2,
+  PanelRightClose,
   Pencil,
   RotateCcw,
+  Trash2,
   UsersRound,
   type LucideIcon,
 } from "lucide-react";
@@ -26,7 +30,7 @@ import { taskService } from "@/services/task-service";
 import { subtaskService } from "@/services/subtask-service";
 import type { Project, ProjectMember } from "@/types/project";
 import type { Subtask } from "@/types/subtask";
-import type { TaskReport, WorkTask } from "@/types/task";
+import type { TaskFileAttachment, TaskLinkAttachment, TaskReport, WorkTask } from "@/types/task";
 import {
   TASK_PRIORITY_OPTIONS,
   isTaskOverdue,
@@ -45,7 +49,11 @@ import { cn, formatDateVN } from "@/lib/utils";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 import { DetailAttachments } from "@/components/tasks/DetailAttachments";
+import { InlineTaskAttachmentEditor } from "@/components/tasks/InlineTaskAttachmentEditor";
 import { TaskPriorityBadge, TaskStatusBadge } from "@/components/tasks/TaskBadges";
+import { useSessionDataCache } from "@/components/providers/SessionDataCacheProvider";
+import { CACHE_RESOURCE } from "@/lib/client-cache/resources";
+import { useSplitView } from "@/components/layout/SplitViewShell";
 
 const TaskFormModal = dynamic(
   () => import("@/components/tasks/TaskFormModal").then((mod) => mod.TaskFormModal),
@@ -86,7 +94,9 @@ export function TaskDetailView({
   readOnly,
 }: TaskDetailViewProps) {
   const router = useRouter();
-  const { notify } = useFeedback();
+  const { confirm, notify } = useFeedback();
+  const cache = useSessionDataCache();
+  const splitView = useSplitView();
   const [task, setTask] = useState<WorkTask | null>(initialTask);
   const [projects, setProjects] = useState<Project[]>(initialProjects);
   const [allTasks, setAllTasks] = useState<WorkTask[]>(initialAllTasks);
@@ -96,6 +106,7 @@ export function TaskDetailView({
   const [error, setError] = useState(false);
   const [tab, setTab] = useState<Tab>("info");
   const [editing, setEditing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [quickUpdating, setQuickUpdating] = useState(false);
 
   const load = useCallback(async () => {
@@ -129,12 +140,47 @@ export function TaskDetailView({
     }
   }, [taskId, notify]);
 
+  const handleAttachmentSave = useCallback(async (value: {
+    files: TaskFileAttachment[];
+    links: TaskLinkAttachment[];
+    images: string[];
+  }) => {
+    if (!task || readOnly || task.status === "done") return;
+    try {
+      const updated = await taskService.updateTask(task.id, {
+        title: task.title,
+        description: task.description,
+        projectId: task.projectId,
+        assigneeIds: task.assignees.map((member) => member.id),
+        status: task.status,
+        priority: task.priority,
+        startDate: task.startDate,
+        dueDate: task.dueDate,
+        progress: task.progress,
+        tags: task.tags,
+        dependsOnTaskId: task.dependsOnTaskId,
+        files: value.files,
+        links: value.links,
+        images: value.images,
+      });
+      if (!updated) throw new Error("Công việc không tồn tại hoặc đã bị xóa.");
+      setTask(updated);
+    } catch (updateError) {
+      notify({
+        type: "error",
+        title: "Không thể cập nhật tài liệu công việc",
+        description: getErrorMessage(updateError, "Vui lòng thử lại."),
+      });
+      throw updateError;
+    }
+  }, [notify, readOnly, task]);
+
   async function handleQuickUpdate(
     patch: Partial<Pick<WorkTask, "priority">> & {
       assigneeIds?: string[];
     }
   ) {
-    if (!task || readOnly || quickUpdating) return;
+    if (!task || readOnly || task.status === "done" || quickUpdating) return;
     setQuickUpdating(true);
     try {
       const updated = await taskService.updateTask(task.id, {
@@ -159,6 +205,10 @@ export function TaskDetailView({
       }
       setTask(updated);
       notify({ type: "success", title: "Đã cập nhật công việc" });
+      // Đổi ưu tiên/người phụ trách nhanh không đi qua load() nên phải tự xóa
+      // cache list công việc + directory phụ thuộc (dropdown "tiền đề" ở trang khác).
+      cache.invalidate(CACHE_RESOURCE.tasksList);
+      cache.invalidate(CACHE_RESOURCE.directoryTasks);
     } catch (updateError) {
       notify({
         type: "error",
@@ -173,9 +223,42 @@ export function TaskDetailView({
     }
   }
 
+  async function handleDelete() {
+    if (!task || readOnly || deleting) return;
+    const confirmed = await confirm({
+      title: "Xóa công việc?",
+      description: `Công việc “${task.title}” và các task trực thuộc sẽ bị xóa. Hành động này không thể hoàn tác.`,
+      confirmLabel: "Xóa công việc",
+      tone: "danger",
+    });
+    if (!confirmed) return;
+    setDeleting(true);
+    try {
+      const deleted = await taskService.deleteTask(task.id);
+      if (!deleted) throw new Error("Công việc không tồn tại hoặc đã được xóa trước đó.");
+      cache.invalidate(CACHE_RESOURCE.tasksList);
+      cache.invalidate(CACHE_RESOURCE.directoryTasks);
+      cache.invalidate(CACHE_RESOURCE.projectsList);
+      notify({
+        type: "success",
+        title: "Đã xóa công việc",
+        description: `Công việc “${task.title}” đã được xóa.`,
+      });
+      router.push("/quan-ly-cong-viec/danh-sach-cong-viec");
+    } catch (deleteError) {
+      notify({
+        type: "error",
+        title: "Xóa công việc thất bại",
+        description: getErrorMessage(deleteError, "Không thể xóa công việc. Vui lòng thử lại."),
+      });
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   if (error) {
     return (
-      <div className="mx-auto max-w-[1080px] px-4 py-10 sm:px-6">
+      <div className="mx-auto max-w-[1080px] px-4 py-10 @sm/detail:px-6">
         <ErrorState onRetry={load} />
       </div>
     );
@@ -183,7 +266,7 @@ export function TaskDetailView({
 
   if (task === null) {
     return (
-      <div className="mx-auto max-w-[1080px] px-4 py-10 sm:px-6">
+      <div className="mx-auto max-w-[1080px] px-4 py-10 @sm/detail:px-6">
         <EmptyState
           icon={AlertCircle}
           title="Không tìm thấy công việc"
@@ -205,50 +288,109 @@ export function TaskDetailView({
     : undefined;
   const dueDistance = getDayDistance(task.dueDate);
   const overdue = isTaskOverdue(task);
+  const viewOnly = readOnly || task.status === "done";
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white">
+    <div className="flex h-full min-h-0 min-w-0 max-w-full flex-col overflow-hidden bg-white [contain:inline-size]">
       <div className="shrink-0 border-b border-gray-100 bg-white">
-        <div className="mx-auto flex w-full max-w-none items-center justify-between gap-4 px-3 py-3 sm:px-5">
-          <div className="flex min-w-0 items-center gap-3">
-            <button
-              type="button"
-              onClick={() => router.back()}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50"
-              aria-label="Quay lại"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </button>
-            <nav className="flex min-w-0 items-center gap-2 text-sm text-gray-400">
+        <div className="mx-auto flex w-full min-w-0 max-w-full flex-wrap items-start justify-between gap-3 px-3 py-3 @sm/detail:px-5">
+          <div className="flex min-w-0 flex-1 items-start gap-3">
+            {splitView && !splitView.maximized ? (
+              <>
+                <button
+                  type="button"
+                  onClick={splitView.toggleDetailCollapsed}
+                  className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 xl:flex"
+                  aria-label="Thu panel chi tiết"
+                  title="Thu panel chi tiết"
+                >
+                  <PanelRightClose className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.back()}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 xl:hidden"
+                  aria-label="Quay lại"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => router.back()}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50"
+                aria-label="Quay lại"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+            )}
+            <nav className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 pt-0.5 text-xs leading-4 text-gray-400 @xl/detail:text-sm @xl/detail:leading-5">
               <Link
                 href="/quan-ly-cong-viec/danh-sach-cong-viec"
                 className="shrink-0 font-semibold text-gray-600 hover:text-brand-600"
               >
                 Quản lý công việc
               </Link>
-              <span>&gt;</span>
               {project && (
-                <>
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="shrink-0">&gt;</span>
                   <Link
                     href={`/quan-ly-cong-viec/danh-sach-du-an/${project.id}`}
-                    className="shrink-0 font-semibold text-gray-500 hover:text-brand-600"
+                    className="min-w-0 break-words font-semibold text-gray-500 hover:text-brand-600"
                   >
                     Dự án {project.name}
                   </Link>
-                  <span>&gt;</span>
-                </>
+                </span>
               )}
-              <span className="truncate font-semibold text-gray-500">{task.title}</span>
+              <span className="flex min-w-0 items-start gap-2">
+                <span className="shrink-0">&gt;</span>
+                <span className="min-w-0 break-words font-semibold text-gray-500">
+                  {task.title}
+                </span>
+              </span>
             </nav>
           </div>
 
-          {!readOnly && <Button
-            onClick={() => setEditing(true)}
-            className="shrink-0 rounded-full bg-brand-600 hover:bg-brand-700"
-          >
-            <Pencil className="h-4 w-4" />
-            <span className="hidden sm:inline">Chỉnh sửa công việc</span>
-          </Button>}
+          <div className="flex shrink-0 items-center gap-2">
+            {task.status === "done" && (
+              <span className="inline-flex h-9 items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700">
+                <CircleCheck className="h-4 w-4" />
+                Chỉ xem
+              </span>
+            )}
+            {splitView && (
+              <button
+                type="button"
+                onClick={splitView.toggleMaximized}
+                className="hidden h-9 w-9 items-center justify-center rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 xl:flex"
+                aria-label={splitView.maximized ? "Thu nhỏ về chia đôi màn hình" : "Phóng to toàn màn hình"}
+                title={splitView.maximized ? "Thu nhỏ về chia đôi màn hình" : "Phóng to toàn màn hình"}
+              >
+                {splitView.maximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              </button>
+            )}
+            {!viewOnly && (
+              <Button
+                onClick={() => setEditing(true)}
+                className="rounded-full bg-brand-600 hover:bg-brand-700"
+              >
+                <Pencil className="h-4 w-4" />
+                <span className="hidden @xl/detail:inline">Chỉnh sửa</span>
+              </Button>
+            )}
+            {!readOnly && (
+              <Button
+                variant="secondary"
+                onClick={() => void handleDelete()}
+                disabled={deleting}
+                className="rounded-full border-rose-200 text-rose-600 ring-rose-200 hover:bg-rose-50 hover:text-rose-700"
+              >
+                <Trash2 className="h-4 w-4" />
+                <span className="hidden @xl/detail:inline">Xóa</span>
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -256,13 +398,13 @@ export function TaskDetailView({
         className={cn(
           "mx-auto min-h-0 w-full flex-1",
           tab === "tasks"
-            ? "max-w-none overflow-hidden px-3 pb-3 pt-3 sm:px-5"
-            : "max-w-none overflow-y-auto px-3 pb-8 pt-4 sm:px-5"
+            ? "max-w-none overflow-hidden px-3 pb-3 pt-3 @sm/detail:px-5"
+            : "max-w-none overflow-y-auto px-3 pb-8 pt-4 @sm/detail:px-5"
         )}
       >
         {tab === "info" ? (
           <div className="space-y-5">
-            <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <section className="grid grid-cols-1 gap-4 @md/detail:grid-cols-2 @5xl/detail:grid-cols-4">
               <OverviewCard
                 label="Tiến độ thực tế"
                 icon={CircleCheck}
@@ -308,7 +450,7 @@ export function TaskDetailView({
                 icon={Flag}
                 iconClassName="bg-orange-50 text-orange-500"
               >
-                {readOnly ? (
+                {viewOnly ? (
                   <TaskPriorityBadge priority={task.priority} />
                 ) : (
                   <QuickSelect
@@ -334,9 +476,9 @@ export function TaskDetailView({
               </OverviewCard>
             </section>
 
-            <section className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+            <section className="grid grid-cols-1 gap-5 @3xl/detail:grid-cols-3">
               <Panel
-                className="lg:col-span-2"
+                className="@3xl/detail:col-span-2"
                 accentClassName="bg-violet-600"
                 icon={Info}
                 iconClassName="text-violet-600"
@@ -349,13 +491,26 @@ export function TaskDetailView({
                     emptyText="Chưa có mô tả cho công việc này."
                   />
                 </div>
-                <DetailAttachments
-                  entityLabel="công việc"
-                  files={task.files}
-                  links={task.links}
-                  images={task.images}
-                />
-                <div className="mt-6 grid grid-cols-1 gap-5 border-t border-gray-100 pt-4 sm:grid-cols-2">
+                {viewOnly ? (
+                  <DetailAttachments
+                    entityLabel="công việc"
+                    files={task.files}
+                    links={task.links}
+                    images={task.images}
+                  />
+                ) : (
+                  <InlineTaskAttachmentEditor
+                    key={task.id}
+                    entityLabel="công việc"
+                    files={task.files}
+                    links={task.links}
+                    images={task.images}
+                    onUploadFile={taskService.uploadFile}
+                    onUploadImage={taskService.uploadImage}
+                    onSave={handleAttachmentSave}
+                  />
+                )}
+                <div className="mt-6 grid grid-cols-1 gap-5 border-t border-gray-100 pt-4 @md/detail:grid-cols-2">
                   <DateInfo
                     label="Thời gian bắt đầu:"
                     value={formatDateVN(task.startDate)}
@@ -386,7 +541,7 @@ export function TaskDetailView({
                     if (ids.length > 0) handleQuickUpdate({ assigneeIds: ids });
                   }}
                   emptyHint="Dự án chưa có thành viên"
-                  disabled={readOnly || quickUpdating}
+                  disabled={viewOnly || quickUpdating}
                 />
 
                 <p className="mb-2 mt-5 text-xs font-medium text-gray-400">
@@ -420,7 +575,7 @@ export function TaskDetailView({
               </Panel>
             </section>
 
-            <section className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+            <section className="grid grid-cols-1 gap-5 @3xl/detail:grid-cols-3">
               <Panel
                 accentClassName="bg-orange-500"
                 icon={CircleAlert}
@@ -445,7 +600,7 @@ export function TaskDetailView({
               </Panel>
 
               <Panel
-                className="lg:col-span-2"
+                className="@3xl/detail:col-span-2"
                 accentClassName="bg-emerald-500"
                 icon={RotateCcw}
                 iconClassName="text-emerald-500"
@@ -479,6 +634,7 @@ export function TaskDetailView({
             workTask={task}
             members={members}
             onSubtasksChanged={load}
+            readOnly={viewOnly}
           />
         ) : (
           <section className="min-h-[520px] rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
@@ -535,7 +691,7 @@ export function TaskDetailView({
         </div>
       </div>
 
-      {editing && !readOnly && (
+      {editing && !viewOnly && (
         <TaskFormModal
           mode="edit"
           task={task}
@@ -546,6 +702,11 @@ export function TaskDetailView({
           onSaved={() => {
             setEditing(false);
             load();
+            // Sửa công việc có thể đổi dự án/tiến độ/tên — xóa cache list công việc,
+            // directory phụ thuộc, và list dự án (thẻ dự án hiển thị stats.total/done).
+            cache.invalidate(CACHE_RESOURCE.tasksList);
+            cache.invalidate(CACHE_RESOURCE.directoryTasks);
+            cache.invalidate(CACHE_RESOURCE.projectsList);
           }}
         />
       )}
@@ -716,7 +877,7 @@ function BottomTab({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex min-w-[190px] flex-1 items-center justify-center gap-2 rounded-lg px-5 py-2 text-sm font-semibold transition-colors",
+        "flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors sm:px-5",
         active
           ? "bg-brand-600 text-white shadow-sm"
           : "bg-gray-50 text-gray-500 hover:bg-gray-100"

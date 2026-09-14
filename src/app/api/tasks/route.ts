@@ -5,12 +5,14 @@ import { createApiSupabaseClient } from "@/lib/supabase/api";
 import { assertManagerOrAdmin, requireRequestAccount } from "@/lib/supabase/authorization";
 import {
   createWorkTask,
+  listWorkTaskDirectory,
   listWorkTasks,
   listWorkTasksPage,
   listWorkTaskOptions,
   type WorkTaskFilters,
 } from "@/lib/supabase/data";
-import type { TaskPriority, TaskStatus } from "@/types/task";
+import type { TaskPriority, TaskStatus, WorkTask } from "@/types/task";
+import { readIdempotencyKey, withIdempotency } from "@/lib/supabase/idempotency";
 
 function filtersFromRequest(request: NextRequest): WorkTaskFilters {
   const params = request.nextUrl.searchParams;
@@ -36,6 +38,12 @@ export async function GET(request: NextRequest) {
       filters.assigneeIds = [access.id];
     }
     const params = request.nextUrl.searchParams;
+    if (params.get("directory") === "true") {
+      return apiSuccess(await listWorkTaskDirectory(
+        supabase,
+        access.role === "member" ? [access.id] : undefined
+      ));
+    }
     const page = params.get("page");
     const pageSize = params.get("pageSize");
     const fields = params.get("fields");
@@ -64,10 +72,16 @@ export async function GET(request: NextRequest) {
 export async function POST(request: Request) {
   try {
     const supabase = createApiSupabaseClient(request);
-    assertManagerOrAdmin(await requireRequestAccount(supabase));
+    const access = await requireRequestAccount(supabase);
+    assertManagerOrAdmin(access);
+    const idempotencyKey = readIdempotencyKey(request);
     const input = parseWorkTaskInput(await readJsonObject(request));
-    const task = await createWorkTask(supabase, input);
-    return apiSuccess(task, 201, "Tạo công việc thành công.");
+    const { status, body } = await withIdempotency<WorkTask>(
+      supabase,
+      { accountId: access.id, idempotencyKey, scope: "create-task" },
+      async () => ({ status: 201, body: await createWorkTask(supabase, input) })
+    );
+    return apiSuccess(body, status, "Tạo công việc thành công.");
   } catch (error) {
     return handleApiError(error);
   }

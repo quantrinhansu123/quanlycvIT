@@ -1,4 +1,9 @@
 import { NextResponse } from "next/server";
+import {
+  beginApiObservation,
+  finalizeApiObservation,
+  measureApiTimingSync,
+} from "@/lib/api/observability";
 
 export class ApiException extends Error {
   status: number;
@@ -15,26 +20,39 @@ interface DatabaseError {
   message?: string;
 }
 
+function rowCount(data: unknown): number {
+  if (Array.isArray(data)) return data.length;
+  if (data && typeof data === "object" && "items" in data) {
+    const items = (data as { items?: unknown }).items;
+    return Array.isArray(items) ? items.length : 1;
+  }
+  return data === null || data === undefined ? 0 : 1;
+}
+
+function jsonResponse(body: unknown, status: number, rows: number): NextResponse {
+  const serialized = measureApiTimingSync("map", () => JSON.stringify(body));
+  const response = new NextResponse(serialized, {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+  return finalizeApiObservation({
+    response,
+    status,
+    rows,
+    responseBytes: new TextEncoder().encode(serialized).byteLength,
+  }) as NextResponse;
+}
+
 export function apiSuccess<T>(data: T, status = 200, message?: string) {
-  return NextResponse.json(
-    {
-      success: true,
-      ...(message ? { message } : {}),
-      data,
-    },
-    { status }
-  );
+  return jsonResponse({
+    success: true,
+    ...(message ? { message } : {}),
+    data,
+  }, status, rowCount(data));
 }
 
 export function apiError(message: string, status: number) {
-  return NextResponse.json(
-    {
-      success: false,
-      message,
-      data: null,
-    },
-    { status }
-  );
+  return jsonResponse({ success: false, message, data: null }, status, 0);
 }
 
 export function throwDatabaseError(error: DatabaseError | null): void {
@@ -67,6 +85,7 @@ export function handleApiError(error: unknown) {
 }
 
 export async function readJsonObject(request: Request): Promise<Record<string, unknown>> {
+  beginApiObservation(request);
   try {
     const body: unknown = await request.json();
     if (!body || typeof body !== "object" || Array.isArray(body)) {

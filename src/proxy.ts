@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { getCachedJwks } from "@/lib/supabase/jwks";
 
 /** Route công khai, không cần đăng nhập. */
 const PUBLIC_PATHS = ["/dang-nhap"];
@@ -29,9 +30,12 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  // Không bỏ lệnh này: getClaims kích hoạt kiểm tra/làm mới JWT khi cần,
-  // đồng thời cho biết đã đăng nhập hay chưa mà không cần gọi mạng thêm lần nữa.
-  const { data } = await supabase.auth.getClaims();
+  // Truyền JWKS đã cache để getClaims xác thực JWT cục bộ, tránh fetch JWKS mỗi request.
+  const keys = await getCachedJwks();
+  const { data } = await supabase.auth.getClaims(
+    undefined,
+    keys.length > 0 ? { jwks: { keys } } : undefined
+  );
   const isAuthenticated = Boolean(data?.claims);
   const { pathname } = request.nextUrl;
 

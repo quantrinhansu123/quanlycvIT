@@ -45,7 +45,7 @@ function validTime(value?: string): number {
   return Number.isNaN(time) ? 0 : time;
 }
 
-function formatRelativeTime(value?: string): string {
+export function formatRelativeTime(value?: string): string {
   const time = validTime(value);
   if (!time) return "";
 

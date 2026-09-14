@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { FileText, ImagePlus, Paperclip, Plus, Trash2 } from "lucide-react";
+import { ClipboardPaste, FileText, ImagePlus, Paperclip, Plus, Trash2 } from "lucide-react";
 import type { TaskFileAttachment, TaskLinkAttachment } from "@/types/task";
 import { cn } from "@/lib/utils";
 import {
@@ -12,6 +12,7 @@ import {
 interface PendingAttachmentFile {
   id: string;
   file: File;
+  description?: string;
 }
 
 interface PendingAttachmentImage extends PendingAttachmentFile {
@@ -34,12 +35,14 @@ interface TaskAttachmentFieldsProps {
   linkError?: string;
   imageError?: string;
   onSelectFiles: (files: FileList | null) => void;
-  onSelectImages: (files: FileList | null) => void;
+  onSelectImages: (files: FileList | File[] | null) => void;
   onAddLink: () => void;
   onUpdateLink: (index: number, patch: Partial<TaskLinkAttachment>) => void;
   onRemoveLink: (index: number) => void;
   onRemoveSavedFile: (url: string) => void;
   onRemovePendingFile: (id: string) => void;
+  onUpdateSavedFile?: (url: string, patch: Partial<TaskFileAttachment>) => void;
+  onUpdatePendingFile?: (id: string, patch: { description?: string }) => void;
   onRemoveSavedImage: (url: string) => void;
   onRemovePendingImage: (id: string) => void;
 }
@@ -66,18 +69,68 @@ export function TaskAttachmentFields({
   onRemoveLink,
   onRemoveSavedFile,
   onRemovePendingFile,
+  onUpdateSavedFile,
+  onUpdatePendingFile,
   onRemoveSavedImage,
   onRemovePendingImage,
 }: TaskAttachmentFieldsProps) {
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [previewImage, setPreviewImage] = useState<PreviewImage | null>(null);
+  const [pasteError, setPasteError] = useState("");
   const imageCount = images.length + pendingImages.length;
   const fileCount = files.length + pendingFiles.length;
 
+  function pasteFilesFromEvent(clipboardData: DataTransfer): File[] {
+    const itemFiles = Array.from(clipboardData.items)
+      .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => file !== null);
+    return itemFiles.length > 0
+      ? itemFiles
+      : Array.from(clipboardData.files).filter((file) => file.type.startsWith("image/"));
+  }
+
+  async function pasteImagesFromClipboard() {
+    setPasteError("");
+    if (!navigator.clipboard?.read) {
+      setPasteError("Trình duyệt không cho đọc clipboard. Hãy đặt con trỏ tại đây rồi nhấn Ctrl+V.");
+      return;
+    }
+    try {
+      const clipboardItems = await navigator.clipboard.read();
+      const pastedFiles: File[] = [];
+      for (const item of clipboardItems) {
+        for (const type of item.types.filter((itemType) => itemType.startsWith("image/"))) {
+          const blob = await item.getType(type);
+          const extension = type === "image/jpeg" ? "jpg" : type.split("/")[1] || "png";
+          pastedFiles.push(new File([blob], `anh-dan-${Date.now()}-${pastedFiles.length + 1}.${extension}`, { type }));
+        }
+      }
+      if (pastedFiles.length === 0) {
+        setPasteError("Clipboard hiện không có ảnh.");
+        return;
+      }
+      onSelectImages(pastedFiles);
+    } catch {
+      setPasteError("Không thể đọc clipboard. Hãy đặt con trỏ tại khu vực đính kèm rồi nhấn Ctrl+V.");
+    }
+  }
+
   return (
     <>
-      <div className="space-y-3">
+      <div
+        className="space-y-3"
+        tabIndex={0}
+        aria-label={`Khu vực đính kèm ${entityLabel}; có thể dán ảnh bằng Ctrl+V`}
+        onPaste={(event) => {
+          const pastedFiles = pasteFilesFromEvent(event.clipboardData);
+          if (pastedFiles.length === 0) return;
+          event.preventDefault();
+          setPasteError("");
+          onSelectImages(pastedFiles);
+        }}
+      >
         <div className="flex flex-wrap items-center gap-2">
         <span className="mr-1 text-sm font-medium text-gray-700">{label}</span>
         <button
@@ -97,6 +150,17 @@ export function TaskAttachmentFields({
           <span className={cn("text-[10px]", imageCount > 0 ? "text-brand-400" : "text-gray-400")}>
             {imageCount}/{maxImages}
           </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => void pasteImagesFromClipboard()}
+          disabled={submitting || imageCount >= maxImages}
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 text-xs font-semibold text-gray-600 transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
+          title="Dán ảnh đang có trong clipboard hoặc đặt con trỏ tại đây rồi nhấn Ctrl+V"
+        >
+          <ClipboardPaste className="h-3.5 w-3.5" />
+          Dán ảnh
+          <span className="text-[10px] text-gray-400">Ctrl+V</span>
         </button>
         <button
           type="button"
@@ -163,49 +227,69 @@ export function TaskAttachmentFields({
           {files.map((fileItem) => (
             <li
               key={fileItem.url}
-              className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2"
+              className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-2"
             >
-              <FileText className="h-4 w-4 shrink-0 text-gray-400" />
-              <a
-                href={fileItem.url}
-                target="_blank"
-                rel="noreferrer"
-                className="min-w-0 flex-1 truncate text-sm text-gray-700 hover:text-brand-600"
-              >
-                {fileItem.name}
-              </a>
-              <button
-                type="button"
-                onClick={() => onRemoveSavedFile(fileItem.url)}
-                disabled={submitting}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-600"
-                aria-label={`Xóa tệp ${fileItem.name}`}
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+              <div className="flex items-center gap-2 px-1">
+                <FileText className="h-4 w-4 shrink-0 text-gray-400" />
+                <a
+                  href={fileItem.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="min-w-0 flex-1 truncate text-sm text-gray-700 hover:text-brand-600"
+                >
+                  {fileItem.name}
+                </a>
+                <button
+                  type="button"
+                  onClick={() => onRemoveSavedFile(fileItem.url)}
+                  disabled={submitting}
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-600"
+                  aria-label={`Xóa tệp ${fileItem.name}`}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+              {onUpdateSavedFile && (
+                <input
+                  type="text"
+                  value={fileItem.description ?? ""}
+                  onChange={(event) => onUpdateSavedFile(fileItem.url, { description: event.target.value })}
+                  placeholder="Mô tả tệp (không bắt buộc)"
+                  maxLength={500}
+                  className="h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+                />
+              )}
             </li>
           ))}
           {pendingFiles.map((pending) => (
             <li
               key={pending.id}
-              className="flex items-center gap-2 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2"
+              className="space-y-2 rounded-lg border border-brand-200 bg-brand-50 p-2"
             >
-              <FileText className="h-4 w-4 shrink-0 text-brand-400" />
-              <span className="min-w-0 flex-1 truncate text-sm text-gray-700">
-                {pending.file.name}
-              </span>
-              <span className="shrink-0 rounded-md bg-brand-600 px-2 py-0.5 text-[10px] font-semibold text-white">
-                Chưa lưu
-              </span>
-              <button
-                type="button"
-                onClick={() => onRemovePendingFile(pending.id)}
-                disabled={submitting}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-600"
-                aria-label={`Bỏ tệp ${pending.file.name}`}
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+              <div className="flex items-center gap-2 px-1">
+                <FileText className="h-4 w-4 shrink-0 text-brand-400" />
+                <span className="min-w-0 flex-1 truncate text-sm text-gray-700">{pending.file.name}</span>
+                <span className="shrink-0 rounded-md bg-brand-600 px-2 py-0.5 text-[10px] font-semibold text-white">Chưa lưu</span>
+                <button
+                  type="button"
+                  onClick={() => onRemovePendingFile(pending.id)}
+                  disabled={submitting}
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-600"
+                  aria-label={`Bỏ tệp ${pending.file.name}`}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+              {onUpdatePendingFile && (
+                <input
+                  type="text"
+                  value={pending.description ?? ""}
+                  onChange={(event) => onUpdatePendingFile(pending.id, { description: event.target.value })}
+                  placeholder="Mô tả tệp (không bắt buộc)"
+                  maxLength={500}
+                  className="h-9 w-full rounded-lg border border-brand-200 bg-white px-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+                />
+              )}
             </li>
           ))}
         </ul>
@@ -243,12 +327,12 @@ export function TaskAttachmentFields({
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
-              <input
-                type="text"
+              <textarea
                 value={link.description ?? ""}
                 onChange={(event) => onUpdateLink(index, { description: event.target.value })}
                 placeholder="Mô tả đường dẫn (không bắt buộc)"
-                className="h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+                rows={3}
+                className="min-h-20 w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
               />
             </div>
           ))}
@@ -333,6 +417,7 @@ export function TaskAttachmentFields({
         )}
 
         {imageError && <p role="alert" className="text-xs text-rose-600">{imageError}</p>}
+        {pasteError && <p role="alert" className="text-xs text-rose-600">{pasteError}</p>}
         {fileError && <p role="alert" className="text-xs text-rose-600">{fileError}</p>}
         {linkError && <p className="text-xs text-rose-500">{linkError}</p>}
       </div>

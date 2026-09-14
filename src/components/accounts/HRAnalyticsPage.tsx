@@ -131,7 +131,7 @@ export function HRAnalyticsPage() {
   async function load() {
     setLoading(true); setError("");
     try {
-      const result = await accountService.getAll();
+      const result = await accountService.getAnalytics();
       setAccounts(result.accounts); setDepartments(result.departments);
     } catch {
       setError("Không thể tải dữ liệu nhân sự. Vui lòng kiểm tra kết nối và thử lại.");
@@ -140,7 +140,7 @@ export function HRAnalyticsPage() {
   useEffect(() => {
     let active = true;
 
-    accountService.getAll()
+    accountService.getAnalytics()
       .then((result) => {
         if (!active) return;
         setAccounts(result.accounts);

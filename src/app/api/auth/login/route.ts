@@ -1,11 +1,7 @@
-import { createClient } from "@supabase/supabase-js";
 import { ApiException, apiSuccess, handleApiError, readJsonObject } from "@/lib/api/response";
+import { measureApiTiming } from "@/lib/api/observability";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
-
-interface LoginSession {
-  accessToken: string;
-  refreshToken: string;
-}
+import { createServerSupabaseClient } from "@/lib/supabase/api";
 
 export async function POST(request: Request) {
   try {
@@ -25,9 +21,11 @@ export async function POST(request: Request) {
     const accountQuery = admin
       .from("tai_khoan")
       .select("id,username,email,role,status,auth_user_id");
-    const { data: account, error: accountError } = identifier.includes("@")
-      ? await accountQuery.eq("email", normalizedIdentifier).maybeSingle()
-      : await accountQuery.eq("username", normalizedIdentifier).maybeSingle();
+    const { data: account, error: accountError } = await measureApiTiming("db", async () =>
+      identifier.includes("@")
+        ? await accountQuery.eq("email", normalizedIdentifier).maybeSingle()
+        : await accountQuery.eq("username", normalizedIdentifier).maybeSingle()
+    );
 
     if (accountError) throw accountError;
     if (!account) {
@@ -40,25 +38,17 @@ export async function POST(request: Request) {
       throw new ApiException("Tài khoản chưa được cấu hình thông tin đăng nhập.", 409);
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-    if (!supabaseUrl || !publishableKey) {
-      throw new ApiException("Hệ thống xác thực chưa được cấu hình.", 500);
-    }
+    // Ký trực tiếp trên client SSR gắn cookie (thay vì client tạm `persistSession:false`
+    // rồi trả token về cho trình duyệt gọi lại `setSession()`) — `setSession()` khi token
+    // còn hạn sẽ tự gọi `_getUser()` (thêm 1 network round-trip tới Supabase Auth server)
+    // để xác thực lại, dù server vừa xác thực xong. Ký ở đây, cookie phiên được ghi thẳng
+    // vào response (Route Handler được phép ghi cookie) — bỏ hẳn round-trip thừa đó.
+    const authClient = await createServerSupabaseClient();
+    const { data: signInData, error: signInError } = await measureApiTiming("auth", () =>
+      authClient.auth.signInWithPassword({ email: account.email!, password })
+    );
 
-    const authClient = createClient(supabaseUrl, publishableKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-        detectSessionInUrl: false,
-      },
-    });
-    const { data, error: signInError } = await authClient.auth.signInWithPassword({
-      email: account.email,
-      password,
-    });
-
-    if (signInError || !data.session) {
+    if (signInError || !signInData.session) {
       if (signInError?.message.toLowerCase().includes("email not confirmed")) {
         throw new ApiException("Email của tài khoản chưa được xác nhận.", 403);
       }
@@ -68,10 +58,7 @@ export async function POST(request: Request) {
       throw new ApiException("Mật khẩu không đúng. Vui lòng kiểm tra và nhập lại.", 401);
     }
 
-    return apiSuccess<LoginSession>({
-      accessToken: data.session.access_token,
-      refreshToken: data.session.refresh_token,
-    });
+    return apiSuccess<{ ok: true }>({ ok: true });
   } catch (error) {
     return handleApiError(error);
   }

@@ -1,6 +1,6 @@
 /** Mẫu layout dùng chung cho bảng Công việc và Task. */
 export const WORK_ITEM_TABLE_CLASS =
-  "w-full table-fixed border-collapse text-xs xl:min-w-0";
+  "w-full table-fixed border-collapse text-xs @[1000px]:min-w-0";
 
 export const WORK_ITEM_TITLE_CLASS =
   "work-item-title text-left text-xs font-semibold text-gray-800 hover:text-brand-600";
@@ -14,8 +14,8 @@ export function taskColumnWidths(hideProjectColumn: boolean, readOnly = false): 
       : ["w-[18%]", "w-[14%]", "w-[17%]", "w-[14%]", "w-[14%]", "w-[10%]", "w-[13%]"];
   }
   return hideProjectColumn
-    ? ["w-[4%]", "w-[20%]", "w-[18%]", "w-[14%]", "w-[15%]", "w-[10%]", "w-[12%]", "w-[7%]"]
-    : ["w-[4%]", "w-[15%]", "w-[12%]", "w-[16%]", "w-[13%]", "w-[13%]", "w-[9%]", "w-[11%]", "w-[7%]"];
+    ? ["w-[4%]", "w-[19%]", "w-[17%]", "w-[13%]", "w-[14%]", "w-[9%]", "w-[11%]", "w-[13%]"]
+    : ["w-[4%]", "w-[14%]", "w-[11%]", "w-[15%]", "w-[12%]", "w-[12%]", "w-[8%]", "w-[10%]", "w-[14%]"];
 }
 
 export function subtaskColumnWidths(
@@ -23,10 +23,10 @@ export function subtaskColumnWidths(
   showProjectColumn: boolean
 ): string[] {
   if (hideWorkTaskColumn) {
-    return ["w-[4%]", "w-[14%]", "w-[19%]", "w-[15%]", "w-[13%]", "w-[9%]", "w-[11%]", "w-[15%]"];
+    return ["w-[4%]", "w-[24%]", "w-[11%]", "w-[11%]", "w-[14%]", "w-[12%]", "w-[9%]", "w-[9%]", "w-[6%]"];
   }
   if (showProjectColumn) {
-    return ["w-[4%]", "w-[12%]", "w-[10%]", "w-[9%]", "w-[14%]", "w-[11%]", "w-[9%]", "w-[8%]", "w-[9%]", "w-[14%]"];
+    return ["w-[4%]", "w-[17%]", "w-[11%]", "w-[11%]", "w-[9%]", "w-[9%]", "w-[11%]", "w-[8%]", "w-[7%]", "w-[8%]", "w-[5%]"];
   }
-  return ["w-[4%]", "w-[14%]", "w-[13%]", "w-[16%]", "w-[13%]", "w-[12%]", "w-[8%]", "w-[10%]", "w-[10%]"];
+  return ["w-[4%]", "w-[20%]", "w-[14%]", "w-[10%]", "w-[10%]", "w-[13%]", "w-[10%]", "w-[8%]", "w-[7%]", "w-[4%]"];
 }

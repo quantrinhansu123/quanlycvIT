@@ -7,6 +7,7 @@ import { AvatarStack } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { ActionMenu } from "@/components/projects/ActionMenu";
 import { formatDateVN } from "@/lib/utils";
+import { IntentPrefetchLink } from "@/components/navigation/IntentPrefetchLink";
 
 interface ProjectCardProps {
   project: Project;
@@ -39,9 +40,8 @@ export function ProjectCard({ project, onEdit, onDelete, readOnly = false }: Pro
         />
       </div>
 
-      <button
-        type="button"
-        onClick={() => router.push(`/quan-ly-cong-viec/danh-sach-du-an/${project.id}`)}
+      <IntentPrefetchLink
+        href={`/quan-ly-cong-viec/danh-sach-du-an/${project.id}`}
         className="text-left"
       >
         <p className="line-clamp-1 text-sm font-semibold text-gray-800 hover:text-brand-600">
@@ -50,7 +50,7 @@ export function ProjectCard({ project, onEdit, onDelete, readOnly = false }: Pro
         {project.description && (
           <p className="mt-1 line-clamp-2 text-xs text-gray-400">{project.description}</p>
         )}
-      </button>
+      </IntentPrefetchLink>
 
       <div className="flex items-center gap-2 text-xs text-gray-500">
         <AvatarStack people={project.managers} />

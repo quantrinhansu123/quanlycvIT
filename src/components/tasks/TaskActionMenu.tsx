@@ -2,17 +2,19 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { CheckCircle2, MoreHorizontal, History, Pencil, Trash2 } from "lucide-react";
+import { CheckCircle2, MoreHorizontal, History, Pencil, Trash2, XCircle } from "lucide-react";
 
 interface TaskActionMenuProps {
   onViewReports?: () => void;
   /** Chỉ hiển thị khi task đang chờ đánh giá và người dùng có quyền duyệt. */
   onApprove?: () => void;
+  onPassTest?: () => void;
+  onFailTest?: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }
 
-export function TaskActionMenu({ onViewReports, onApprove, onEdit, onDelete }: TaskActionMenuProps) {
+export function TaskActionMenu({ onViewReports, onApprove, onPassTest, onFailTest, onEdit, onDelete }: TaskActionMenuProps) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
@@ -25,7 +27,7 @@ export function TaskActionMenu({ onViewReports, onApprove, onEdit, onDelete }: T
 
     const rect = button.getBoundingClientRect();
     const menuWidth = 208;
-    const itemCount = 2 + (onViewReports ? 1 : 0) + (onApprove ? 1 : 0);
+    const itemCount = 2 + (onViewReports ? 1 : 0) + (onApprove ? 1 : 0) + (onPassTest ? 1 : 0) + (onFailTest ? 1 : 0);
     const menuHeight = itemCount * 40 + 16;
     const gap = 4;
     const viewportPadding = 8;
@@ -40,7 +42,7 @@ export function TaskActionMenu({ onViewReports, onApprove, onEdit, onDelete }: T
         window.innerWidth - menuWidth - viewportPadding
       ),
     });
-  }, [onViewReports, onApprove]);
+  }, [onViewReports, onApprove, onPassTest, onFailTest]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -110,6 +112,16 @@ export function TaskActionMenu({ onViewReports, onApprove, onEdit, onDelete }: T
             >
               <CheckCircle2 className="h-4 w-4" />
               Duyệt
+            </button>
+          )}
+          {onPassTest && (
+            <button type="button" role="menuitem" onClick={() => { setOpen(false); onPassTest(); }} className="flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm text-emerald-600 hover:bg-emerald-50">
+              <CheckCircle2 className="h-4 w-4" /> Pass kiểm thử
+            </button>
+          )}
+          {onFailTest && (
+            <button type="button" role="menuitem" onClick={() => { setOpen(false); onFailTest(); }} className="flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm text-rose-600 hover:bg-rose-50">
+              <XCircle className="h-4 w-4" /> Fail kiểm thử
             </button>
           )}
           {onViewReports && (

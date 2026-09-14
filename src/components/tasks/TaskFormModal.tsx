@@ -11,28 +11,34 @@ import type {
 import {
   TASK_PRIORITY_OPTIONS,
 } from "@/types/task";
-import type { Project, ProjectMember } from "@/types/project";
+import type { ProjectDirectoryItem, ProjectMember } from "@/types/project";
 import { taskService } from "@/services/task-service";
-import { toDateInputValue, cn } from "@/lib/utils";
+import { toDateInputValue, getAppDateKey, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { MemberMultiSelect } from "@/components/ui/MemberMultiSelect";
 import { SingleSelectDropdown } from "@/components/ui/SingleSelectDropdown";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 import { TaskAttachmentFields } from "@/components/tasks/TaskAttachmentFields";
-import { TaskStatusBadge } from "@/components/tasks/TaskBadges";
+import { useCurrentAccount } from "@/hooks/useCurrentAccount";
+import { buildFormDraftKey, useVersionedFormDraft } from "@/hooks/useVersionedFormDraft";
+import { FormDraftBanner, RememberDraftToggle } from "@/components/ui/FormDraftBanner";
+import { runUploadBatch } from "@/lib/upload-concurrency";
 
 interface TaskFormModalProps {
   mode: "create" | "edit";
   task?: WorkTask;
-  projects: Project[];
+  projects: ProjectDirectoryItem[];
   members: ProjectMember[];
-  otherTasks: Pick<WorkTask, "id" | "title">[];
+  otherTasks: import("@/types/task").WorkTaskDirectoryItem[];
   defaultProjectId?: string;
   defaultStatus?: WorkTaskInput["status"];
   onClose: () => void;
-  /** Trang danh sách truyền callback này để optimistic-update từ response API. */
-  onSave?: (input: WorkTaskInput) => Promise<WorkTask | null>;
+  /**
+   * Trang danh sách truyền callback này để optimistic-update từ response API.
+   * `idempotencyKey` chỉ có giá trị ở `mode === "create"` — GĐ9 (idempotency).
+   */
+  onSave?: (input: WorkTaskInput, idempotencyKey?: string) => Promise<WorkTask | null>;
   /** Tương thích với các màn hình chi tiết chưa dùng optimistic update. */
   onSaved?: (task: WorkTask) => void;
 }
@@ -53,6 +59,12 @@ interface FormState {
   images: string[];
 }
 
+/** Phần của FormState lưu được vào bản nháp (GĐ7) — loại `files`/`links`/`images`. */
+type TaskDraftData = Pick<
+  FormState,
+  "title" | "description" | "projectId" | "assigneeIds" | "status" | "priority" | "startDate" | "dueDate" | "tagsText" | "dependsOnTaskId"
+>;
+
 interface PendingTaskImage {
   id: string;
   file: File;
@@ -62,6 +74,7 @@ interface PendingTaskImage {
 interface PendingTaskFile {
   id: string;
   file: File;
+  description?: string;
 }
 
 const MAX_TASK_IMAGES = 10;
@@ -103,7 +116,7 @@ function isValidHttpUrl(value: string): boolean {
 }
 
 /** Người tham gia dự án = người quản lý + thành viên, không trùng lặp. */
-function participantsOf(project: Project | undefined): ProjectMember[] {
+function participantsOf(project: ProjectDirectoryItem | undefined): ProjectMember[] {
   if (!project) return [];
   const seen = new Set<string>();
   return [...project.managers, ...project.members].filter((member) => {
@@ -115,7 +128,7 @@ function participantsOf(project: Project | undefined): ProjectMember[] {
 
 function buildInitialState(
   task: WorkTask | undefined,
-  projects: Project[],
+  projects: ProjectDirectoryItem[],
   defaultProjectId?: string,
   defaultStatus?: WorkTaskInput["status"]
 ): FormState {
@@ -145,7 +158,7 @@ function buildInitialState(
     assigneeIds: [],
     status: defaultStatus ?? "todo",
     priority: "low",
-    startDate: selectedProject ? toDateInputValue(selectedProject.startDate) : "",
+    startDate: getAppDateKey(),
     dueDate: selectedProject ? toDateInputValue(selectedProject.endDate) : "",
     tagsText: "",
     dependsOnTaskId: "",
@@ -168,6 +181,19 @@ export function TaskFormModal({
   onSaved,
 }: TaskFormModalProps) {
   const { notify } = useFeedback();
+  const { account } = useCurrentAccount();
+  const draftStorageKey = account
+    ? buildFormDraftKey({ accountId: account.id, formType: "task", mode, entityId: task?.id })
+    : null;
+  const { draft, scheduleSave, clearDraft, persistent, setPersistent } = useVersionedFormDraft<TaskDraftData>({
+    storageKey: draftStorageKey,
+    entityVersion: task?.updatedAt,
+  });
+  const [draftBannerDismissed, setDraftBannerDismissed] = useState(false);
+  // Xem chú thích tương ứng trong ProjectFormModal.tsx — GĐ9 (idempotency).
+  const [createIdempotencyKey] = useState<string | undefined>(() =>
+    mode === "create" ? crypto.randomUUID() : undefined
+  );
   const [form, setForm] = useState<FormState>(() =>
     buildInitialState(task, projects, defaultProjectId, defaultStatus)
   );
@@ -191,6 +217,33 @@ export function TaskFormModal({
   useEffect(() => {
     resizeDescriptionTextarea(descriptionRef.current);
   }, []);
+
+  useEffect(() => {
+    scheduleSave({
+      title: form.title,
+      description: form.description,
+      projectId: form.projectId,
+      assigneeIds: form.assigneeIds,
+      status: form.status,
+      priority: form.priority,
+      startDate: form.startDate,
+      dueDate: form.dueDate,
+      tagsText: form.tagsText,
+      dependsOnTaskId: form.dependsOnTaskId,
+    });
+  }, [
+    form.title,
+    form.description,
+    form.projectId,
+    form.assigneeIds,
+    form.status,
+    form.priority,
+    form.startDate,
+    form.dueDate,
+    form.tagsText,
+    form.dependsOnTaskId,
+    scheduleSave,
+  ]);
 
   useEffect(() => {
     pendingImagesRef.current = pendingImages;
@@ -266,7 +319,7 @@ export function TaskFormModal({
       ...prev,
       projectId,
       assigneeIds: prev.assigneeIds.filter((id) => allowed.has(id)),
-      startDate: project ? toDateInputValue(project.startDate) : "",
+      startDate: getAppDateKey(),
       dueDate: project ? toDateInputValue(project.endDate) : "",
     }));
     setErrors((prev) => ({
@@ -277,7 +330,7 @@ export function TaskFormModal({
     }));
   }
 
-  function handleImageSelection(files: FileList | null) {
+  function handleImageSelection(files: FileList | File[] | null) {
     if (!files?.length) return;
 
     const availableSlots =
@@ -377,6 +430,17 @@ export function TaskFormModal({
     setFileError("");
   }
 
+  function updateSavedFile(url: string, patch: Partial<TaskFileAttachment>) {
+    setForm((current) => ({
+      ...current,
+      files: current.files.map((file) => file.url === url ? { ...file, ...patch } : file),
+    }));
+  }
+
+  function updatePendingFile(id: string, patch: { description?: string }) {
+    setPendingFiles((current) => current.map((file) => file.id === id ? { ...file, ...patch } : file));
+  }
+
   function addLinkRow() {
     setForm((prev) => ({ ...prev, links: [...prev.links, { label: "", url: "" }] }));
     setErrors((prev) => ({ ...prev, links: undefined }));
@@ -450,10 +514,38 @@ export function TaskFormModal({
     startTransition(async () => {
       setSubmitError(null);
       try {
-        const [uploadedImages, uploadedFiles] = await Promise.all([
-          Promise.all(pendingImages.map((image) => taskService.uploadImage(image.file))),
-          Promise.all(pendingFiles.map((pending) => taskService.uploadFile(pending.file))),
+        const uploadedImages: string[] = [];
+        const uploadedFiles: TaskFileAttachment[] = [];
+        const uploadResult = await runUploadBatch([
+          ...pendingImages.map((image) => ({
+            id: image.id,
+            upload: async () => { uploadedImages.push(await taskService.uploadImage(image.file)); },
+          })),
+          ...pendingFiles.map((pending) => ({
+            id: pending.id,
+            upload: async () => {
+              const uploaded = await taskService.uploadFile(pending.file);
+              uploadedFiles.push({ ...uploaded, description: pending.description?.trim() || undefined });
+            },
+          })),
         ]);
+        const uploadedIds = new Set(uploadResult.succeededIds);
+        if (uploadedImages.length || uploadedFiles.length) {
+          setForm((current) => ({
+            ...current,
+            images: [...current.images, ...uploadedImages],
+            files: [...current.files, ...uploadedFiles],
+          }));
+          setPendingImages((current) => current.filter((item) => {
+            if (!uploadedIds.has(item.id)) return true;
+            URL.revokeObjectURL(item.previewUrl);
+            return false;
+          }));
+          setPendingFiles((current) => current.filter((item) => !uploadedIds.has(item.id)));
+        }
+        if (uploadResult.failures.length) {
+          throw new Error(`Không thể tải ${uploadResult.failures.length} tệp. Các tệp đã tải xong được giữ lại; bấm Lưu để thử lại tệp lỗi.`);
+        }
         const input: WorkTaskInput = {
           title: form.title.trim(),
           description: form.description || undefined,
@@ -475,16 +567,17 @@ export function TaskFormModal({
         };
 
         const saved = onSave
-          ? await onSave(input)
+          ? await onSave(input, createIdempotencyKey)
           : mode === "edit" && task
             ? await taskService.updateTask(task.id, input)
-            : await taskService.createTask(input);
+            : await taskService.createTask(input, { idempotencyKey: createIdempotencyKey });
         if (!saved) throw new Error("Không tìm thấy công việc để cập nhật.");
         notify({
           type: "success",
           title: mode === "edit" ? "Đã cập nhật công việc" : "Đã tạo công việc",
           description: `Công việc “${input.title}” đã được lưu thành công.`,
         });
+        clearDraft();
         onSaved?.(saved);
         onClose();
       } catch (error) {
@@ -525,6 +618,21 @@ export function TaskFormModal({
         </div>
 
         <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
+          {draft && !draftBannerDismissed && (
+            <FormDraftBanner
+              savedAt={draft.savedAt}
+              conflict={draft.conflict}
+              onRestore={() => {
+                setForm((prev) => ({ ...prev, ...draft.data }));
+                setDraftBannerDismissed(true);
+              }}
+              onDiscard={() => {
+                clearDraft();
+                setDraftBannerDismissed(true);
+              }}
+            />
+          )}
+
           {(projects.length === 0 || members.length === 0) && (
             <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
               {projects.length === 0
@@ -588,6 +696,8 @@ export function TaskFormModal({
             onRemoveLink={removeLinkRow}
             onRemoveSavedFile={removeSavedFile}
             onRemovePendingFile={removePendingFile}
+            onUpdateSavedFile={updateSavedFile}
+            onUpdatePendingFile={updatePendingFile}
             onRemoveSavedImage={removeSavedImage}
             onRemovePendingImage={removePendingImage}
           />
@@ -640,27 +750,16 @@ export function TaskFormModal({
             )}
           </div>
 
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Trạng thái</label>
-              <div className="flex min-h-11 flex-col items-start justify-center rounded-xl border border-gray-200 bg-gray-50 px-3">
-                <TaskStatusBadge status={form.status} />
-                <span className="mt-1 text-[11px] text-gray-400">
-                  Tự động theo trạng thái các Task
-                </span>
-              </div>
-            </div>
-            <div className="flex-1">
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Mức độ ưu tiên</label>
-              <SingleSelectDropdown
-                options={priorityOptions}
-                value={form.priority}
-                onChange={(value) =>
-                  setForm((prev) => ({ ...prev, priority: value as FormState["priority"] }))
-                }
-                showSelectionIndicator={false}
-              />
-            </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">Mức độ ưu tiên</label>
+            <SingleSelectDropdown
+              options={priorityOptions}
+              value={form.priority}
+              onChange={(value) =>
+                setForm((prev) => ({ ...prev, priority: value as FormState["priority"] }))
+              }
+              showSelectionIndicator={false}
+            />
           </div>
 
           <div className="flex gap-4">
@@ -733,21 +832,24 @@ export function TaskFormModal({
           {submitError && <p className="text-sm text-rose-500">{submitError}</p>}
         </div>
 
-        <div className="flex shrink-0 items-center justify-end gap-3 border-t border-gray-100 px-6 py-4">
-          <Button type="button" variant="secondary" onClick={onClose} disabled={isPending}>
-            Hủy
-          </Button>
-          <Button type="submit" disabled={isPending || projects.length === 0 || members.length === 0}>
-            {isPending
-              ? "Đang lưu..."
-              : projects.length === 0
-                ? "Chưa có dự án"
-                : members.length === 0
-                  ? "Chưa có nhân sự"
-                  : mode === "edit"
-                    ? "Cập nhật"
-                    : "Tạo mới"}
-          </Button>
+        <div className="flex shrink-0 items-center justify-between gap-3 border-t border-gray-100 px-6 py-4">
+          {setPersistent && <RememberDraftToggle checked={persistent} onChange={setPersistent} />}
+          <div className="flex items-center gap-3">
+            <Button type="button" variant="secondary" onClick={onClose} disabled={isPending}>
+              Hủy
+            </Button>
+            <Button type="submit" disabled={isPending || projects.length === 0 || members.length === 0}>
+              {isPending
+                ? "Đang lưu..."
+                : projects.length === 0
+                  ? "Chưa có dự án"
+                  : members.length === 0
+                    ? "Chưa có nhân sự"
+                    : mode === "edit"
+                      ? "Cập nhật"
+                      : "Tạo mới"}
+            </Button>
+          </div>
         </div>
       </form>
     </div>

@@ -11,6 +11,25 @@ import { getAppDateKey } from "@/lib/utils";
 /** Định nghĩa thật ở task.ts, dùng chung cho công việc, dự án và task. */
 export type { TaskFileAttachment, TaskLinkAttachment };
 
+/** Một lần bổ sung mô tả và đính kèm của Task, từ lần 2 trở đi. */
+export interface SubtaskUpdateEntry {
+  id: string;
+  description?: string;
+  images: string[];
+  files: TaskFileAttachment[];
+  links: TaskLinkAttachment[];
+  createdAt: string;
+}
+
+/** Một yêu cầu dùng để ghép nội dung với URL ảnh thành Prompt có thể sao chép. */
+export interface SubtaskPromptItem {
+  id: string;
+  content: string;
+  /** Các link Cloudinary của ảnh tham chiếu (mỗi ảnh một URL). */
+  imageUrls: string[];
+  status: "unprocessed" | "processed";
+}
+
 export interface Subtask {
   id: string;
   title: string;
@@ -22,6 +41,13 @@ export interface Subtask {
   assigneeId: string;
   /** Toàn bộ người phụ trách, phần tử đầu tiên là người chính. */
   assignees: ProjectMember[];
+  /** Người đã tạo Task; có thể trống với dữ liệu cũ chưa xác định được người tạo. */
+  creator?: ProjectMember;
+  /** UUID tài khoản được giao kiểm thử Task. */
+  testerId?: string;
+  tester?: ProjectMember;
+  /** Ghi chú của lần test fail gần nhất. */
+  testNote?: string;
   /** UUID tài khoản của những người đã xác nhận nhận Task. */
   acceptedAssigneeIds: string[];
   status: TaskStatus;
@@ -36,6 +62,10 @@ export interface Subtask {
   links: TaskLinkAttachment[];
   /** Danh sách URL ảnh minh họa của Task. */
   images: string[];
+  /** Các lần bổ sung mô tả và đính kèm sau lần đầu tiên. */
+  updates: SubtaskUpdateEntry[];
+  /** Các dòng yêu cầu và ảnh dùng trong khu vực tạo Prompt. */
+  promptItems: SubtaskPromptItem[];
 }
 
 export interface SubtaskInput {
@@ -44,7 +74,10 @@ export interface SubtaskInput {
   workTaskId: string;
   /** Danh sách người phụ trách; phần tử đầu tiên là người phụ trách chính. */
   assigneeIds: string[];
-  /** Trạng thái được server tự tính từ tiến độ, không nhận từ form. */
+  /** Mã nhân viên hoặc UUID tài khoản được giao kiểm thử. */
+  testerId?: string;
+  /** Chỉ quản trị viên được phép gửi trạng thái khi chỉnh sửa Task. */
+  status?: TaskStatus;
   priority: TaskPriority;
   startDate: string;
   dueDate: string;
@@ -56,10 +89,27 @@ export interface SubtaskInput {
   links: TaskLinkAttachment[];
   /** Tối đa 10 URL ảnh đã tải lên Cloudinary. */
   images: string[];
+  /** Các lần bổ sung mô tả và đính kèm sau lần đầu tiên. */
+  updates: SubtaskUpdateEntry[];
 }
 
 export interface SubtaskReport extends ProgressReport {
   subtaskId: string;
+}
+
+export interface SubtaskTestResult {
+  passed: boolean;
+  note?: string;
+}
+
+/** Một lần Tester ghi kết quả Pass/Fail cho Task. */
+export interface SubtaskTestHistoryEntry {
+  id: string;
+  subtaskId: string;
+  tester?: ProjectMember;
+  result: "passed" | "failed";
+  note?: string;
+  createdAt: string;
 }
 
 export function isSubtaskOverdue(subtask: Subtask, referenceDate: Date = new Date()): boolean {

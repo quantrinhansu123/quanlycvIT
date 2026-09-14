@@ -27,6 +27,7 @@ import {
   type Project,
   type ProjectMember,
 } from "@/types/project";
+import type { TaskFileAttachment, TaskLinkAttachment } from "@/types/task";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -38,6 +39,8 @@ import { ProjectTasksPanel } from "@/components/projects/ProjectTasksPanel";
 import { ActivityTimeline } from "@/components/timeline/ActivityTimeline";
 import { cn, formatDateVN } from "@/lib/utils";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
+import { useSessionDataCache } from "@/components/providers/SessionDataCacheProvider";
+import { CACHE_RESOURCE } from "@/lib/client-cache/resources";
 
 const ProjectFormModal = dynamic(
   () => import("@/components/projects/ProjectFormModal").then((mod) => mod.ProjectFormModal),
@@ -45,6 +48,7 @@ const ProjectFormModal = dynamic(
 );
 import { getErrorMessage } from "@/lib/errors";
 import { DetailAttachments } from "@/components/tasks/DetailAttachments";
+import { InlineTaskAttachmentEditor } from "@/components/tasks/InlineTaskAttachmentEditor";
 
 type Tab = "info" | "tasks" | "history";
 
@@ -75,6 +79,7 @@ export function ProjectDetailView({
 }: ProjectDetailViewProps) {
   const router = useRouter();
   const { notify } = useFeedback();
+  const cache = useSessionDataCache();
   const [project, setProject] = useState<Project | null>(initialProject);
   const [tasks, setTasks] = useState<ProjectTask[]>(initialTasks);
   const [members, setMembers] = useState<ProjectMember[]>(initialMembers);
@@ -105,6 +110,39 @@ export function ProjectDetailView({
       });
     }
   }, [projectId, notify, readOnly]);
+
+  const handleAttachmentSave = useCallback(async (value: {
+    files: TaskFileAttachment[];
+    links: TaskLinkAttachment[];
+    images: string[];
+  }) => {
+    if (!project || readOnly) return;
+    try {
+      const updated = await projectService.updateProject(project.id, {
+        name: project.name,
+        code: project.code,
+        color: project.color,
+        steps: project.steps,
+        description: project.description,
+        startDate: project.startDate,
+        endDate: project.endDate,
+        managerIds: project.managers.map((member) => member.id),
+        memberIds: project.members.map((member) => member.id),
+        files: value.files,
+        links: value.links,
+        images: value.images,
+      });
+      if (!updated) throw new Error("Dự án không tồn tại hoặc đã bị xóa.");
+      setProject(updated);
+    } catch (updateError) {
+      notify({
+        type: "error",
+        title: "Không thể cập nhật tài liệu dự án",
+        description: getErrorMessage(updateError, "Vui lòng thử lại."),
+      });
+      throw updateError;
+    }
+  }, [notify, project, readOnly]);
 
   if (error) {
     return (
@@ -137,10 +175,10 @@ export function ProjectDetailView({
   return (
     <div
       className={cn(
-        "bg-white",
+        "min-w-0 max-w-full bg-white",
         tab === "tasks"
           ? "flex h-full min-h-0 flex-col overflow-hidden"
-          : "min-h-full pb-2"
+          : "min-h-full overflow-x-hidden pb-2"
       )}
     >
       <div className="shrink-0 border-b border-gray-100 bg-white">
@@ -274,12 +312,25 @@ export function ProjectDetailView({
                 <div className="min-h-24 max-w-full overflow-x-auto rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-4 text-sm leading-6 text-gray-700">
                   <ProjectDescription description={project.description} />
                 </div>
-                <DetailAttachments
-                  entityLabel="dự án"
-                  files={project.files}
-                  links={project.links}
-                  images={project.images}
-                />
+                {readOnly ? (
+                  <DetailAttachments
+                    entityLabel="dự án"
+                    files={project.files}
+                    links={project.links}
+                    images={project.images}
+                  />
+                ) : (
+                  <InlineTaskAttachmentEditor
+                    key={project.id}
+                    entityLabel="dự án"
+                    files={project.files}
+                    links={project.links}
+                    images={project.images}
+                    onUploadFile={projectService.uploadFile}
+                    onUploadImage={projectService.uploadImage}
+                    onSave={handleAttachmentSave}
+                  />
+                )}
                 <div className="mt-6 grid grid-cols-1 gap-5 border-t border-gray-100 pt-4 sm:grid-cols-2">
                   <DateInfo
                     label="Thời gian bắt đầu:"
@@ -476,6 +527,11 @@ export function ProjectDetailView({
           onSaved={() => {
             setEditing(false);
             load();
+            // Trang chi tiết đã tự refetch (load()) — ở đây chỉ cần xóa cache của
+            // danh sách dự án chính + directory dự án để không hiển thị dữ liệu cũ
+            // khi người dùng quay lại 2 nơi đó (theo ma trận invalidation GĐ6).
+            cache.invalidate(CACHE_RESOURCE.projectsList);
+            cache.invalidate(CACHE_RESOURCE.directoryProjects);
           }}
         />
       )}
@@ -613,7 +669,7 @@ function BottomTab({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex min-w-[190px] flex-1 items-center justify-center gap-2 rounded-lg px-5 py-2 text-sm font-semibold transition-colors",
+        "flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors sm:px-5",
         active
           ? "bg-brand-600 text-white shadow-sm"
           : "bg-gray-50 text-gray-500 hover:bg-gray-100"

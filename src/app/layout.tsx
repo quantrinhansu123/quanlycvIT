@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { WebVitalsReporter } from "@/components/observability/WebVitalsReporter";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -22,8 +23,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="vi" className="h-full">
-      <body className="h-full font-sans antialiased">{children}</body>
+    <html lang="vi" className="h-full max-w-full overflow-x-clip" suppressHydrationWarning>
+      <body className="h-full max-w-full overflow-x-clip font-sans antialiased">
+        {children}
+        <WebVitalsReporter />
+      </body>
     </html>
   );
 }

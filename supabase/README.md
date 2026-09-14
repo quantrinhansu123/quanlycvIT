@@ -12,6 +12,8 @@ Các migration:
 - `migrations/20260729000900_separate_project_managers_members.sql`
 - `migrations/20260729001000_subtask_progress_reports.sql`
 - `migrations/20260731000100_production_rls_cleanup.sql`
+- `migrations/20260808000100_add_task_update_entries.sql` (migration lịch sử; cột cũ ở `cong_viec` không còn được ứng dụng sử dụng)
+- `migrations/20260808000200_add_subtask_update_entries.sql` (lưu các lần mô tả và đính kèm trên bảng `task`)
 
 ## Nguồn dữ liệu
 
@@ -45,7 +47,7 @@ chạy một lần.
 Nếu dự án đã liên kết Supabase CLI:
 
 ```bash
-npx supabase db push
+pnpm exec supabase db push
 ```
 
 ## Xác thực và RLS

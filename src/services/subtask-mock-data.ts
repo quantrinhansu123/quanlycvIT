@@ -18,6 +18,8 @@ export const INITIAL_SUBTASKS: Subtask[] = [
     files: [],
     links: [],
     images: [],
+    updates: [],
+    promptItems: [],
   },
   {
     id: "tk-2",
@@ -36,6 +38,8 @@ export const INITIAL_SUBTASKS: Subtask[] = [
     files: [],
     links: [],
     images: [],
+    updates: [],
+    promptItems: [],
   },
   {
     id: "tk-3",
@@ -54,6 +58,8 @@ export const INITIAL_SUBTASKS: Subtask[] = [
     files: [],
     links: [],
     images: [],
+    updates: [],
+    promptItems: [],
   },
   {
     id: "tk-4",
@@ -72,6 +78,8 @@ export const INITIAL_SUBTASKS: Subtask[] = [
     files: [],
     links: [],
     images: [],
+    updates: [],
+    promptItems: [],
   },
   {
     id: "tk-5",
@@ -90,6 +98,8 @@ export const INITIAL_SUBTASKS: Subtask[] = [
     files: [],
     links: [],
     images: [],
+    updates: [],
+    promptItems: [],
   },
   {
     id: "tk-6",
@@ -108,6 +118,8 @@ export const INITIAL_SUBTASKS: Subtask[] = [
     files: [],
     links: [],
     images: [],
+    updates: [],
+    promptItems: [],
   },
   {
     id: "tk-7",
@@ -126,6 +138,8 @@ export const INITIAL_SUBTASKS: Subtask[] = [
     files: [],
     links: [],
     images: [],
+    updates: [],
+    promptItems: [],
   },
   {
     id: "tk-8",
@@ -144,6 +158,8 @@ export const INITIAL_SUBTASKS: Subtask[] = [
     files: [],
     links: [],
     images: [],
+    updates: [],
+    promptItems: [],
   },
   {
     id: "tk-9",
@@ -162,6 +178,8 @@ export const INITIAL_SUBTASKS: Subtask[] = [
     files: [],
     links: [],
     images: [],
+    updates: [],
+    promptItems: [],
   },
   {
     id: "tk-10",
@@ -180,6 +198,8 @@ export const INITIAL_SUBTASKS: Subtask[] = [
     files: [],
     links: [],
     images: [],
+    updates: [],
+    promptItems: [],
   },
   {
     id: "tk-11",
@@ -198,6 +218,8 @@ export const INITIAL_SUBTASKS: Subtask[] = [
     files: [],
     links: [],
     images: [],
+    updates: [],
+    promptItems: [],
   },
 ];
 

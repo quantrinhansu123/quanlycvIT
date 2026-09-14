@@ -112,7 +112,7 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
       {children}
 
       <div
-        className="pointer-events-none fixed right-4 top-4 z-[70] flex w-[calc(100%-2rem)] max-w-sm flex-col gap-3"
+        className="pointer-events-none fixed inset-x-4 top-4 z-[70] flex flex-col items-end gap-3"
         aria-live="polite"
         aria-atomic="true"
       >
@@ -122,7 +122,7 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
             <div
               key={toast.id}
               className={cn(
-                "pointer-events-auto flex items-start gap-3 rounded-xl border p-4 shadow-lg",
+                "pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-xl border p-4 shadow-lg",
                 TOAST_STYLES[toast.type]
               )}
               role={toast.type === "error" ? "alert" : "status"}
@@ -176,12 +176,13 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
               </div>
             </div>
             <div className="mt-6 flex justify-end gap-3">
-              <Button variant="secondary" onClick={() => closeConfirm(false)} autoFocus>
+              <Button variant="secondary" onClick={() => closeConfirm(false)}>
                 {pendingConfirm.cancelLabel ?? "Hủy"}
               </Button>
               <Button
                 variant={pendingConfirm.tone === "primary" ? "primary" : "danger"}
                 onClick={() => closeConfirm(true)}
+                autoFocus
               >
                 {pendingConfirm.confirmLabel ?? "Xác nhận"}
               </Button>
