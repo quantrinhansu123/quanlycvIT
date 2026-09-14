@@ -3,7 +3,7 @@ import { apiSuccess, handleApiError, readJsonObject } from "@/lib/api/response";
 import { parseProjectInput } from "@/lib/api/validation";
 import { createApiSupabaseClient } from "@/lib/supabase/api";
 import { assertManagerOrAdmin, requireRequestAccount } from "@/lib/supabase/authorization";
-import { createProject, listProjects, listProjectsPage } from "@/lib/supabase/data";
+import { createProject, listProjectOptions, listProjects, listProjectsPage } from "@/lib/supabase/data";
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,6 +14,12 @@ export async function GET(request: NextRequest) {
     const search = params.get("q") ?? undefined;
     const page = params.get("page");
     const pageSize = params.get("pageSize");
+    const fields = params.get("fields");
+
+    if (fields === "options") {
+      const options = await listProjectOptions(supabase, search, participantAccountId);
+      return apiSuccess(options);
+    }
 
     if (page && pageSize) {
       const managerIdsParam = params.get("managerIds");
@@ -31,7 +37,12 @@ export async function GET(request: NextRequest) {
       return apiSuccess(result);
     }
 
-    const projects = await listProjects(supabase, search, participantAccountId);
+    const projects = await listProjects(
+      supabase,
+      search,
+      participantAccountId,
+      fields === "form"
+    );
     return apiSuccess(projects);
   } catch (error) {
     return handleApiError(error);

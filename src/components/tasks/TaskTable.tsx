@@ -18,7 +18,7 @@ import { formatDateVN } from "@/lib/utils";
 
 interface TaskTableProps {
   tasks: WorkTask[];
-  projectsById: Map<string, Project>;
+  projectsById: Map<string, Pick<Project, "name">>;
   membersById: Map<string, ProjectMember>;
   selectedIds: string[];
   onToggleSelect: (id: string) => void;

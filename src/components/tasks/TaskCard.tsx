@@ -13,7 +13,7 @@ import { formatDateVN } from "@/lib/utils";
 
 interface TaskCardProps {
   task: WorkTask;
-  project?: Project;
+  project?: Pick<Project, "name"> & { color?: Project["color"] };
   assignee?: ProjectMember;
   onOpen: (task: WorkTask) => void;
   onEdit: (task: WorkTask) => void;
@@ -36,7 +36,7 @@ export function TaskCard({
     <div className="flex flex-col gap-3 rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
       <div className="flex items-start justify-between gap-2">
         {project ? (
-          <Badge color={project.color} className="max-w-full whitespace-normal leading-4">
+          <Badge color={project.color ?? "blue"} className="max-w-full whitespace-normal leading-4">
             {project.name}
           </Badge>
         ) : <span />}

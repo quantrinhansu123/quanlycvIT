@@ -7,6 +7,7 @@ import {
   createWorkTask,
   listWorkTasks,
   listWorkTasksPage,
+  listWorkTaskOptions,
   type WorkTaskFilters,
 } from "@/lib/supabase/data";
 import type { TaskPriority, TaskStatus } from "@/types/task";
@@ -37,6 +38,12 @@ export async function GET(request: NextRequest) {
     const params = request.nextUrl.searchParams;
     const page = params.get("page");
     const pageSize = params.get("pageSize");
+    const fields = params.get("fields");
+
+    if (fields === "options") {
+      const options = await listWorkTaskOptions(supabase, filters);
+      return apiSuccess(options);
+    }
 
     if (page && pageSize) {
       const result = await listWorkTasksPage(supabase, {

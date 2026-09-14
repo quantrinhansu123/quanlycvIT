@@ -66,6 +66,12 @@ export interface TaskLinkAttachment {
   description?: string;
 }
 
+/** Bản rút gọn cho dropdown “công việc tiền đề”: không hydrate người phụ trách/task con. */
+export interface WorkTaskOption {
+  id: string;
+  title: string;
+}
+
 export interface WorkTask {
   id: string;
   title: string;

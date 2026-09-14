@@ -6,6 +6,7 @@ import type {
   TaskStatus,
   WorkTask,
   WorkTaskInput,
+  WorkTaskOption,
 } from "@/types/task";
 
 export type TaskReportSubmission = ProgressReportSubmission;
@@ -63,6 +64,22 @@ export const taskService = {
 
   async getTasks(filters: TaskFilters = {}): Promise<WorkTask[]> {
     return apiClient.get<WorkTask[]>(`/tasks${buildQuery(filters)}`);
+  },
+
+  /** Chỉ id + tên, dùng cho dropdown công việc tiền đề. */
+  async getTaskOptions(filters: TaskFilters = {}): Promise<WorkTaskOption[]> {
+    const params = new URLSearchParams();
+    if (filters.search) params.set("search", filters.search);
+    if (filters.projectId) params.set("projectId", filters.projectId);
+    if (filters.assigneeId) params.set("assigneeId", filters.assigneeId);
+    if (filters.assigneeIds && filters.assigneeIds.length > 0) {
+      params.set("assigneeIds", filters.assigneeIds.join(","));
+    }
+    if (filters.priority) params.set("priority", filters.priority);
+    if (filters.status) params.set("status", filters.status);
+    if (filters.overdueOnly) params.set("overdueOnly", "true");
+    params.set("fields", "options");
+    return apiClient.get<WorkTaskOption[]>(`/tasks?${params.toString()}`);
   },
 
   /** Tải một trang công việc từ server thay vì toàn bộ tập kết quả khớp bộ lọc. */

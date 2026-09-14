@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useOptimistic, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
@@ -16,8 +16,8 @@ import {
 import { projectService } from "@/services/project-service";
 import { taskService, type TaskFilters } from "@/services/task-service";
 import { useCurrentAccount } from "@/hooks/useCurrentAccount";
-import type { Project, ProjectMember } from "@/types/project";
-import type { WorkTask, WorkTaskInput, TaskPriority, TaskStatus } from "@/types/task";
+import type { Project, ProjectMember, ProjectOption } from "@/types/project";
+import type { WorkTask, WorkTaskInput, WorkTaskOption, TaskPriority, TaskStatus } from "@/types/task";
 import { isTaskOverdue, TASK_PRIORITY_OPTIONS, TASK_STATUS_OPTIONS } from "@/types/task";
 import { Button } from "@/components/ui/Button";
 import { FilterSelect } from "@/components/ui/FilterSelect";
@@ -94,16 +94,18 @@ export default function TaskListPage() {
   const { account, loading: accountLoading } = useCurrentAccount();
   const isMember = account?.role === "member";
   const readOnly = accountLoading || !account || isMember;
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectOptions, setProjectOptions] = useState<ProjectOption[]>([]);
+  const [formProjects, setFormProjects] = useState<Project[]>([]);
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [tasks, setTasks] = useState<WorkTask[]>([]);
   const [total, setTotal] = useState(0);
-  /** Toàn bộ công việc (không phân trang), chỉ dùng để chọn "công việc tiền đề" trong form. */
-  const [dependencyTasks, setDependencyTasks] = useState<WorkTask[]>([]);
+  /** Danh sách rút gọn cho dropdown “công việc tiền đề”, chỉ tải khi mở form. */
+  const [dependencyTasks, setDependencyTasks] = useState<WorkTaskOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   const [search, setSearch] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");
   const [projectId, setProjectId] = useState("");
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [priority, setPriority] = useState<TaskPriority | "">("");
@@ -127,12 +129,13 @@ export default function TaskListPage() {
     }
   );
 
-  const projectsById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
+  const projectsById = useMemo(() => new Map(projectOptions.map((p) => [p.id, p])), [projectOptions]);
   const membersById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
+  const formCatalogRef = useRef<Promise<void> | null>(null);
 
   function currentFilters(): TaskFilters {
     return {
-      search,
+      search: appliedSearch,
       projectId: projectId || undefined,
       assigneeIds: assigneeIds.length > 0 ? assigneeIds : undefined,
       priority: priority || undefined,
@@ -161,45 +164,120 @@ export default function TaskListPage() {
     }
   }, [notify]);
 
-  const refreshDependencyTasks = useCallback(() => {
-    taskService.getTasks().then(setDependencyTasks).catch(() => {
-      // Không chặn luồng chính nếu tải danh sách phụ thuộc thất bại.
-    });
-  }, []);
-
-  useEffect(() => {
-    refreshDependencyTasks();
-  }, [refreshDependencyTasks]);
-
-  useEffect(() => {
-    Promise.all([projectService.getProjects(), projectService.getDirectory()])
-      .then(([projectData, memberData]) => {
-        setProjects(projectData);
-        setMembers(memberData);
-      })
-      .catch((dependencyError) => {
-        setError(true);
-        notify({
-          type: "error",
-          title: "Không thể tải dữ liệu bộ lọc",
-          description: getErrorMessage(dependencyError, "Không thể tải dự án hoặc danh sách nhân sự."),
+  const ensureFormCatalog = useCallback(() => {
+    if (readOnly) return Promise.resolve();
+    if (!formCatalogRef.current) {
+      formCatalogRef.current = Promise.all([
+        projectService.getProjectsForForm(),
+        taskService.getTaskOptions(),
+      ])
+        .then(([projectData, taskOptions]) => {
+          setFormProjects(projectData);
+          setDependencyTasks(taskOptions);
+        })
+        .catch((catalogError) => {
+          formCatalogRef.current = null;
+          notify({
+            type: "error",
+            title: "Không thể tải dữ liệu form công việc",
+            description: getErrorMessage(catalogError, "Không thể tải dự án hoặc danh sách công việc tiền đề."),
+          });
+          throw catalogError;
         });
+    }
+    return formCatalogRef.current;
+  }, [notify, readOnly]);
+
+  async function openForm(state: Exclude<FormModalState, null>) {
+    if (readOnly) return;
+    try {
+      await ensureFormCatalog();
+    } catch {
+      return;
+    }
+    setFormModal(state);
+  }
+
+  useEffect(() => {
+    if (search === appliedSearch) return;
+    const timer = setTimeout(() => {
+      setAppliedSearch(search);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [appliedSearch, search]);
+
+  useEffect(() => {
+    let cancelled = false;
+    projectService.getProjectOptions().then((options) => {
+      if (!cancelled) setProjectOptions(options);
+    }).catch((projectError) => {
+      if (cancelled) return;
+      setError(true);
+      notify({
+        type: "error",
+        title: "Không thể tải danh sách dự án",
+        description: getErrorMessage(projectError, "Không thể tải dự án để lọc công việc."),
       });
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [notify]);
 
   useEffect(() => {
-    // Bộ lọc thay đổi thì quay về trang đầu để không rơi vào trang trống.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setPage(1);
-  }, [search, projectId, assigneeIds, priority, status, overdueOnly]);
+    if (accountLoading || isMember) return;
+    let cancelled = false;
+    projectService.getDirectory().then((directory) => {
+      if (!cancelled) setMembers(directory);
+    }).catch((directoryError) => {
+      if (cancelled) return;
+      setError(true);
+      notify({
+        type: "error",
+        title: "Không thể tải dữ liệu bộ lọc",
+        description: getErrorMessage(directoryError, "Không thể tải danh sách nhân sự."),
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountLoading, isMember, notify]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      loadTasks(currentFilters(), page, pageSize);
-    }, 300);
-    return () => clearTimeout(timer);
+    let cancelled = false;
+    setLoading(true);
+    setError(false);
+    taskService
+      .getTasksPage({ ...currentFilters(), page, pageSize })
+      .then((result) => {
+        if (cancelled) return;
+        setTasks(result.items);
+        setTotal(result.total);
+        setSelectedIds([]);
+      })
+      .catch((loadError) => {
+        if (cancelled) return;
+        setError(true);
+        notify({
+          type: "error",
+          title: "Không thể tải danh sách công việc",
+          description: getErrorMessage(loadError, "Vui lòng kiểm tra kết nối và thử lại."),
+        });
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, projectId, assigneeIds, priority, status, overdueOnly, page, pageSize, loadTasks]);
+  }, [appliedSearch, projectId, assigneeIds, priority, status, overdueOnly, page, pageSize, loadTasks]);
+
+  useEffect(() => {
+    if (loading || error || readOnly) return;
+    void ensureFormCatalog().catch(() => undefined);
+  }, [ensureFormCatalog, error, loading, readOnly]);
 
   function toggleSelect(id: string) {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
@@ -275,10 +353,11 @@ export default function TaskListPage() {
             return !existing && page === 1 ? [saved, ...current].slice(0, pageSize) : current;
           });
           setDependencyTasks((current) => {
+            const next = { id: saved.id, title: saved.title };
             const exists = current.some((task) => task.id === saved.id);
             return exists
-              ? current.map((task) => task.id === saved.id ? saved : task)
-              : [saved, ...current];
+              ? current.map((task) => task.id === saved.id ? next : task)
+              : [next, ...current];
           });
           if (wasVisible !== isVisible || (!existing && isVisible)) {
             setTotal((current) => current + (isVisible ? 1 : -1));
@@ -353,15 +432,21 @@ export default function TaskListPage() {
           label="Dự án"
           searchPlaceholder="Tìm dự án..."
           value={projectId}
-          onChange={setProjectId}
-          options={projects.map((p) => ({ value: p.id, label: p.name, sublabel: p.code }))}
+          onChange={(value) => {
+            setProjectId(value);
+            setPage(1);
+          }}
+          options={projectOptions.map((p) => ({ value: p.id, label: p.name, sublabel: p.code }))}
         />
         {!isMember && (
           <MemberFilterMultiSelect
             className="w-[130px] shrink-0 2xl:w-[150px]"
             label="Người phụ trách"
             value={assigneeIds}
-            onChange={setAssigneeIds}
+            onChange={(value) => {
+              setAssigneeIds(value);
+              setPage(1);
+            }}
             options={members}
           />
         )}
@@ -370,7 +455,10 @@ export default function TaskListPage() {
           className="w-[112px] shrink-0 2xl:w-[124px]"
           label="Mức độ ưu tiên"
           value={priority}
-          onChange={(value) => setPriority(value as TaskPriority | "")}
+          onChange={(value) => {
+            setPriority(value as TaskPriority | "");
+            setPage(1);
+          }}
           options={TASK_PRIORITY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
         />
         <FilterSelect
@@ -378,12 +466,18 @@ export default function TaskListPage() {
           className="w-[92px] shrink-0 2xl:w-[104px]"
           label="Trạng thái"
           value={status}
-          onChange={(value) => setStatus(value as TaskStatus | "")}
+          onChange={(value) => {
+            setStatus(value as TaskStatus | "");
+            setPage(1);
+          }}
           options={TASK_STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
         />
         <button
           type="button"
-          onClick={() => setOverdueOnly((prev) => !prev)}
+          onClick={() => {
+            setOverdueOnly((prev) => !prev);
+            setPage(1);
+          }}
           className={cn(
             "flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 text-xs font-medium",
             overdueOnly ? "border-rose-300 bg-rose-50 text-rose-600" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
@@ -394,7 +488,7 @@ export default function TaskListPage() {
         </button>
 
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          {!readOnly && <Button size="sm" className="whitespace-nowrap px-2.5" onClick={() => setFormModal({ mode: "create" })}>
+          {!readOnly && <Button size="sm" className="whitespace-nowrap px-2.5" onClick={() => void openForm({ mode: "create" })}>
             <Plus className="h-4 w-4" />
             Thêm mới
           </Button>}
@@ -441,7 +535,7 @@ export default function TaskListPage() {
             title="Không tìm thấy công việc nào"
             description="Thử thay đổi bộ lọc hoặc tạo công việc mới."
             action={readOnly ? undefined :
-              <Button size="sm" onClick={() => setFormModal({ mode: "create" })}>
+              <Button size="sm" onClick={() => void openForm({ mode: "create" })}>
                 <Plus className="h-4 w-4" />
                 Thêm công việc
               </Button>
@@ -458,7 +552,7 @@ export default function TaskListPage() {
             onOpenTask={(task) =>
               router.push(`/quan-ly-cong-viec/danh-sach-cong-viec/${task.id}`)
             }
-            onEdit={(task) => setFormModal({ mode: "edit", task })}
+            onEdit={(task) => void openForm({ mode: "edit", task })}
             onDelete={handleDelete}
             readOnly={readOnly}
           />
@@ -473,7 +567,7 @@ export default function TaskListPage() {
                 onOpen={(task) =>
                   router.push(`/quan-ly-cong-viec/danh-sach-cong-viec/${task.id}`)
                 }
-                onEdit={(t) => setFormModal({ mode: "edit", task: t })}
+                onEdit={(t) => void openForm({ mode: "edit", task: t })}
                 onDelete={handleDelete}
                 readOnly={readOnly}
               />
@@ -500,7 +594,7 @@ export default function TaskListPage() {
         <TaskFormModal
           mode={formModal.mode}
           task={formModal.mode === "edit" ? formModal.task : undefined}
-          projects={projects}
+          projects={formProjects}
           members={members}
           otherTasks={dependencyTasks}
           onClose={() => setFormModal(null)}

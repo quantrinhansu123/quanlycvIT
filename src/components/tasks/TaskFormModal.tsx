@@ -27,7 +27,7 @@ interface TaskFormModalProps {
   task?: WorkTask;
   projects: Project[];
   members: ProjectMember[];
-  otherTasks: WorkTask[];
+  otherTasks: Pick<WorkTask, "id" | "title">[];
   defaultProjectId?: string;
   defaultStatus?: WorkTaskInput["status"];
   onClose: () => void;

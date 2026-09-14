@@ -3,6 +3,7 @@ import type {
   Project,
   ProjectInput,
   ProjectMember,
+  ProjectOption,
 } from "@/types/project";
 import type { ProjectTask } from "@/services/mock-data";
 
@@ -35,6 +36,20 @@ export const projectService = {
   async getProjects(search?: string): Promise<Project[]> {
     const query = search?.trim() ? `?q=${encodeURIComponent(search.trim())}` : "";
     return apiClient.get<Project[]>(`/projects${query}`);
+  },
+
+  /** Chỉ id/mã/tên — đủ cho bộ lọc danh sách, không kéo thành viên và thống kê công việc. */
+  async getProjectOptions(search?: string): Promise<ProjectOption[]> {
+    const params = new URLSearchParams({ fields: "options" });
+    if (search?.trim()) params.set("q", search.trim());
+    return apiClient.get<ProjectOption[]>(`/projects?${params.toString()}`);
+  },
+
+  /** Dự án kèm người tham gia và ngày, bỏ thống kê/đính kèm — dùng cho form công việc. */
+  async getProjectsForForm(search?: string): Promise<Project[]> {
+    const params = new URLSearchParams({ fields: "form" });
+    if (search?.trim()) params.set("q", search.trim());
+    return apiClient.get<Project[]>(`/projects?${params.toString()}`);
   },
 
   /** Tải một trang dự án từ server, có thể lọc theo nhiều người quản lý. */

@@ -51,6 +51,13 @@ export interface ProjectStats {
   overdue: number;
 }
 
+/** Bản rút gọn cho bộ lọc/danh sách: không kèm thành viên hay thống kê công việc. */
+export interface ProjectOption {
+  id: string;
+  code: string;
+  name: string;
+}
+
 export interface Project {
   id: string;
   code: string;
