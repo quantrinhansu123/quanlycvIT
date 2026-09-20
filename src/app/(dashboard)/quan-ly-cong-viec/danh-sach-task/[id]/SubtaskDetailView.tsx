@@ -963,9 +963,9 @@ export function SubtaskDetailView({
           workTasks={workTasks}
           members={members}
           onClose={() => setEditing(false)}
-          onSaved={() => {
+          onSaved={(saved) => {
             setEditing(false);
-            load();
+            setSubtask(saved);
             cache.invalidate(CACHE_RESOURCE.subtasksList);
             cache.invalidate(CACHE_RESOURCE.tasksList);
           }}

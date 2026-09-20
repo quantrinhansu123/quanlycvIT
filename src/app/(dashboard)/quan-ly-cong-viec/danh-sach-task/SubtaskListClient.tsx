@@ -651,12 +651,33 @@ export function SubtaskListClient({
           workTasks={workTasks}
           members={members}
           onClose={() => setFormModal(null)}
-          onSaved={() => {
+          onSaved={(saved) => {
+            const isEdit = formModal?.mode === "edit";
             setFormModal(null);
-            cache.invalidate(CACHE_RESOURCE.subtasksList);
+            setSubtaskPage((previous) => {
+              const currentItems = previous?.items ?? [];
+              const currentTotal = previous?.total ?? 0;
+              const exists = currentItems.some((item) => item.id === saved.id);
+              if (exists) {
+                return {
+                  items: currentItems.map((item) => (item.id === saved.id ? saved : item)),
+                  total: currentTotal,
+                };
+              }
+              if (!isEdit && page === 1) {
+                return {
+                  items: [saved, ...currentItems].slice(0, pageSize),
+                  total: currentTotal + 1,
+                };
+              }
+              return {
+                items: currentItems,
+                total: isEdit ? currentTotal : currentTotal + 1,
+              };
+            });
+            cache.invalidate(CACHE_RESOURCE.subtasksList, listKey);
             // Sửa task con có thể đổi tiến độ -> ảnh hưởng tiến độ công việc cha.
             cache.invalidate(CACHE_RESOURCE.tasksList);
-            refreshSubtasks();
           }}
         />
       )}

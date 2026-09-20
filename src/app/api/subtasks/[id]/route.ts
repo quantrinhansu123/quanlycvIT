@@ -52,9 +52,14 @@ export async function PUT(request: Request, { params }: RouteParams) {
     }
     const input = parseSubtaskInput(await readJsonObject(request));
     if (input.status !== undefined) {
-      const current = await getSubtask(supabase, id);
-      if (!current) throw new ApiException("Không tìm thấy task.", 404);
-      if (current.status === "done" && input.status !== "done") {
+      const { data: currentRow, error: currentError } = await supabase
+        .from("task")
+        .select("trang_thai")
+        .eq("id", id)
+        .maybeSingle();
+      if (currentError) throw currentError;
+      if (!currentRow) throw new ApiException("Không tìm thấy task.", 404);
+      if (currentRow.trang_thai === "done" && input.status !== "done") {
         throw new ApiException("Task đã hoàn thành nên không thể thay đổi trạng thái.", 400);
       }
     }

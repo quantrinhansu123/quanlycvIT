@@ -588,8 +588,25 @@ function hydrateProjects(rows: ProjectRow[]): Project[] {
 async function syncProjectMembers(
   supabase: ApiSupabaseClient,
   projectId: string,
-  memberIds: string[]
+  memberIds: string[],
+  options?: { assumeEmpty?: boolean }
 ): Promise<void> {
+  if (!options?.assumeEmpty) {
+    const { data: current, error: currentError } = await supabase
+      .from("du_an_thanh_vien")
+      .select("tai_khoan_id")
+      .eq("du_an_id", projectId);
+    throwDatabaseError(currentError);
+    const currentIds = (current ?? []).map((row) => row.tai_khoan_id as string);
+    const currentSet = new Set(currentIds);
+    if (
+      currentIds.length === memberIds.length &&
+      memberIds.every((accountId) => currentSet.has(accountId))
+    ) {
+      return;
+    }
+  }
+
   if (memberIds.length > 0) {
     const { error: upsertError } = await supabase.from("du_an_thanh_vien").upsert(
       memberIds.map((accountId) => ({
@@ -612,8 +629,28 @@ async function syncProjectMembers(
 async function syncProjectManagers(
   supabase: ApiSupabaseClient,
   projectId: string,
-  managerIds: string[]
+  managerIds: string[],
+  options?: { assumeEmpty?: boolean }
 ): Promise<void> {
+  if (!options?.assumeEmpty) {
+    const { data: current, error: currentError } = await supabase
+      .from("du_an_quan_ly")
+      .select("tai_khoan_id,la_chinh")
+      .eq("du_an_id", projectId);
+    throwDatabaseError(currentError);
+    const currentRows = current ?? [];
+    const currentIds = currentRows.map((row) => row.tai_khoan_id as string);
+    const currentPrimary = currentRows.find((row) => row.la_chinh)?.tai_khoan_id as
+      | string
+      | undefined;
+    const currentSet = new Set(currentIds);
+    const sameMembers =
+      currentIds.length === managerIds.length &&
+      managerIds.every((accountId) => currentSet.has(accountId));
+    const samePrimary = (managerIds[0] ?? null) === (currentPrimary ?? null);
+    if (sameMembers && samePrimary) return;
+  }
+
   if (managerIds.length > 0) {
     const { error: upsertError } = await supabase.from("du_an_quan_ly").upsert(
       managerIds.map((accountId) => ({
@@ -660,14 +697,15 @@ async function syncProjectPeople(
   supabase: ApiSupabaseClient,
   projectId: string,
   managerIds: string[],
-  memberIds: string[]
+  memberIds: string[],
+  options?: { assumeEmpty?: boolean }
 ): Promise<void> {
   const results = await Promise.all([
-    syncProjectManagers(supabase, projectId, managerIds).then(
+    syncProjectManagers(supabase, projectId, managerIds, options).then(
       () => undefined,
       (error: unknown) => error
     ),
-    syncProjectMembers(supabase, projectId, memberIds).then(
+    syncProjectMembers(supabase, projectId, memberIds, options).then(
       () => undefined,
       (error: unknown) => error
     ),
@@ -918,7 +956,9 @@ export async function createProject(
   const projectRow = data as unknown as ProjectRow;
 
   try {
-    await syncProjectPeople(supabase, projectRow.id, managerIds, memberIds);
+    await syncProjectPeople(supabase, projectRow.id, managerIds, memberIds, {
+      assumeEmpty: true,
+    });
   } catch (syncError) {
     await supabase.from("du_an").delete().eq("id", projectRow.id);
     throw syncError;
@@ -1280,14 +1320,38 @@ export async function getWorkTask(
   return task;
 }
 
-/** Đồng bộ bảng nối người phụ trách; phần tử đầu của `accountIds` là người chính. */
+/**
+ * Đồng bộ bảng nối người phụ trách; phần tử đầu của `accountIds` là người chính.
+ * `assumeEmpty`: entity mới — bỏ SELECT so sánh (tránh +1 RTT trên create).
+ */
 async function syncAssignments(
   supabase: ApiSupabaseClient,
   table: "cong_viec_phu_trach" | "task_phu_trach" | "truc_nhat_lich_lap_phu_trach" | "truc_nhat_ca_phu_trach",
   ownerColumn: "cong_viec_id" | "task_id" | "lich_lap_id" | "ca_id",
   ownerId: string,
-  accountIds: string[]
+  accountIds: string[],
+  options?: { assumeEmpty?: boolean }
 ): Promise<void> {
+  if (!options?.assumeEmpty) {
+    const { data: current, error: currentError } = await supabase
+      .from(table)
+      .select("tai_khoan_id,la_chinh")
+      .eq(ownerColumn, ownerId);
+    throwDatabaseError(currentError);
+
+    const currentRows = current ?? [];
+    const currentIds = currentRows.map((row) => row.tai_khoan_id as string);
+    const currentPrimary = currentRows.find((row) => row.la_chinh)?.tai_khoan_id as
+      | string
+      | undefined;
+    const currentSet = new Set(currentIds);
+    const sameMembers =
+      currentIds.length === accountIds.length &&
+      accountIds.every((accountId) => currentSet.has(accountId));
+    const samePrimary = (accountIds[0] ?? null) === (currentPrimary ?? null);
+    if (sameMembers && samePrimary) return;
+  }
+
   if (accountIds.length > 0) {
     const { error: upsertError } = await supabase.from(table).upsert(
       accountIds.map((accountId) => ({
@@ -1328,6 +1392,27 @@ function withWorkTaskAssignees(
     ...row,
     legacy_assignee: accountsById.get(assigneeIds[0]) ?? row.legacy_assignee,
     cong_viec_phu_trach: assignmentRows(assigneeIds, accountsById),
+  };
+}
+
+/** Ghi đè embed người phụ trách sau sync — giữ `xac_nhan_luc` của người còn lại. */
+function withSubtaskAssignees(
+  row: SubtaskRow,
+  assigneeIds: string[],
+  accountsById: Map<string, AccountRow>
+): SubtaskRow {
+  const previousById = new Map(
+    (row.task_phu_trach ?? []).map((assignment) => [assignment.tai_khoan_id, assignment])
+  );
+  return {
+    ...row,
+    legacy_assignee: accountsById.get(assigneeIds[0]) ?? row.legacy_assignee,
+    task_phu_trach: assigneeIds.map((accountId) => ({
+      tai_khoan_id: accountId,
+      la_chinh: accountId === assigneeIds[0],
+      xac_nhan_luc: previousById.get(accountId)?.xac_nhan_luc ?? null,
+      tai_khoan: accountsById.get(accountId) ?? null,
+    })),
   };
 }
 
@@ -1507,7 +1592,8 @@ export async function createWorkTask(
       "cong_viec_phu_trach",
       "cong_viec_id",
       taskId,
-      assigneeIds
+      assigneeIds,
+      { assumeEmpty: true }
     );
   } catch (syncError) {
     // Không phải RPC transaction thật (2 round-trip riêng) — nhưng bù lại bằng
@@ -1528,9 +1614,14 @@ export async function updateWorkTask(
   id: string,
   input: WorkTaskInput
 ): Promise<WorkTask | null> {
-  const current = await getWorkTask(supabase, id);
-  if (!current) return null;
-  if (current.status === "done") {
+  const { data: currentRow, error: currentError } = await supabase
+    .from("cong_viec")
+    .select("trang_thai")
+    .eq("id", id)
+    .maybeSingle();
+  throwDatabaseError(currentError);
+  if (!currentRow) return null;
+  if (currentRow.trang_thai === "done") {
     throw new ApiException(
       "Công việc đã hoàn thành nên chỉ có thể xem, không thể chỉnh sửa.",
       409
@@ -1975,10 +2066,15 @@ export async function createSubtask(
   input: SubtaskInput,
   creatorAccountId: string
 ): Promise<Subtask> {
-  const parentWorkTask = await getWorkTask(supabase, input.workTaskId);
-  if (!parentWorkTask) throw new ApiException("Không tìm thấy công việc.", 404);
+  const { data: parentRow, error: parentError } = await supabase
+    .from("cong_viec")
+    .select("id")
+    .eq("id", input.workTaskId)
+    .maybeSingle();
+  throwDatabaseError(parentError);
+  if (!parentRow) throw new ApiException("Không tìm thấy công việc.", 404);
 
-  const [{ ids: assigneeIds }, testerAccountId] = await Promise.all([
+  const [{ ids: assigneeIds, accountsById }, testerAccountId] = await Promise.all([
     resolveAccounts(supabase, input.assigneeIds, "Người phụ trách"),
     input.testerId
       ? resolveAccountId(supabase, input.testerId, "Người test")
@@ -1998,11 +2094,12 @@ export async function createSubtask(
       ...subtaskPayload(input, assigneeIds[0], testerAccountId, 0, "todo"),
       nguoi_tao_id: creatorAccountId,
     })
-    .select(SUBTASK_SELECT)
+    .select(SUBTASK_DETAIL_SELECT)
     .single();
 
-  let insertData = data;
+  let insertData: unknown = data;
   let insertError = error;
+  let issuesFromInput = false;
   if (isMissingColumnError(insertError)) {
     const retry = await supabase
       .from("task")
@@ -2012,15 +2109,19 @@ export async function createSubtask(
         }),
         nguoi_tao_id: creatorAccountId,
       })
-      .select(SUBTASK_SELECT)
+      .select(SUBTASK_DETAIL_SELECT_WITHOUT_ISSUES)
       .single();
     insertData = retry.data;
     insertError = retry.error;
+    issuesFromInput = true;
   }
 
   throwDatabaseError(insertError);
   if (!insertData) throw new ApiException("Supabase không trả về task vừa tạo.", 500);
-  const subtaskRow = insertData as unknown as SubtaskRow;
+  let subtaskRow = insertData as SubtaskRow;
+  if (issuesFromInput) {
+    subtaskRow = { ...subtaskRow, van_de_giai_phap: input.issues };
+  }
 
   const subtaskId = subtaskRow.id;
   try {
@@ -2029,7 +2130,8 @@ export async function createSubtask(
       "task_phu_trach",
       "task_id",
       subtaskId,
-      assigneeIds
+      assigneeIds,
+      { assumeEmpty: true }
     );
   } catch (syncError) {
     // Xem chú thích tương ứng trong createWorkTask() — compensating delete, không
@@ -2038,8 +2140,9 @@ export async function createSubtask(
     throw syncError;
   }
 
-  const subtask = await getSubtask(supabase, subtaskId);
-  if (!subtask) throw new ApiException("Không thể đọc lại task vừa tạo.", 500);
+  const [subtask] = hydrateSubtasks([
+    withSubtaskAssignees(subtaskRow, assigneeIds, accountsById),
+  ]);
   return subtask;
 }
 
@@ -2073,7 +2176,7 @@ export async function updateSubtask(
     ? progressForSubtaskStatus(input.status, currentProgress)
     : currentProgress;
 
-  const [{ ids: assigneeIds }, testerAccountId] = await Promise.all([
+  const [{ ids: assigneeIds, accountsById }, testerAccountId] = await Promise.all([
     resolveAccounts(supabase, input.assigneeIds, "Người phụ trách"),
     input.testerId
       ? resolveAccountId(supabase, input.testerId, "Người test")
@@ -2102,11 +2205,12 @@ export async function updateSubtask(
       )
     )
     .eq("id", id)
-    .select(SUBTASK_SELECT)
+    .select(SUBTASK_DETAIL_SELECT)
     .maybeSingle();
 
-  let updateData = data;
+  let updateData: unknown = data;
   let updateError = error;
+  let issuesFromInput = false;
   if (isMissingColumnError(updateError)) {
     const retry = await supabase
       .from("task")
@@ -2121,17 +2225,27 @@ export async function updateSubtask(
         )
       )
       .eq("id", id)
-      .select(SUBTASK_SELECT)
+      .select(SUBTASK_DETAIL_SELECT_WITHOUT_ISSUES)
       .maybeSingle();
     updateData = retry.data;
     updateError = retry.error;
+    issuesFromInput = true;
   }
 
   throwDatabaseError(updateError);
   if (!updateData) return null;
 
   await syncAssignments(supabase, "task_phu_trach", "task_id", id, assigneeIds);
-  return getSubtask(supabase, id);
+
+  let subtaskRow = updateData as SubtaskRow;
+  if (issuesFromInput) {
+    subtaskRow = { ...subtaskRow, van_de_giai_phap: input.issues };
+  }
+
+  const [subtask] = hydrateSubtasks([
+    withSubtaskAssignees(subtaskRow, assigneeIds, accountsById),
+  ]);
+  return subtask;
 }
 
 /** Nhân viên xác nhận nhận Task; lần xác nhận đầu tiên đưa Task sang "Đang làm". */
