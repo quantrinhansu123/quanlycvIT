@@ -58,6 +58,7 @@ export async function GET(request: NextRequest) {
         ...filters,
         page: Number(page),
         pageSize: Number(pageSize),
+        lite: params.get("lite") === "dashboard",
       });
       return apiSuccess(result);
     }

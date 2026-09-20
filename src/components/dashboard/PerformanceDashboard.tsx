@@ -62,8 +62,14 @@ type TimelinePoint = {
 
 async function fetchDashboardData(signal: AbortSignal): Promise<DashboardData> {
   const [projects, tasks, members] = await Promise.all([
-    projectService.getProjectsPage(undefined, 1, DASHBOARD_PROJECT_LIMIT, undefined, { signal }),
-    taskService.getTasksPage({ page: 1, pageSize: DASHBOARD_TASK_LIMIT }, { signal }),
+    projectService.getProjectsPage(undefined, 1, DASHBOARD_PROJECT_LIMIT, undefined, {
+      signal,
+      lite: "dashboard",
+    }),
+    taskService.getTasksPage(
+      { page: 1, pageSize: DASHBOARD_TASK_LIMIT },
+      { signal, lite: "dashboard" }
+    ),
     projectService.getDirectory({ signal }),
   ]);
   return {

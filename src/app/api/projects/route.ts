@@ -38,6 +38,7 @@ export async function GET(request: NextRequest) {
         participantAccountId,
         page: Number(page),
         pageSize: Number(pageSize),
+        lite: params.get("lite") === "dashboard",
       });
       return apiSuccess(result);
     }

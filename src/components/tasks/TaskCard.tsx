@@ -9,7 +9,7 @@ import { Avatar, AvatarStack } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { TaskPriorityBadge, TaskStatusBadge, OverdueTag } from "@/components/tasks/TaskBadges";
-import { ActionIconButton } from "@/components/ui/ActionIconButton";
+import { RowActionMenu } from "@/components/ui/RowActionMenu";
 import { formatDateVN } from "@/lib/utils";
 import { IntentPrefetchLink } from "@/components/navigation/IntentPrefetchLink";
 
@@ -45,27 +45,30 @@ export function TaskCard({
           </Badge>
         ) : <span />}
         {!readOnly && (
-          <div className="flex shrink-0 items-center gap-1.5">
-            <ActionIconButton
-              icon={Eye}
-              label="Xem chi tiết"
-              onClick={() => router.push(`/quan-ly-cong-viec/danh-sach-cong-viec/${task.id}`)}
-            />
-            <ActionIconButton
-              icon={Pencil}
-              label="Chỉnh sửa"
-              tone="warning"
-              disabled={locked || Boolean(deletingId)}
-              onClick={() => onEdit(task)}
-            />
-            <ActionIconButton
-              icon={Trash2}
-              label={deletingId === task.id ? "Đang xóa..." : "Xóa công việc"}
-              tone="danger"
-              disabled={Boolean(deletingId)}
-              onClick={() => onDelete(task)}
-            />
-          </div>
+          <RowActionMenu
+            label={`Thao tác công việc ${task.title}`}
+            items={[
+              {
+                icon: Eye,
+                label: "Xem chi tiết",
+                onClick: () => router.push(`/quan-ly-cong-viec/danh-sach-cong-viec/${task.id}`),
+              },
+              {
+                icon: Pencil,
+                label: "Chỉnh sửa",
+                tone: "warning",
+                disabled: locked || Boolean(deletingId),
+                onClick: () => onEdit(task),
+              },
+              {
+                icon: Trash2,
+                label: deletingId === task.id ? "Đang xóa..." : "Xóa công việc",
+                tone: "danger",
+                disabled: Boolean(deletingId),
+                onClick: () => onDelete(task),
+              },
+            ]}
+          />
         )}
       </div>
 

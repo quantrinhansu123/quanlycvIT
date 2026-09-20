@@ -30,6 +30,13 @@ export interface SubtaskPromptItem {
   status: "unprocessed" | "processed";
 }
 
+/** Một dòng vấn đề và giải pháp của Task. */
+export interface SubtaskIssueEntry {
+  id: string;
+  problem: string;
+  solution: string;
+}
+
 export interface Subtask {
   id: string;
   title: string;
@@ -66,6 +73,8 @@ export interface Subtask {
   updates: SubtaskUpdateEntry[];
   /** Các dòng yêu cầu và ảnh dùng trong khu vực tạo Prompt. */
   promptItems: SubtaskPromptItem[];
+  /** Các dòng vấn đề và giải pháp. */
+  issues: SubtaskIssueEntry[];
 }
 
 export interface SubtaskInput {
@@ -91,6 +100,8 @@ export interface SubtaskInput {
   images: string[];
   /** Các lần bổ sung mô tả và đính kèm sau lần đầu tiên. */
   updates: SubtaskUpdateEntry[];
+  /** Các dòng vấn đề và giải pháp. */
+  issues: SubtaskIssueEntry[];
 }
 
 export interface SubtaskReport extends ProgressReport {

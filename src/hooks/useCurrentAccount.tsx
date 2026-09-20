@@ -25,14 +25,27 @@ interface CurrentAccountState {
  * mount effect và tự query `tai_khoan` riêng — nhân bản round-trip mỗi khi vào
  * trang. Context này fetch đúng 1 lần và chia sẻ cho toàn bộ cây trang (xem
  * `agents/PERF-LOGIN-PAGELOAD-OPTIMIZATION-README.md`, giai đoạn 2).
+ *
+ * `initialAccount` từ Server Component giúp Header/Sidebar render ngay, không
+ * chờ round-trip client sau hydrate.
  */
 const CurrentAccountContext = createContext<CurrentAccountState | undefined>(undefined);
 
-export function CurrentAccountProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<CurrentAccountState>({ account: null, loading: true });
+export function CurrentAccountProvider({
+  children,
+  initialAccount = null,
+}: {
+  children: ReactNode;
+  initialAccount?: CurrentAccount | null;
+}) {
+  const [state, setState] = useState<CurrentAccountState>({
+    account: initialAccount,
+    loading: initialAccount === null,
+  });
 
   useEffect(() => {
     let active = true;
+    let skipInitialAuthEvent = Boolean(initialAccount);
     const supabase = createClient();
 
     const loadAccount = async (userId?: string) => {
@@ -65,10 +78,23 @@ export function CurrentAccountProvider({ children }: { children: ReactNode }) {
     // Đọc phiên cục bộ (không gọi mạng) thay vì `getUser()` để có id tài khoản ngay khi mount.
     void supabase.auth
       .getSession()
-      .then((result: { data: { session: Session | null } }) => loadAccount(result.data.session?.user.id));
+      .then((result: { data: { session: Session | null } }) => {
+        const userId = result.data.session?.user.id;
+        // Đã có seed SSR → giữ account sẵn có, không round-trip ngay.
+        if (initialAccount && userId) {
+          if (active) setState({ account: initialAccount, loading: false });
+          return;
+        }
+        return loadAccount(userId);
+      });
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
+      // Bỏ qua sự kiện khởi tạo khi đã seed từ server để tránh query trùng.
+      if (skipInitialAuthEvent) {
+        skipInitialAuthEvent = false;
+        return;
+      }
       void loadAccount(session?.user.id);
     });
 
@@ -76,7 +102,7 @@ export function CurrentAccountProvider({ children }: { children: ReactNode }) {
       active = false;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [initialAccount]);
 
   return (
     <CurrentAccountContext.Provider value={state}>{children}</CurrentAccountContext.Provider>

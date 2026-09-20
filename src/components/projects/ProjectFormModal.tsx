@@ -161,6 +161,7 @@ export function ProjectFormModal({ mode, project, members, onClose, onSave, onSa
     mode === "create" ? crypto.randomUUID() : undefined
   );
   const [form, setForm] = useState<FormState>(() => buildInitialState(project, members));
+  const [formTab, setFormTab] = useState<"info" | "attachments">("info");
   const [codeTouched, setCodeTouched] = useState(mode === "edit");
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [isPending, startTransition] = useTransition();
@@ -317,13 +318,6 @@ export function ProjectFormModal({ mode, project, members, onClose, onSave, onSa
       ...prev,
       name: value,
       code: codeTouched ? prev.code : generateProjectCode(value),
-    }));
-  }
-
-  function toggleStep(key: ProjectStepConfig["key"]) {
-    setForm((prev) => ({
-      ...prev,
-      steps: prev.steps.map((step) => (step.key === key ? { ...step, enabled: !step.enabled } : step)),
     }));
   }
 
@@ -507,15 +501,17 @@ export function ProjectFormModal({ mode, project, members, onClose, onSave, onSa
     if (form.startDate && form.endDate && form.endDate < form.startDate) {
       nextErrors.endDate = "Ngày kết thúc phải sau ngày bắt đầu";
     }
-    if (!form.steps.some((step) => step.enabled)) {
-      nextErrors.steps = "Chọn ít nhất một bước trạng thái";
-    }
     const invalidLink = normalizedLinks().find((link) => !isValidHttpUrl(link.url));
     if (invalidLink) {
       nextErrors.links = `Liên kết “${invalidLink.url}” không hợp lệ.`;
     }
     setErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
+    const keys = Object.keys(nextErrors) as (keyof FormState)[];
+    if (keys.includes("links")) setFormTab("attachments");
+    else if (keys.some((key) => key !== "links" && key !== "files" && key !== "images")) {
+      setFormTab("info");
+    }
+    return keys.length === 0;
   }
 
   async function handleSubmit(event: React.FormEvent) {
@@ -561,7 +557,7 @@ export function ProjectFormModal({ mode, project, members, onClose, onSave, onSa
           name: form.name.trim(),
           code: form.code.trim(),
           color: form.color,
-          steps: form.steps,
+          steps: DEFAULT_PROJECT_STEPS,
           description: form.description || undefined,
           startDate: form.startDate,
           endDate: form.endDate,
@@ -625,6 +621,42 @@ export function ProjectFormModal({ mode, project, members, onClose, onSave, onSa
           </button>
         </div>
 
+        <div className="flex shrink-0 gap-1 border-b border-gray-100 px-6" role="tablist" aria-label="Phần form dự án">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={formTab === "info"}
+            onClick={() => setFormTab("info")}
+            className={cn(
+              "relative -mb-px border-b-2 px-3 py-2.5 text-sm font-semibold transition",
+              formTab === "info"
+                ? "border-brand-600 text-brand-700"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            )}
+          >
+            Thông tin
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={formTab === "attachments"}
+            onClick={() => setFormTab("attachments")}
+            className={cn(
+              "relative -mb-px border-b-2 px-3 py-2.5 text-sm font-semibold transition",
+              formTab === "attachments"
+                ? "border-brand-600 text-brand-700"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            )}
+          >
+            Đính kèm
+            {(form.files.length + pendingFiles.length + form.links.length + form.images.length + pendingImages.length) > 0 && (
+              <span className="ml-1.5 rounded-full bg-brand-50 px-1.5 py-0.5 text-[11px] font-bold text-brand-700">
+                {form.files.length + pendingFiles.length + form.links.length + form.images.length + pendingImages.length}
+              </span>
+            )}
+          </button>
+        </div>
+
         <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
           {draft && !draftBannerDismissed && (
             <FormDraftBanner
@@ -641,6 +673,8 @@ export function ProjectFormModal({ mode, project, members, onClose, onSave, onSa
             />
           )}
 
+          {formTab === "info" ? (
+            <div className="space-y-5" role="tabpanel">
           {members.length === 0 && (
             <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
               Chưa có nhân sự đang hoạt động trong Supabase. Hãy thêm dữ liệu vào bảng{" "}
@@ -706,30 +740,6 @@ export function ProjectFormModal({ mode, project, members, onClose, onSave, onSa
           </div>
 
           <div>
-            <span className="mb-1 block text-sm font-medium text-gray-700">
-              Cấu hình các bước (trạng thái công việc) <span className="text-rose-500">*</span>
-            </span>
-            <p className="mb-2 text-xs text-gray-400">Lựa chọn các bước trạng thái được kích hoạt trong dự án này</p>
-            <div className="grid grid-cols-2 gap-2">
-              {form.steps.map((step) => (
-                <label
-                  key={step.key}
-                  className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-700"
-                >
-                  <input
-                    type="checkbox"
-                    checked={step.enabled}
-                    onChange={() => toggleStep(step.key)}
-                    className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
-                  />
-                  {step.label}
-                </label>
-              ))}
-            </div>
-            {errors.steps && <p className="mt-1 text-xs text-rose-500">{errors.steps}</p>}
-          </div>
-
-          <div>
             <label className="mb-1.5 block text-sm font-medium text-gray-700">Mô tả dự án</label>
             <textarea
               ref={descriptionRef}
@@ -744,34 +754,6 @@ export function ProjectFormModal({ mode, project, members, onClose, onSave, onSa
               className="w-full resize-none overflow-y-auto rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
             />
           </div>
-
-          <TaskAttachmentFields
-            label="Đính kèm dự án"
-            entityLabel="dự án"
-            files={form.files}
-            pendingFiles={pendingFiles}
-            links={form.links}
-            images={form.images}
-            pendingImages={pendingImages}
-            maxFiles={MAX_PROJECT_FILES}
-            maxLinks={MAX_PROJECT_LINKS}
-            maxImages={MAX_PROJECT_IMAGES}
-            submitting={isPending}
-            fileError={fileError}
-            linkError={errors.links}
-            imageError={imageError}
-            onSelectFiles={handleFileSelection}
-            onSelectImages={handleImageSelection}
-            onAddLink={addLinkRow}
-            onUpdateLink={updateLinkRow}
-            onRemoveLink={removeLinkRow}
-            onRemoveSavedFile={removeSavedFile}
-            onRemovePendingFile={removePendingFile}
-            onUpdateSavedFile={updateSavedFile}
-            onUpdatePendingFile={updatePendingFile}
-            onRemoveSavedImage={removeSavedImage}
-            onRemovePendingImage={removePendingImage}
-          />
 
           <div className="flex gap-4">
             <div className="flex-1">
@@ -1044,6 +1026,38 @@ export function ProjectFormModal({ mode, project, members, onClose, onSave, onSa
               Người đã được chọn làm quản lý sẽ không xuất hiện trong danh sách này.
             </p>
           </div>
+            </div>
+          ) : (
+            <div role="tabpanel">
+              <TaskAttachmentFields
+                label="Đính kèm dự án"
+                entityLabel="dự án"
+                files={form.files}
+                pendingFiles={pendingFiles}
+                links={form.links}
+                images={form.images}
+                pendingImages={pendingImages}
+                maxFiles={MAX_PROJECT_FILES}
+                maxLinks={MAX_PROJECT_LINKS}
+                maxImages={MAX_PROJECT_IMAGES}
+                submitting={isPending}
+                fileError={fileError}
+                linkError={errors.links}
+                imageError={imageError}
+                onSelectFiles={handleFileSelection}
+                onSelectImages={handleImageSelection}
+                onAddLink={addLinkRow}
+                onUpdateLink={updateLinkRow}
+                onRemoveLink={removeLinkRow}
+                onRemoveSavedFile={removeSavedFile}
+                onRemovePendingFile={removePendingFile}
+                onUpdateSavedFile={updateSavedFile}
+                onUpdatePendingFile={updatePendingFile}
+                onRemoveSavedImage={removeSavedImage}
+                onRemovePendingImage={removePendingImage}
+              />
+            </div>
+          )}
 
           {submitError && <p className="text-sm text-rose-500">{submitError}</p>}
         </div>

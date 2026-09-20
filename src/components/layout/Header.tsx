@@ -63,7 +63,9 @@ function useNow() {
   const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 1000);
+    setNow(new Date());
+    // Chỉ hiển thị giờ:phút — tick mỗi phút thay vì mỗi giây để tránh re-render Header.
+    const timer = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(timer);
   }, []);
 
@@ -277,6 +279,8 @@ export function Header({ onToggleSidebar, onOpenMobileMenu }: HeaderProps) {
 
   useEffect(() => {
     let timer: number | undefined;
+    let idleHandle: number | undefined;
+    let deferredStart: number | undefined;
 
     const stopPolling = () => {
       if (timer === undefined) return;
@@ -288,19 +292,43 @@ export function Header({ onToggleSidebar, onOpenMobileMenu }: HeaderProps) {
       void loadNotifications();
       timer = window.setInterval(() => void loadNotifications(), 30_000);
     };
+    const scheduleStart = () => {
+      if (document.visibilityState !== "visible") return;
+      // Trì hoãn poll lần đầu để không tranh băng thông với dữ liệu trang chính.
+      const run = () => startPolling();
+      if (typeof window.requestIdleCallback === "function") {
+        idleHandle = window.requestIdleCallback(run, { timeout: 2500 });
+      } else {
+        deferredStart = window.setTimeout(run, 1500);
+      }
+    };
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") startPolling();
-      else stopPolling();
+      if (document.visibilityState === "visible") scheduleStart();
+      else {
+        stopPolling();
+        if (idleHandle !== undefined && typeof window.cancelIdleCallback === "function") {
+          window.cancelIdleCallback(idleHandle);
+          idleHandle = undefined;
+        }
+        if (deferredStart !== undefined) {
+          window.clearTimeout(deferredStart);
+          deferredStart = undefined;
+        }
+      }
     };
     const refresh = () => {
       if (document.visibilityState === "visible") void loadNotifications();
     };
 
-    startPolling();
+    scheduleStart();
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("app:notifications-changed", refresh);
     return () => {
       stopPolling();
+      if (idleHandle !== undefined && typeof window.cancelIdleCallback === "function") {
+        window.cancelIdleCallback(idleHandle);
+      }
+      if (deferredStart !== undefined) window.clearTimeout(deferredStart);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("app:notifications-changed", refresh);
     };

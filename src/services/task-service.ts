@@ -90,7 +90,7 @@ export const taskService = {
   /** Tải một trang công việc từ server thay vì toàn bộ tập kết quả khớp bộ lọc. */
   async getTasksPage(
     filters: TaskFilters & { page: number; pageSize: number },
-    options?: { signal?: AbortSignal }
+    options?: { signal?: AbortSignal; lite?: "dashboard" }
   ): Promise<TaskPage> {
     const params = new URLSearchParams();
     if (filters.search) params.set("search", filters.search);
@@ -104,6 +104,7 @@ export const taskService = {
     if (filters.overdueOnly) params.set("overdueOnly", "true");
     params.set("page", String(filters.page));
     params.set("pageSize", String(filters.pageSize));
+    if (options?.lite) params.set("lite", options.lite);
     return apiClient.get<TaskPage>(`/tasks?${params.toString()}`, {
       signal: options?.signal,
     });

@@ -1,4 +1,6 @@
+import { cache } from "react";
 import type { ApiSupabaseClient } from "@/lib/supabase/api";
+import { createServerSupabaseClient } from "@/lib/supabase/api";
 import { ApiException, throwDatabaseError } from "@/lib/api/response";
 import type { AccountRole } from "@/types/account";
 import { measureApiTiming } from "@/lib/api/observability";
@@ -8,6 +10,18 @@ export interface RequestAccountAccess {
   id: string;
   employeeCode: string;
   role: AccountRole;
+}
+
+/** Hồ sơ tài khoản đủ để seed Header/Sidebar từ Server Component. */
+export interface RequestAccountProfile {
+  id: string;
+  name: string;
+  username: string;
+  email: string;
+  role: AccountRole;
+  position?: string;
+  avatarUrl?: string;
+  employeeCode: string;
 }
 
 export function assertManagerOrAdmin(access: RequestAccountAccess): void {
@@ -36,11 +50,62 @@ export async function resolveAuthUserId(supabase: ApiSupabaseClient): Promise<st
   return typeof claimsData?.claims.sub === "string" ? claimsData.claims.sub : undefined;
 }
 
+async function fetchAccountProfile(
+  supabase: ApiSupabaseClient
+): Promise<RequestAccountProfile | null> {
+  const authUserId = await resolveAuthUserId(supabase);
+  if (!authUserId) return null;
+
+  const { data, error } = await supabase
+    .from("tai_khoan")
+    .select("id,ten_nv,username,email,role,chuc_vu,avatar_url,ma_nv,status")
+    .eq("auth_user_id", authUserId)
+    .maybeSingle();
+  throwDatabaseError(error);
+  if (!data || data.status !== "active") return null;
+
+  return {
+    id: String(data.id),
+    name: String(data.ten_nv),
+    username: String(data.username ?? ""),
+    email: String(data.email ?? ""),
+    role: data.role as AccountRole,
+    position: data.chuc_vu ?? undefined,
+    avatarUrl: data.avatar_url ?? undefined,
+    employeeCode: String(data.ma_nv),
+  };
+}
+
+/**
+ * Hồ sơ phiên cookie — dedupe trong cùng request RSC (layout + page chỉ query 1 lần).
+ */
+export const getServerAccountProfile = cache(async (): Promise<RequestAccountProfile | null> => {
+  const supabase = await createServerSupabaseClient();
+  return fetchAccountProfile(supabase);
+});
+
+function profileToAccess(profile: RequestAccountProfile): RequestAccountAccess {
+  return {
+    id: profile.id,
+    employeeCode: profile.employeeCode,
+    role: profile.role,
+  };
+}
+
 /** Tài khoản nội bộ đang gắn với phiên Supabase gửi lên API / Server Component. */
 export async function requireRequestAccount(
   supabase: ApiSupabaseClient
 ): Promise<RequestAccountAccess> {
   return measureApiTiming("auth", async () => {
+    // Server Component (cookie, không bearer): dùng cache request để tránh query trùng với layout.
+    if (!supabase.bearerToken) {
+      const profile = await getServerAccountProfile();
+      if (!profile) {
+        throw new ApiException("Bạn cần đăng nhập để xem dữ liệu công việc.", 401);
+      }
+      return profileToAccess(profile);
+    }
+
     const authUserId = await resolveAuthUserId(supabase);
     if (!authUserId) {
       throw new ApiException("Bạn cần đăng nhập để xem dữ liệu công việc.", 401);
@@ -61,6 +126,19 @@ export async function requireRequestAccount(
       role: data.role as AccountRole,
     };
   });
+}
+
+/**
+ * Đọc hồ sơ `tai_khoan` đầy đủ cho layout dashboard (SSR seed).
+ * Trả `null` khi chưa đăng nhập / tài khoản không hợp lệ thay vì ném lỗi.
+ */
+export async function getRequestAccountProfile(
+  supabase: ApiSupabaseClient
+): Promise<RequestAccountProfile | null> {
+  if (!supabase.bearerToken) {
+    return getServerAccountProfile();
+  }
+  return fetchAccountProfile(supabase);
 }
 
 async function hasRelation(

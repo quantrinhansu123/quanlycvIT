@@ -63,7 +63,7 @@ export const projectService = {
     page: number,
     pageSize: number,
     managerIds?: string[],
-    options?: { signal?: AbortSignal }
+    options?: { signal?: AbortSignal; lite?: "dashboard" }
   ): Promise<ProjectPage> {
     const params = new URLSearchParams();
     if (search?.trim()) params.set("q", search.trim());
@@ -72,6 +72,7 @@ export const projectService = {
     }
     params.set("page", String(page));
     params.set("pageSize", String(pageSize));
+    if (options?.lite) params.set("lite", options.lite);
     return apiClient.get<ProjectPage>(`/projects?${params.toString()}`, {
       signal: options?.signal,
     });

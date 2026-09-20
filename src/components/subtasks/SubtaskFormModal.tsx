@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Plus,
   Check,
   ChevronDown,
-  Plus,
   Search,
   Trash2,
   X,
@@ -12,6 +12,7 @@ import {
 import type {
   Subtask,
   SubtaskInput,
+  SubtaskIssueEntry,
   SubtaskUpdateEntry,
   TaskFileAttachment,
   TaskLinkAttachment,
@@ -72,13 +73,16 @@ interface FormState {
   links: TaskLinkAttachment[];
   images: string[];
   updates: UpdateEntryFormState[];
+  issues: SubtaskIssueEntry[];
 }
 
 /** Phần của FormState lưu được vào bản nháp (GĐ7) — loại `files`/`links`/`images`. */
 type SubtaskDraftData = Pick<
   FormState,
-  "title" | "description" | "workTaskId" | "assigneeIds" | "testerId" | "status" | "priority" | "startDate" | "dueDate" | "progress" | "tagsText"
+  "title" | "description" | "workTaskId" | "assigneeIds" | "testerId" | "status" | "priority" | "startDate" | "dueDate" | "progress" | "tagsText" | "issues"
 >;
+
+const MAX_ISSUE_ROWS = 50;
 
 interface PendingTaskImage {
   id: string;
@@ -167,6 +171,9 @@ function buildInitialState(
         ...entry,
         description: entry.description ?? "",
       })),
+      issues: subtask.issues.length > 0
+        ? subtask.issues.map((entry) => ({ ...entry }))
+        : [{ id: crypto.randomUUID(), problem: "", solution: "" }],
     };
   }
   const workTaskId = defaultWorkTaskId ?? workTasks[0]?.id ?? "";
@@ -187,6 +194,7 @@ function buildInitialState(
     links: [],
     images: [],
     updates: [],
+    issues: [{ id: crypto.randomUUID(), problem: "", solution: "" }],
   };
 }
 
@@ -362,7 +370,7 @@ export function SubtaskFormModal({
   const [form, setForm] = useState<FormState>(() =>
     buildInitialState(subtask, workTasks, defaultWorkTaskId)
   );
-  const [selectedUpdateId, setSelectedUpdateId] = useState("initial");
+  const [formTab, setFormTab] = useState<"info" | "issues" | "attachments">("info");
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -372,12 +380,6 @@ export function SubtaskFormModal({
   const [pendingFiles, setPendingFiles] = useState<PendingTaskFile[]>([]);
   const [fileError, setFileError] = useState("");
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
-  const [entryPendingImages, setEntryPendingImages] = useState<Record<string, PendingTaskImage[]>>({});
-  const [entryPendingFiles, setEntryPendingFiles] = useState<Record<string, PendingTaskFile[]>>({});
-  const [entryImageErrors, setEntryImageErrors] = useState<Record<string, string>>({});
-  const [entryFileErrors, setEntryFileErrors] = useState<Record<string, string>>({});
-  const [entryLinkErrors, setEntryLinkErrors] = useState<Record<string, string>>({});
-  const entryPendingImagesRef = useRef<Record<string, PendingTaskImage[]>>({});
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -403,6 +405,7 @@ export function SubtaskFormModal({
       dueDate: form.dueDate,
       progress: form.progress,
       tagsText: form.tagsText,
+      issues: form.issues,
     });
   }, [
     form.title,
@@ -416,6 +419,7 @@ export function SubtaskFormModal({
     form.dueDate,
     form.progress,
     form.tagsText,
+    form.issues,
     scheduleSave,
   ]);
 
@@ -423,17 +427,10 @@ export function SubtaskFormModal({
     pendingImagesRef.current = pendingImages;
   }, [pendingImages]);
 
-  useEffect(() => {
-    entryPendingImagesRef.current = entryPendingImages;
-  }, [entryPendingImages]);
-
   useEffect(
     () => () => {
       for (const image of pendingImagesRef.current) {
         URL.revokeObjectURL(image.previewUrl);
-      }
-      for (const images of Object.values(entryPendingImagesRef.current)) {
-        for (const image of images) URL.revokeObjectURL(image.previewUrl);
       }
     },
     []
@@ -589,106 +586,6 @@ export function SubtaskFormModal({
     setPendingFiles((current) => current.map((file) => file.id === id ? { ...file, ...patch } : file));
   }
 
-  function updateEntry(id: string, updater: (entry: UpdateEntryFormState) => UpdateEntryFormState) {
-    setForm((current) => ({
-      ...current,
-      updates: current.updates.map((entry) => entry.id === id ? updater(entry) : entry),
-    }));
-  }
-
-  function addUpdateEntry() {
-    const id = crypto.randomUUID();
-    setForm((current) => ({
-      ...current,
-      updates: [...current.updates, {
-        id,
-        createdAt: new Date().toISOString(),
-        description: "",
-        files: [],
-        links: [],
-        images: [],
-      }],
-    }));
-    setSelectedUpdateId(id);
-  }
-
-  function removeUpdateEntry(id: string) {
-    setSelectedUpdateId("initial");
-    setForm((current) => ({ ...current, updates: current.updates.filter((entry) => entry.id !== id) }));
-    setEntryPendingImages((current) => {
-      for (const image of current[id] ?? []) URL.revokeObjectURL(image.previewUrl);
-      const next = { ...current };
-      delete next[id];
-      return next;
-    });
-    setEntryPendingFiles((current) => {
-      const next = { ...current };
-      delete next[id];
-      return next;
-    });
-  }
-
-  function handleEntryImageSelection(id: string, files: FileList | File[] | null) {
-    if (!files?.length) return;
-    const entry = form.updates.find((item) => item.id === id);
-    if (!entry) return;
-    const availableSlots = MAX_TASK_IMAGES - entry.images.length - (entryPendingImages[id]?.length ?? 0);
-    if (availableSlots <= 0) {
-      setEntryImageErrors((current) => ({ ...current, [id]: `Mỗi lần chỉ được lưu tối đa ${MAX_TASK_IMAGES} ảnh.` }));
-      return;
-    }
-    const selected = Array.from(files);
-    const invalid = selected.find((file) => !ALLOWED_TASK_IMAGE_TYPES.has(file.type));
-    if (invalid) {
-      setEntryImageErrors((current) => ({ ...current, [id]: "Chỉ hỗ trợ ảnh JPG, PNG, WEBP hoặc AVIF." }));
-      return;
-    }
-    const oversized = selected.find((file) => file.size === 0 || file.size > MAX_TASK_IMAGE_SIZE);
-    if (oversized) {
-      setEntryImageErrors((current) => ({ ...current, [id]: `Ảnh “${oversized.name}” phải có dung lượng tối đa 10 MB.` }));
-      return;
-    }
-    const additions = selected.slice(0, availableSlots).map((file) => ({
-      id: crypto.randomUUID(), file, previewUrl: URL.createObjectURL(file),
-    }));
-    setEntryPendingImages((current) => ({ ...current, [id]: [...(current[id] ?? []), ...additions] }));
-    setEntryImageErrors((current) => ({
-      ...current,
-      [id]: selected.length > availableSlots ? `Chỉ thêm ${availableSlots} ảnh để không vượt quá giới hạn.` : "",
-    }));
-  }
-
-  function handleEntryFileSelection(id: string, files: FileList | null) {
-    if (!files?.length) return;
-    const entry = form.updates.find((item) => item.id === id);
-    if (!entry) return;
-    const availableSlots = MAX_TASK_FILES - entry.files.length - (entryPendingFiles[id]?.length ?? 0);
-    if (availableSlots <= 0) {
-      setEntryFileErrors((current) => ({ ...current, [id]: `Mỗi lần chỉ được đính kèm tối đa ${MAX_TASK_FILES} tệp.` }));
-      return;
-    }
-    const selected = Array.from(files);
-    const oversized = selected.find((file) => file.size === 0 || file.size > MAX_TASK_FILE_SIZE);
-    if (oversized) {
-      setEntryFileErrors((current) => ({ ...current, [id]: `Tệp “${oversized.name}” phải có dung lượng tối đa 20 MB.` }));
-      return;
-    }
-    const additions = selected.slice(0, availableSlots).map((file) => ({ id: crypto.randomUUID(), file }));
-    setEntryPendingFiles((current) => ({ ...current, [id]: [...(current[id] ?? []), ...additions] }));
-    setEntryFileErrors((current) => ({
-      ...current,
-      [id]: selected.length > availableSlots ? `Chỉ thêm ${availableSlots} tệp để không vượt quá giới hạn.` : "",
-    }));
-  }
-
-  function removeEntryPendingImage(id: string, imageId: string) {
-    setEntryPendingImages((current) => {
-      const target = (current[id] ?? []).find((image) => image.id === imageId);
-      if (target) URL.revokeObjectURL(target.previewUrl);
-      return { ...current, [id]: (current[id] ?? []).filter((image) => image.id !== imageId) };
-    });
-  }
-
   function normalizeLinks(links: TaskLinkAttachment[]): TaskLinkAttachment[] {
     return links.map((link) => ({
       label: link.label?.trim() || undefined,
@@ -753,14 +650,11 @@ export function SubtaskFormModal({
     if (invalidLink) {
       nextErrors.links = `Liên kết “${invalidLink.url}” không hợp lệ.`;
     }
-    const nextEntryLinkErrors: Record<string, string> = {};
-    for (const entry of form.updates) {
-      const invalidEntryLink = normalizeLinks(entry.links).find((link) => !isValidHttpUrl(link.url));
-      if (invalidEntryLink) nextEntryLinkErrors[entry.id] = `Liên kết “${invalidEntryLink.url}” không hợp lệ.`;
-    }
-    setEntryLinkErrors(nextEntryLinkErrors);
     setErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0 && Object.keys(nextEntryLinkErrors).length === 0;
+    const keys = Object.keys(nextErrors);
+    if (keys.includes("links")) setFormTab("attachments");
+    else if (keys.length > 0) setFormTab("info");
+    return keys.length === 0;
   }
 
   async function handleSubmit(event: React.FormEvent) {
@@ -772,12 +666,6 @@ export function SubtaskFormModal({
     try {
       const uploadedImages: string[] = [];
       const uploadedFiles: TaskFileAttachment[] = [];
-      const entryUploadedImages: Record<string, string[]> = Object.fromEntries(
-        form.updates.map((entry) => [entry.id, []])
-      );
-      const entryUploadedFiles: Record<string, TaskFileAttachment[]> = Object.fromEntries(
-        form.updates.map((entry) => [entry.id, []])
-      );
       const uploadResult = await runUploadBatch([
         ...pendingImages.map((image) => ({
           id: image.id,
@@ -790,24 +678,6 @@ export function SubtaskFormModal({
             uploadedFiles.push({ ...uploaded, description: pending.description?.trim() || undefined });
           },
         })),
-        ...form.updates.flatMap((entry) => [
-          ...(entryPendingImages[entry.id] ?? []).map((image) => ({
-            id: image.id,
-            upload: async () => {
-              entryUploadedImages[entry.id].push(await subtaskService.uploadImage(image.file));
-            },
-          })),
-          ...(entryPendingFiles[entry.id] ?? []).map((pending) => ({
-            id: pending.id,
-            upload: async () => {
-              const uploaded = await subtaskService.uploadFile(pending.file);
-              entryUploadedFiles[entry.id].push({
-                ...uploaded,
-                description: pending.description?.trim() || undefined,
-              });
-            },
-          })),
-        ]),
       ]);
       const uploadedIds = new Set(uploadResult.succeededIds);
       if (uploadedImages.length || uploadedFiles.length) {
@@ -823,26 +693,6 @@ export function SubtaskFormModal({
         }));
         setPendingFiles((current) => current.filter((item) => !uploadedIds.has(item.id)));
       }
-      setEntryPendingImages((current) => Object.fromEntries(
-        Object.entries(current).map(([entryId, images]) => [entryId, images.filter((image) => {
-          if (!uploadedIds.has(image.id)) return true;
-          URL.revokeObjectURL(image.previewUrl);
-          return false;
-        })])
-      ));
-      setEntryPendingFiles((current) => Object.fromEntries(
-        Object.entries(current).map(([entryId, files]) => [entryId, files.filter((file) => !uploadedIds.has(file.id))])
-      ));
-      if (form.updates.some((entry) => entryUploadedImages[entry.id].length || entryUploadedFiles[entry.id].length)) {
-        setForm((current) => ({
-          ...current,
-          updates: current.updates.map((entry) => ({
-            ...entry,
-            images: [...entry.images, ...(entryUploadedImages[entry.id] ?? [])],
-            files: [...entry.files, ...(entryUploadedFiles[entry.id] ?? [])],
-          })),
-        }));
-      }
       if (uploadResult.failures.length) {
         throw new Error(`Không thể tải ${uploadResult.failures.length} tệp. Các tệp đã tải xong được giữ lại; bấm Lưu để thử lại tệp lỗi.`);
       }
@@ -850,9 +700,9 @@ export function SubtaskFormModal({
         id: entry.id,
         createdAt: entry.createdAt,
         description: entry.description.trim() || undefined,
-        files: [...entry.files, ...entryUploadedFiles[entry.id]],
+        files: entry.files,
         links: normalizeLinks(entry.links),
-        images: [...entry.images, ...entryUploadedImages[entry.id]],
+        images: entry.images,
       })).filter((entry) =>
         Boolean(entry.description || entry.files.length || entry.links.length || entry.images.length)
       );
@@ -875,6 +725,13 @@ export function SubtaskFormModal({
         links: normalizedLinks(),
         images: [...form.images, ...uploadedImages],
         updates,
+        issues: form.issues
+          .map((entry) => ({
+            id: entry.id,
+            problem: entry.problem.trim(),
+            solution: entry.solution.trim(),
+          }))
+          .filter((entry) => entry.problem || entry.solution),
       };
       const saved = mode === "edit" && subtask
         ? await subtaskService.updateSubtask(subtask.id, input)
@@ -925,6 +782,61 @@ export function SubtaskFormModal({
           </button>
         </div>
 
+        <div className="flex shrink-0 gap-1 border-b border-gray-100 px-6" role="tablist" aria-label="Phần form task">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={formTab === "info"}
+            onClick={() => setFormTab("info")}
+            className={cn(
+              "relative -mb-px border-b-2 px-3 py-2.5 text-sm font-semibold transition",
+              formTab === "info"
+                ? "border-brand-600 text-brand-700"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            )}
+          >
+            Thông tin
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={formTab === "issues"}
+            onClick={() => setFormTab("issues")}
+            className={cn(
+              "relative -mb-px border-b-2 px-3 py-2.5 text-sm font-semibold transition",
+              formTab === "issues"
+                ? "border-brand-600 text-brand-700"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            )}
+          >
+            Vấn đề
+            {form.issues.some((entry) => entry.problem.trim() || entry.solution.trim()) && (
+              <span className="ml-1.5 rounded-full bg-brand-50 px-1.5 py-0.5 text-[11px] font-bold text-brand-700">
+                {form.issues.filter((entry) => entry.problem.trim() || entry.solution.trim()).length}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={formTab === "attachments"}
+            onClick={() => setFormTab("attachments")}
+            className={cn(
+              "relative -mb-px border-b-2 px-3 py-2.5 text-sm font-semibold transition",
+              formTab === "attachments"
+                ? "border-brand-600 text-brand-700"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            )}
+          >
+            Đính kèm
+            {(form.files.length + pendingFiles.length + form.links.length + form.images.length + pendingImages.length) > 0 && (
+              <span className="ml-1.5 rounded-full bg-brand-50 px-1.5 py-0.5 text-[11px] font-bold text-brand-700">
+                {form.files.length + pendingFiles.length + form.links.length + form.images.length + pendingImages.length}
+              </span>
+            )}
+          </button>
+        </div>
+
         <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
           {draft && !draftBannerDismissed && (
             <FormDraftBanner
@@ -941,6 +853,8 @@ export function SubtaskFormModal({
             />
           )}
 
+          {formTab === "info" ? (
+            <div className="space-y-5" role="tabpanel">
           {(workTasks.length === 0 || members.length === 0) && (
             <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
               {workTasks.length === 0
@@ -966,151 +880,21 @@ export function SubtaskFormModal({
             {errors.title && <p className="mt-1 text-xs text-rose-500">{errors.title}</p>}
           </div>
 
-          <section className="space-y-4 rounded-xl border border-gray-200 bg-gray-50/60 p-4">
-            <div>
-              <span className="mb-2 block text-sm font-semibold text-gray-700">Chọn lần</span>
-              <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Chọn lần mô tả và đính kèm Task">
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={selectedUpdateId === "initial"}
-                  onClick={() => setSelectedUpdateId("initial")}
-                  className={cn(
-                    "h-9 rounded-lg border px-3 text-sm font-semibold transition",
-                    selectedUpdateId === "initial"
-                      ? "border-brand-500 bg-brand-50 text-brand-700"
-                      : "border-gray-200 bg-white text-gray-600 hover:border-brand-300 hover:text-brand-600"
-                  )}
-                >
-                  Lần 1
-                </button>
-                {form.updates.map((entry, index) => (
-                  <button
-                    key={entry.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={selectedUpdateId === entry.id}
-                    onClick={() => setSelectedUpdateId(entry.id)}
-                    className={cn(
-                      "h-9 rounded-lg border px-3 text-sm font-semibold transition",
-                      selectedUpdateId === entry.id
-                        ? "border-brand-500 bg-brand-50 text-brand-700"
-                        : "border-gray-200 bg-white text-gray-600 hover:border-brand-300 hover:text-brand-600"
-                    )}
-                  >
-                    Lần {index + 2}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={addUpdateEntry}
-                  disabled={submitting || form.updates.length >= 20}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-dashed border-gray-300 bg-white px-3 text-sm font-semibold text-gray-600 transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600 disabled:opacity-50"
-                >
-                  <Plus className="h-4 w-4" />
-                  Thêm lần
-                </button>
-              </div>
-              <p className="mt-2 text-xs text-gray-400">Mô tả và đính kèm được lưu riêng theo lần đang chọn.</p>
-            </div>
-
-            {selectedUpdateId === "initial" ? (
-              <div className="space-y-4" role="tabpanel">
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Mô tả Task — Lần 1</label>
-                  <textarea
-                    ref={descriptionRef}
-                    value={form.description}
-                    onChange={(event) => {
-                      setForm((prev) => ({ ...prev, description: event.target.value }));
-                      resizeDescriptionTextarea(event.target);
-                    }}
-                    placeholder="Chi tiết yêu cầu task..."
-                    rows={3}
-                    style={{ maxHeight: DESCRIPTION_MAX_HEIGHT }}
-                    className="w-full resize-none overflow-y-auto rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
-                  />
-                </div>
-                <TaskAttachmentFields
-                  label="Đính kèm — Lần 1"
-                  entityLabel="Task"
-                  files={form.files}
-                  pendingFiles={pendingFiles}
-                  links={form.links}
-                  images={form.images}
-                  pendingImages={pendingImages}
-                  maxFiles={MAX_TASK_FILES}
-                  maxLinks={MAX_TASK_LINKS}
-                  maxImages={MAX_TASK_IMAGES}
-                  submitting={submitting}
-                  fileError={fileError}
-                  linkError={errors.links}
-                  imageError={imageError}
-                  onSelectFiles={handleFileSelection}
-                  onSelectImages={handleImageSelection}
-                  onAddLink={addLinkRow}
-                  onUpdateLink={updateLinkRow}
-                  onRemoveLink={removeLinkRow}
-                  onRemoveSavedFile={removeSavedFile}
-                  onRemovePendingFile={removePendingFile}
-                  onUpdateSavedFile={updateSavedFile}
-                  onUpdatePendingFile={updatePendingFile}
-                  onRemoveSavedImage={removeSavedImage}
-                  onRemovePendingImage={removePendingImage}
-                />
-              </div>
-            ) : form.updates.map((entry, index) => entry.id === selectedUpdateId ? (
-              <div key={entry.id} className="space-y-4" role="tabpanel">
-                <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-gray-700">Mô tả Task — Lần {index + 2}</label>
-                  <button
-                    type="button"
-                    onClick={() => removeUpdateEntry(entry.id)}
-                    disabled={submitting}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-gray-400 hover:bg-rose-50 hover:text-rose-600"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    Xóa lần
-                  </button>
-                </div>
-                <textarea
-                  value={entry.description}
-                  onChange={(event) => updateEntry(entry.id, (current) => ({ ...current, description: event.target.value }))}
-                  placeholder="Nội dung bổ sung..."
-                  rows={3}
-                  style={{ maxHeight: DESCRIPTION_MAX_HEIGHT }}
-                  className="w-full resize-none overflow-y-auto rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
-                />
-                <TaskAttachmentFields
-                  label={`Đính kèm — Lần ${index + 2}`}
-                  entityLabel="Task"
-                  files={entry.files}
-                  pendingFiles={entryPendingFiles[entry.id] ?? []}
-                  links={entry.links}
-                  images={entry.images}
-                  pendingImages={entryPendingImages[entry.id] ?? []}
-                  maxFiles={MAX_TASK_FILES}
-                  maxLinks={MAX_TASK_LINKS}
-                  maxImages={MAX_TASK_IMAGES}
-                  submitting={submitting}
-                  fileError={entryFileErrors[entry.id]}
-                  linkError={entryLinkErrors[entry.id]}
-                  imageError={entryImageErrors[entry.id]}
-                  onSelectFiles={(files) => handleEntryFileSelection(entry.id, files)}
-                  onSelectImages={(files) => handleEntryImageSelection(entry.id, files)}
-                  onAddLink={() => updateEntry(entry.id, (current) => ({ ...current, links: [...current.links, { label: "", url: "" }] }))}
-                  onUpdateLink={(rowIndex, linkPatch) => updateEntry(entry.id, (current) => ({ ...current, links: current.links.map((link, i) => i === rowIndex ? { ...link, ...linkPatch } : link) }))}
-                  onRemoveLink={(rowIndex) => updateEntry(entry.id, (current) => ({ ...current, links: current.links.filter((_, i) => i !== rowIndex) }))}
-                  onRemoveSavedFile={(url) => updateEntry(entry.id, (current) => ({ ...current, files: current.files.filter((file) => file.url !== url) }))}
-                  onRemovePendingFile={(fileId) => setEntryPendingFiles((current) => ({ ...current, [entry.id]: (current[entry.id] ?? []).filter((file) => file.id !== fileId) }))}
-                  onUpdateSavedFile={(url, filePatch) => updateEntry(entry.id, (current) => ({ ...current, files: current.files.map((file) => file.url === url ? { ...file, ...filePatch } : file) }))}
-                  onUpdatePendingFile={(fileId, filePatch) => setEntryPendingFiles((current) => ({ ...current, [entry.id]: (current[entry.id] ?? []).map((file) => file.id === fileId ? { ...file, ...filePatch } : file) }))}
-                  onRemoveSavedImage={(url) => updateEntry(entry.id, (current) => ({ ...current, images: current.images.filter((image) => image !== url) }))}
-                  onRemovePendingImage={(imageId) => removeEntryPendingImage(entry.id, imageId)}
-                />
-              </div>
-            ) : null)}
-          </section>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">Mô tả Task</label>
+            <textarea
+              ref={descriptionRef}
+              value={form.description}
+              onChange={(event) => {
+                setForm((prev) => ({ ...prev, description: event.target.value }));
+                resizeDescriptionTextarea(event.target);
+              }}
+              placeholder="Chi tiết yêu cầu task..."
+              rows={3}
+              style={{ maxHeight: DESCRIPTION_MAX_HEIGHT }}
+              className="w-full resize-none overflow-y-auto rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+            />
+          </div>
 
           <div>
             <label className="mb-1.5 block text-sm font-medium text-gray-700">
@@ -1258,6 +1042,132 @@ export function SubtaskFormModal({
               className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
             />
           </div>
+            </div>
+          ) : formTab === "issues" ? (
+            <div className="space-y-3" role="tabpanel" aria-label="Vấn đề và giải pháp">
+              <div className="overflow-hidden rounded-xl border border-gray-200">
+                <table className="w-full border-collapse text-sm">
+                  <thead className="bg-gray-50">
+                    <tr className="text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      <th className="w-10 px-3 py-2.5">#</th>
+                      <th className="px-3 py-2.5">Vấn đề</th>
+                      <th className="px-3 py-2.5">Giải pháp</th>
+                      <th className="w-12 px-2 py-2.5" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 bg-white">
+                    {form.issues.map((entry, index) => (
+                      <tr key={entry.id}>
+                        <td className="px-3 py-2 align-top text-xs text-gray-400">{index + 1}</td>
+                        <td className="px-3 py-2 align-top">
+                          <textarea
+                            value={entry.problem}
+                            onChange={(event) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                issues: prev.issues.map((item) =>
+                                  item.id === entry.id ? { ...item, problem: event.target.value } : item
+                                ),
+                              }))
+                            }
+                            placeholder="Mô tả vấn đề..."
+                            rows={2}
+                            className="w-full resize-y rounded-lg border border-gray-200 px-2.5 py-2 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+                          />
+                        </td>
+                        <td className="px-3 py-2 align-top">
+                          <textarea
+                            value={entry.solution}
+                            onChange={(event) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                issues: prev.issues.map((item) =>
+                                  item.id === entry.id ? { ...item, solution: event.target.value } : item
+                                ),
+                              }))
+                            }
+                            placeholder="Giải pháp xử lý..."
+                            rows={2}
+                            className="w-full resize-y rounded-lg border border-gray-200 px-2.5 py-2 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+                          />
+                        </td>
+                        <td className="px-2 py-2 align-top">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setForm((prev) => ({
+                                ...prev,
+                                issues:
+                                  prev.issues.length <= 1
+                                    ? [{ id: crypto.randomUUID(), problem: "", solution: "" }]
+                                    : prev.issues.filter((item) => item.id !== entry.id),
+                              }))
+                            }
+                            disabled={submitting}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+                            aria-label={`Xóa dòng vấn đề ${index + 1}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  setForm((prev) =>
+                    prev.issues.length >= MAX_ISSUE_ROWS
+                      ? prev
+                      : {
+                          ...prev,
+                          issues: [
+                            ...prev.issues,
+                            { id: crypto.randomUUID(), problem: "", solution: "" },
+                          ],
+                        }
+                  )
+                }
+                disabled={submitting || form.issues.length >= MAX_ISSUE_ROWS}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-dashed border-gray-300 bg-white px-3 text-sm font-semibold text-gray-600 transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600 disabled:opacity-50"
+              >
+                <Plus className="h-4 w-4" />
+                Thêm dòng
+              </button>
+            </div>
+          ) : (
+            <div role="tabpanel" aria-label="Đính kèm task">
+              <TaskAttachmentFields
+                label="Đính kèm task"
+                entityLabel="Task"
+                files={form.files}
+                pendingFiles={pendingFiles}
+                links={form.links}
+                images={form.images}
+                pendingImages={pendingImages}
+                maxFiles={MAX_TASK_FILES}
+                maxLinks={MAX_TASK_LINKS}
+                maxImages={MAX_TASK_IMAGES}
+                submitting={submitting}
+                fileError={fileError}
+                linkError={errors.links}
+                imageError={imageError}
+                onSelectFiles={handleFileSelection}
+                onSelectImages={handleImageSelection}
+                onAddLink={addLinkRow}
+                onUpdateLink={updateLinkRow}
+                onRemoveLink={removeLinkRow}
+                onRemoveSavedFile={removeSavedFile}
+                onRemovePendingFile={removePendingFile}
+                onUpdateSavedFile={updateSavedFile}
+                onUpdatePendingFile={updatePendingFile}
+                onRemoveSavedImage={removeSavedImage}
+                onRemovePendingImage={removePendingImage}
+              />
+            </div>
+          )}
 
           {submitError && <p className="text-sm text-rose-500">{submitError}</p>}
         </div>

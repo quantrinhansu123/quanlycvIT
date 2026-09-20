@@ -1,6 +1,7 @@
 import { ApiException } from "@/lib/api/response";
 import type { ProjectColor, ProjectInput, ProjectStepConfig } from "@/types/project";
-import type { SubtaskInput, SubtaskPromptItem, SubtaskUpdateEntry, TaskFileAttachment, TaskLinkAttachment } from "@/types/subtask";
+import { DEFAULT_PROJECT_STEPS } from "@/types/project";
+import type { SubtaskInput, SubtaskIssueEntry, SubtaskPromptItem, SubtaskUpdateEntry, TaskFileAttachment, TaskLinkAttachment } from "@/types/subtask";
 import type { TaskPriority, TaskStatus, WorkTaskInput } from "@/types/task";
 import type {
   DutyChecklistTemplateInput,
@@ -177,6 +178,31 @@ function subtaskUpdateEntries(body: Record<string, unknown>): SubtaskUpdateEntry
   });
 }
 
+/** Các dòng vấn đề / giải pháp gửi kèm khi tạo/sửa Task. */
+function subtaskIssueEntries(body: Record<string, unknown>): SubtaskIssueEntry[] {
+  const value = body.issues;
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    throw new ApiException("Danh sách vấn đề phải là một mảng.", 400);
+  }
+  if (value.length > 50) {
+    throw new ApiException("Mỗi Task chỉ được có tối đa 50 dòng vấn đề.", 400);
+  }
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        throw new ApiException("Dòng vấn đề không hợp lệ.", 400);
+      }
+      const entry = item as Record<string, unknown>;
+      const id =
+        typeof entry.id === "string" && entry.id.trim() ? entry.id.trim() : crypto.randomUUID();
+      const problem = typeof entry.problem === "string" ? entry.problem.trim() : "";
+      const solution = typeof entry.solution === "string" ? entry.solution.trim() : "";
+      return { id, problem, solution };
+    })
+    .filter((entry) => entry.problem || entry.solution);
+}
+
 export function parseSubtaskPromptItems(body: Record<string, unknown>): SubtaskPromptItem[] {
   const value = body.items;
   if (!Array.isArray(value)) {
@@ -273,30 +299,9 @@ function validateDateRange(startDate: string, endDate: string): void {
   }
 }
 
-function projectSteps(body: Record<string, unknown>): ProjectStepConfig[] {
-  const value = body.steps;
-  if (!Array.isArray(value) || value.length === 0) {
-    throw new ApiException("Dự án phải có cấu hình bước trạng thái.", 400);
-  }
-
-  const steps = value.map((item) => {
-    if (
-      !item ||
-      typeof item !== "object" ||
-      Array.isArray(item) ||
-      typeof (item as Record<string, unknown>).key !== "string" ||
-      typeof (item as Record<string, unknown>).label !== "string" ||
-      typeof (item as Record<string, unknown>).enabled !== "boolean"
-    ) {
-      throw new ApiException("Cấu hình bước trạng thái không hợp lệ.", 400);
-    }
-    return item as ProjectStepConfig;
-  });
-
-  if (!steps.some((step) => step.enabled)) {
-    throw new ApiException("Dự án phải bật ít nhất một bước trạng thái.", 400);
-  }
-  return steps;
+function projectSteps(_body: Record<string, unknown>): ProjectStepConfig[] {
+  // Form không còn cấu hình bước — luôn bật đủ trạng thái chuẩn.
+  return DEFAULT_PROJECT_STEPS;
 }
 
 export function parseProjectInput(body: Record<string, unknown>): ProjectInput {
@@ -556,5 +561,6 @@ export function parseSubtaskInput(body: Record<string, unknown>): SubtaskInput {
     links: linkAttachments(body),
     images: imageUrls(body),
     updates: subtaskUpdateEntries(body),
+    issues: subtaskIssueEntries(body),
   };
 }

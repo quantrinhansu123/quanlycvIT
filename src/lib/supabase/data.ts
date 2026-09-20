@@ -14,6 +14,7 @@ import {
 import type {
   Subtask,
   SubtaskInput,
+  SubtaskIssueEntry,
   SubtaskPromptItem,
   SubtaskReport,
   SubtaskTestHistoryEntry,
@@ -152,6 +153,7 @@ interface SubtaskRow {
   tep_dinh_kem?: TaskFileAttachment[] | null;
   lien_ket_dinh_kem?: TaskLinkAttachment[] | null;
   cap_nhat_bo_sung?: SubtaskUpdateEntry[] | null;
+  van_de_giai_phap?: unknown;
   task_tien_de_id?: string | null;
   cong_viec_id: string;
   nguoi_tao_id: string | null;
@@ -266,6 +268,8 @@ const PROJECT_FORM_SELECT =
   `du_an_quan_ly(tai_khoan_id,la_chinh,tai_khoan(${ACCOUNT_SELECT})),` +
   `du_an_thanh_vien(tai_khoan_id,tai_khoan(${ACCOUNT_SELECT}))`;
 const PROJECT_OPTION_SELECT = "id,ma_da,ten_da";
+/** Dashboard chỉ cần mã/tên/ngày — bỏ mô tả, đính kèm, thành viên và embed công việc. */
+const PROJECT_DASHBOARD_SELECT = "id,ma_da,ten_da,hop_mau,ngay_bd,ngay_kt";
 const PROJECT_DIRECTORY_SELECT =
   "id,ma_da,ten_da,hop_mau,ngay_bd,ngay_kt,nguoi_ql_id," +
   `legacy_manager:tai_khoan!nguoi_ql_id(${ACCOUNT_SELECT}),` +
@@ -273,6 +277,12 @@ const PROJECT_DIRECTORY_SELECT =
   `du_an_thanh_vien(tai_khoan_id,tai_khoan(${ACCOUNT_SELECT}))`;
 const WORK_TASK_SELECT =
   "id,ten_cv,mo_ta,created_at,updated_at,du_an_id,nguoi_phu_trach_id,trang_thai,uu_tien,ngay_bat_dau,ngay_hoan_thanh,tien_do_thuc_te,nhan_tag,cong_viec_tien_de_id,hinh_anh,tep_dinh_kem,lien_ket_dinh_kem," +
+  `legacy_assignee:tai_khoan!nguoi_phu_trach_id(${ACCOUNT_SELECT}),` +
+  `cong_viec_phu_trach(tai_khoan_id,la_chinh,tai_khoan(${ACCOUNT_SELECT})),` +
+  "task(tien_do_thuc_te,trang_thai)";
+/** Dashboard giữ assignee + tiến độ task con; bỏ mô tả/đính kèm/tag. */
+const WORK_TASK_DASHBOARD_SELECT =
+  "id,ten_cv,created_at,updated_at,du_an_id,nguoi_phu_trach_id,uu_tien,ngay_bat_dau,ngay_hoan_thanh," +
   `legacy_assignee:tai_khoan!nguoi_phu_trach_id(${ACCOUNT_SELECT}),` +
   `cong_viec_phu_trach(tai_khoan_id,la_chinh,tai_khoan(${ACCOUNT_SELECT})),` +
   "task(tien_do_thuc_te,trang_thai)";
@@ -286,8 +296,10 @@ const SUBTASK_SELECT =
   `creator:tai_khoan!nguoi_tao_id(${ACCOUNT_SELECT}),` +
   `tester:tai_khoan!nguoi_test_id(${ACCOUNT_SELECT}),` +
   `task_phu_trach(tai_khoan_id,la_chinh,xac_nhan_luc,tai_khoan(${ACCOUNT_SELECT}))`;
-/** Chi tiết Task cần thêm prompt_items; danh sách bỏ qua để tránh JSON nặng. */
-const SUBTASK_DETAIL_SELECT = `${SUBTASK_SELECT},prompt_items`;
+/** Chi tiết Task cần thêm prompt_items / van_de_giai_phap; danh sách bỏ qua để giảm payload. */
+const SUBTASK_DETAIL_SELECT = `${SUBTASK_SELECT},prompt_items,van_de_giai_phap`;
+/** Fallback khi deployment chưa có cột van_de_giai_phap. */
+const SUBTASK_DETAIL_SELECT_WITHOUT_ISSUES = `${SUBTASK_SELECT},prompt_items`;
 /** Danh sách bảng: bỏ mô tả/đính kèm/cập nhật bổ sung để giảm payload. */
 const SUBTASK_LIST_SELECT =
   "id,ten_task,created_at,updated_at,ngay_bat_dau,ngay_ket_thuc,nguoi_phu_trach_id,nguoi_tao_id,nguoi_test_id,ghi_chu_test,trang_thai,uu_tien,tien_do_thuc_te,nhan_tag,cong_viec_id," +
@@ -546,7 +558,7 @@ function hydrateProjects(rows: ProjectRow[]): Project[] {
       code: row.ma_da,
       name: row.ten_da,
       description: row.mo_ta ?? undefined,
-      color: projectColor(row.hop_mau),
+      color: projectColor(row.hop_mau ?? "purple"),
       steps: projectSteps(row.steps),
       startDate: row.ngay_bd ?? "",
       endDate: row.ngay_kt ?? "",
@@ -800,7 +812,15 @@ export async function listProjectDirectory(
 /** Giống `listProjects` nhưng chỉ tải một trang kết quả. */
 export async function listProjectsPage(
   supabase: ApiSupabaseClient,
-  filters: { search?: string; managerIds?: string[]; participantAccountId?: string; page: number; pageSize: number }
+  filters: {
+    search?: string;
+    managerIds?: string[];
+    participantAccountId?: string;
+    page: number;
+    pageSize: number;
+    /** Bỏ mô tả/đính kèm/thành viên/embed công việc — dùng cho dashboard. */
+    lite?: boolean;
+  }
 ): Promise<PagedResult<Project>> {
   let projectIdsFromManagers: string[] | undefined;
   if (filters.managerIds && filters.managerIds.length > 0) {
@@ -826,7 +846,7 @@ export async function listProjectsPage(
 
   let query = supabase
     .from("du_an")
-    .select(PROJECT_SELECT, { count: "exact" })
+    .select(filters.lite ? PROJECT_DASHBOARD_SELECT : PROJECT_SELECT, { count: "exact" })
     .order("created_at", { ascending: false });
 
   const term = filters.search?.trim();
@@ -1025,8 +1045,8 @@ function hydrateWorkTasks(rows: WorkTaskRow[]): WorkTask[] {
       id: row.id,
       title: row.ten_cv,
       description: row.mo_ta ?? undefined,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
+      createdAt: row.created_at ?? "",
+      updatedAt: row.updated_at ?? "",
       projectId: row.du_an_id,
       assigneeId: primary?.id ?? "",
       assignees: assignees.length > 0 ? assignees : primary ? [primary] : [],
@@ -1165,14 +1185,14 @@ function mapWorkTaskDirectoryItem(raw: unknown): WorkTaskDirectoryItem {
  */
 export async function listWorkTasksPage(
   supabase: ApiSupabaseClient,
-  filters: WorkTaskFilters & { page: number; pageSize: number }
+  filters: WorkTaskFilters & { page: number; pageSize: number; lite?: boolean }
 ): Promise<PagedResult<WorkTask>> {
   const taskIdsFromAssignees = await workTaskIdsForAssignees(supabase, filters.assigneeIds);
   if (taskIdsFromAssignees?.length === 0) return { items: [], total: 0 };
 
   let query = supabase
     .from("cong_viec")
-    .select(WORK_TASK_SELECT, { count: "exact" })
+    .select(filters.lite ? WORK_TASK_DASHBOARD_SELECT : WORK_TASK_SELECT, { count: "exact" })
     .order("created_at", { ascending: false });
 
   if (filters.search?.trim()) {
@@ -1671,6 +1691,7 @@ function hydrateSubtasks(rows: SubtaskRow[]): Subtask[] {
       links: row.lien_ket_dinh_kem ?? [],
       images: row.hinh_anh ?? [],
       updates: row.cap_nhat_bo_sung ?? [],
+      issues: normalizeSubtaskIssueEntries(row.van_de_giai_phap),
       promptItems: row.prompt_items !== undefined
         ? normalizeSubtaskPromptItems(row.prompt_items)
         : [],
@@ -1815,8 +1836,17 @@ export async function getSubtask(
     .eq("id", id)
     .maybeSingle();
 
-  // Deployment chưa có cột prompt_items: fallback select danh sách.
+  // Deployment chưa có cột van_de_giai_phap / prompt_items: fallback từng bước.
   if (detailed.error?.code === "42703" || detailed.error?.code === "PGRST204") {
+    const withoutIssues = await supabase
+      .from("task")
+      .select(SUBTASK_DETAIL_SELECT_WITHOUT_ISSUES)
+      .eq("id", id)
+      .maybeSingle();
+    if (!withoutIssues.error && withoutIssues.data) {
+      const [subtask] = hydrateSubtasks([withoutIssues.data as unknown as SubtaskRow]);
+      return subtask;
+    }
     const fallback = await supabase
       .from("task")
       .select(SUBTASK_SELECT)
@@ -1879,6 +1909,20 @@ function normalizeSubtaskPromptItems(value: unknown): SubtaskPromptItem[] {
   });
 }
 
+function normalizeSubtaskIssueEntries(value: unknown): SubtaskIssueEntry[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const entry = item as Record<string, unknown>;
+    const problem = typeof entry.problem === "string" ? entry.problem.trim() : "";
+    const solution = typeof entry.solution === "string" ? entry.solution.trim() : "";
+    if (!problem && !solution) return [];
+    const id =
+      typeof entry.id === "string" && entry.id.trim() ? entry.id.trim() : crypto.randomUUID();
+    return [{ id, problem, solution }];
+  });
+}
+
 export async function getSubtaskPromptItems(
   supabase: ApiSupabaseClient,
   id: string
@@ -1899,7 +1943,8 @@ function subtaskPayload(
   primaryAccountId: string,
   testerAccountId: string | null,
   progress: number,
-  status: TaskStatus
+  status: TaskStatus,
+  options?: { includeIssues?: boolean }
 ) {
   return {
     ten_task: input.title,
@@ -1916,8 +1961,13 @@ function subtaskPayload(
     tep_dinh_kem: input.files,
     lien_ket_dinh_kem: input.links,
     cap_nhat_bo_sung: input.updates,
+    ...(options?.includeIssues === false ? {} : { van_de_giai_phap: input.issues }),
     cong_viec_id: input.workTaskId,
   };
+}
+
+function isMissingColumnError(error: { code?: string } | null | undefined): boolean {
+  return error?.code === "42703" || error?.code === "PGRST204";
 }
 
 export async function createSubtask(
@@ -1950,9 +2000,27 @@ export async function createSubtask(
     })
     .select(SUBTASK_SELECT)
     .single();
-  throwDatabaseError(error);
-  if (!data) throw new ApiException("Supabase không trả về task vừa tạo.", 500);
-  const subtaskRow = data as unknown as SubtaskRow;
+
+  let insertData = data;
+  let insertError = error;
+  if (isMissingColumnError(insertError)) {
+    const retry = await supabase
+      .from("task")
+      .insert({
+        ...subtaskPayload(input, assigneeIds[0], testerAccountId, 0, "todo", {
+          includeIssues: false,
+        }),
+        nguoi_tao_id: creatorAccountId,
+      })
+      .select(SUBTASK_SELECT)
+      .single();
+    insertData = retry.data;
+    insertError = retry.error;
+  }
+
+  throwDatabaseError(insertError);
+  if (!insertData) throw new ApiException("Supabase không trả về task vừa tạo.", 500);
+  const subtaskRow = insertData as unknown as SubtaskRow;
 
   const subtaskId = subtaskRow.id;
   try {
@@ -2036,8 +2104,31 @@ export async function updateSubtask(
     .eq("id", id)
     .select(SUBTASK_SELECT)
     .maybeSingle();
-  throwDatabaseError(error);
-  if (!data) return null;
+
+  let updateData = data;
+  let updateError = error;
+  if (isMissingColumnError(updateError)) {
+    const retry = await supabase
+      .from("task")
+      .update(
+        subtaskPayload(
+          input,
+          assigneeIds[0],
+          testerAccountId,
+          nextProgress,
+          nextStatus,
+          { includeIssues: false }
+        )
+      )
+      .eq("id", id)
+      .select(SUBTASK_SELECT)
+      .maybeSingle();
+    updateData = retry.data;
+    updateError = retry.error;
+  }
+
+  throwDatabaseError(updateError);
+  if (!updateData) return null;
 
   await syncAssignments(supabase, "task_phu_trach", "task_id", id, assigneeIds);
   return getSubtask(supabase, id);

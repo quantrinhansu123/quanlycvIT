@@ -235,6 +235,7 @@ export function SubtaskDetailView({
         links: value.links,
         images: value.images,
         updates: subtask.updates,
+        issues: subtask.issues,
       });
       if (!updated) throw new Error("Task không tồn tại hoặc đã bị xóa.");
       setSubtask(updated);
@@ -276,6 +277,7 @@ export function SubtaskDetailView({
         updates: subtask.updates.map((entry) =>
           entry.id === updateId ? { ...entry, ...value } : entry
         ),
+        issues: subtask.issues,
       });
       if (!updated) throw new Error("Task không tồn tại hoặc đã bị xóa.");
       setSubtask(updated);
@@ -336,6 +338,7 @@ export function SubtaskDetailView({
         links: subtask.links,
         images: subtask.images,
         updates: subtask.updates,
+        issues: subtask.issues,
         ...patch,
       });
       if (!updated) throw new Error("Task không tồn tại hoặc đã bị xóa.");
@@ -653,6 +656,36 @@ export function SubtaskDetailView({
               subtaskId={subtask.id}
               initialItems={subtask.promptItems}
             />
+
+            {subtask.issues.length > 0 && (
+              <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+                <h2 className="mb-3 text-base font-bold text-gray-900">Vấn đề &amp; giải pháp</h2>
+                <div className="overflow-hidden rounded-xl border border-gray-200">
+                  <table className="w-full border-collapse text-sm">
+                    <thead className="bg-gray-50">
+                      <tr className="text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        <th className="w-10 px-3 py-2.5">#</th>
+                        <th className="px-3 py-2.5">Vấn đề</th>
+                        <th className="px-3 py-2.5">Giải pháp</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {subtask.issues.map((entry, index) => (
+                        <tr key={entry.id}>
+                          <td className="px-3 py-3 align-top text-xs text-gray-400">{index + 1}</td>
+                          <td className="px-3 py-3 align-top whitespace-pre-wrap text-gray-700">
+                            {entry.problem || "—"}
+                          </td>
+                          <td className="px-3 py-3 align-top whitespace-pre-wrap text-gray-700">
+                            {entry.solution || "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
 
             <section className="grid grid-cols-1 gap-5 @3xl/detail:grid-cols-3">
               <Panel

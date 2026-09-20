@@ -1,37 +1,25 @@
-"use client";
+import { createServerSupabaseClient } from "@/lib/supabase/api";
+import { getServerAccountProfile } from "@/lib/supabase/authorization";
+import { DashboardShell } from "./DashboardShell";
+import type { CurrentAccount } from "@/hooks/useCurrentAccount";
 
-import { useState } from "react";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { Header } from "@/components/layout/Header";
-import { MobileMenu } from "@/components/layout/MobileMenu";
-import { FeedbackProvider } from "@/components/ui/FeedbackProvider";
-import { CurrentAccountProvider } from "@/hooks/useCurrentAccount";
-import { SessionDataCacheProvider } from "@/components/providers/SessionDataCacheProvider";
+export default async function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const profile = await getServerAccountProfile();
+  const initialAccount: CurrentAccount | null = profile
+    ? {
+        id: profile.id,
+        name: profile.name,
+        username: profile.username,
+        email: profile.email,
+        role: profile.role,
+        position: profile.position,
+        avatarUrl: profile.avatarUrl,
+      }
+    : null;
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const [collapsed, setCollapsed] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-  return (
-    <CurrentAccountProvider>
-      <SessionDataCacheProvider>
-        <FeedbackProvider>
-          <div className="flex h-dvh w-full max-w-full overflow-hidden overscroll-none bg-gray-50 [contain:inline-size]">
-            <Sidebar collapsed={collapsed} variant="rail" />
-            <MobileMenu open={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} />
-
-            <div className="flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden [contain:inline-size]">
-              <Header
-                onToggleSidebar={() => setCollapsed((prev) => !prev)}
-                onOpenMobileMenu={() => setMobileMenuOpen(true)}
-              />
-              <main className="min-h-0 min-w-0 max-w-full flex-1 overflow-x-clip overflow-y-auto [contain:inline-size]">
-                {children}
-              </main>
-            </div>
-          </div>
-        </FeedbackProvider>
-      </SessionDataCacheProvider>
-    </CurrentAccountProvider>
-  );
+  return <DashboardShell initialAccount={initialAccount}>{children}</DashboardShell>;
 }

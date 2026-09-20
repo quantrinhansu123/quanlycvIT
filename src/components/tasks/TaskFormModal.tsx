@@ -197,6 +197,7 @@ export function TaskFormModal({
   const [form, setForm] = useState<FormState>(() =>
     buildInitialState(task, projects, defaultProjectId, defaultStatus)
   );
+  const [formTab, setFormTab] = useState<"info" | "attachments">("info");
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [isPending, startTransition] = useTransition();
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -504,7 +505,10 @@ export function TaskFormModal({
       nextErrors.links = `Liên kết “${invalidLink.url}” không hợp lệ.`;
     }
     setErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
+    const keys = Object.keys(nextErrors);
+    if (keys.includes("links")) setFormTab("attachments");
+    else if (keys.length > 0) setFormTab("info");
+    return keys.length === 0;
   }
 
   async function handleSubmit(event: React.FormEvent) {
@@ -617,6 +621,42 @@ export function TaskFormModal({
           </button>
         </div>
 
+        <div className="flex shrink-0 gap-1 border-b border-gray-100 px-6" role="tablist" aria-label="Phần form công việc">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={formTab === "info"}
+            onClick={() => setFormTab("info")}
+            className={cn(
+              "relative -mb-px border-b-2 px-3 py-2.5 text-sm font-semibold transition",
+              formTab === "info"
+                ? "border-brand-600 text-brand-700"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            )}
+          >
+            Thông tin
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={formTab === "attachments"}
+            onClick={() => setFormTab("attachments")}
+            className={cn(
+              "relative -mb-px border-b-2 px-3 py-2.5 text-sm font-semibold transition",
+              formTab === "attachments"
+                ? "border-brand-600 text-brand-700"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            )}
+          >
+            Đính kèm
+            {(form.files.length + pendingFiles.length + form.links.length + form.images.length + pendingImages.length) > 0 && (
+              <span className="ml-1.5 rounded-full bg-brand-50 px-1.5 py-0.5 text-[11px] font-bold text-brand-700">
+                {form.files.length + pendingFiles.length + form.links.length + form.images.length + pendingImages.length}
+              </span>
+            )}
+          </button>
+        </div>
+
         <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
           {draft && !draftBannerDismissed && (
             <FormDraftBanner
@@ -633,18 +673,20 @@ export function TaskFormModal({
             />
           )}
 
-          {(projects.length === 0 || members.length === 0) && (
-            <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-              {projects.length === 0
-                ? "Chưa có dự án. Hãy tạo dự án trước khi tạo công việc."
-                : "Chưa có nhân sự đang hoạt động trong Supabase để giao công việc."}
-            </div>
-          )}
+          {formTab === "info" ? (
+            <div className="space-y-5" role="tabpanel" aria-label="Thông tin công việc">
+              {(projects.length === 0 || members.length === 0) && (
+                <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  {projects.length === 0
+                    ? "Chưa có dự án. Hãy tạo dự án trước khi tạo công việc."
+                    : "Chưa có nhân sự đang hoạt động trong Supabase để giao công việc."}
+                </div>
+              )}
 
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-gray-700">
-              Tên công việc <span className="text-rose-500">*</span>
-            </label>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                  Tên công việc <span className="text-rose-500">*</span>
+                </label>
             <input
               type="text"
               value={form.title}
@@ -673,34 +715,6 @@ export function TaskFormModal({
               className="w-full resize-none overflow-y-auto rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
             />
           </div>
-
-          <TaskAttachmentFields
-            label="Đính kèm công việc"
-            entityLabel="công việc"
-            files={form.files}
-            pendingFiles={pendingFiles}
-            links={form.links}
-            images={form.images}
-            pendingImages={pendingImages}
-            maxFiles={MAX_TASK_FILES}
-            maxLinks={MAX_TASK_LINKS}
-            maxImages={MAX_TASK_IMAGES}
-            submitting={isPending}
-            fileError={fileError}
-            linkError={errors.links}
-            imageError={imageError}
-            onSelectFiles={handleFileSelection}
-            onSelectImages={handleImageSelection}
-            onAddLink={addLinkRow}
-            onUpdateLink={updateLinkRow}
-            onRemoveLink={removeLinkRow}
-            onRemoveSavedFile={removeSavedFile}
-            onRemovePendingFile={removePendingFile}
-            onUpdateSavedFile={updateSavedFile}
-            onUpdatePendingFile={updatePendingFile}
-            onRemoveSavedImage={removeSavedImage}
-            onRemovePendingImage={removePendingImage}
-          />
 
           <div>
             <label className="mb-1.5 block text-sm font-medium text-gray-700">
@@ -828,6 +842,38 @@ export function TaskFormModal({
               searchPlaceholder="Nhập tên công việc..."
             />
           </div>
+            </div>
+          ) : (
+            <div role="tabpanel" aria-label="Đính kèm công việc">
+              <TaskAttachmentFields
+                label="Đính kèm công việc"
+                entityLabel="công việc"
+                files={form.files}
+                pendingFiles={pendingFiles}
+                links={form.links}
+                images={form.images}
+                pendingImages={pendingImages}
+                maxFiles={MAX_TASK_FILES}
+                maxLinks={MAX_TASK_LINKS}
+                maxImages={MAX_TASK_IMAGES}
+                submitting={isPending}
+                fileError={fileError}
+                linkError={errors.links}
+                imageError={imageError}
+                onSelectFiles={handleFileSelection}
+                onSelectImages={handleImageSelection}
+                onAddLink={addLinkRow}
+                onUpdateLink={updateLinkRow}
+                onRemoveLink={removeLinkRow}
+                onRemoveSavedFile={removeSavedFile}
+                onRemovePendingFile={removePendingFile}
+                onUpdateSavedFile={updateSavedFile}
+                onUpdatePendingFile={updatePendingFile}
+                onRemoveSavedImage={removeSavedImage}
+                onRemovePendingImage={removePendingImage}
+              />
+            </div>
+          )}
 
           {submitError && <p className="text-sm text-rose-500">{submitError}</p>}
         </div>

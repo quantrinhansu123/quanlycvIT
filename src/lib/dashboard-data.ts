@@ -37,11 +37,13 @@ export async function getDashboardData(): Promise<InitialDashboardData> {
       participantAccountId,
       page: 1,
       pageSize: DASHBOARD_PROJECT_LIMIT,
+      lite: true,
     }),
     listWorkTasksPage(supabase, {
       ...(participantAccountId ? { assigneeIds: [participantAccountId] } : {}),
       page: 1,
       pageSize: DASHBOARD_TASK_LIMIT,
+      lite: true,
     }),
     listDirectory(supabase),
   ]);

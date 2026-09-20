@@ -8,7 +8,7 @@ import type { ProjectDirectoryItem, ProjectMember } from "@/types/project";
 import { Avatar, AvatarStack } from "@/components/ui/Avatar";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { TaskPriorityBadge, TaskStatusBadge, OverdueTag } from "@/components/tasks/TaskBadges";
-import { ActionIconButton } from "@/components/ui/ActionIconButton";
+import { RowActionMenu } from "@/components/ui/RowActionMenu";
 import { IntentPrefetchLink } from "@/components/navigation/IntentPrefetchLink";
 import {
   taskColumnWidths,
@@ -167,28 +167,34 @@ export function TaskTable({
                 {!readOnly && (
                   <td className="sticky right-0 z-[2] border-l border-gray-100 bg-white px-2 py-3 align-top group-hover:bg-gray-50">
                     <div
-                      className="flex items-center gap-1.5"
+                      className="flex justify-start"
                       onClick={(event) => event.stopPropagation()}
                       onKeyDown={(event) => event.stopPropagation()}
                     >
-                      <ActionIconButton
-                        icon={Eye}
-                        label="Xem chi tiết"
-                        onClick={() => router.push(`/quan-ly-cong-viec/danh-sach-cong-viec/${task.id}`)}
-                      />
-                      <ActionIconButton
-                        icon={Pencil}
-                        label="Chỉnh sửa"
-                        tone="warning"
-                        disabled={locked || Boolean(deletingId)}
-                        onClick={() => onEdit(task)}
-                      />
-                      <ActionIconButton
-                        icon={Trash2}
-                        label={deletingId === task.id ? "Đang xóa..." : "Xóa công việc"}
-                        tone="danger"
-                        disabled={Boolean(deletingId)}
-                        onClick={() => onDelete(task)}
+                      <RowActionMenu
+                        label={`Thao tác công việc ${task.title}`}
+                        items={[
+                          {
+                            icon: Eye,
+                            label: "Xem chi tiết",
+                            onClick: () =>
+                              router.push(`/quan-ly-cong-viec/danh-sach-cong-viec/${task.id}`),
+                          },
+                          {
+                            icon: Pencil,
+                            label: "Chỉnh sửa",
+                            tone: "warning",
+                            disabled: locked || Boolean(deletingId),
+                            onClick: () => onEdit(task),
+                          },
+                          {
+                            icon: Trash2,
+                            label: deletingId === task.id ? "Đang xóa..." : "Xóa công việc",
+                            tone: "danger",
+                            disabled: Boolean(deletingId),
+                            onClick: () => onDelete(task),
+                          },
+                        ]}
                       />
                     </div>
                   </td>

@@ -64,7 +64,7 @@ export function SplitViewShell({ listSlot, children, detailOpen = true, detailKe
               ? "hidden"
               : detailCollapsed
                 ? "hidden xl:flex xl:flex-1"
-                : "hidden xl:flex xl:w-[280px] 2xl:w-[320px]"
+                : "hidden xl:flex xl:w-[35%]"
           )}
         >
           {listSlot}
