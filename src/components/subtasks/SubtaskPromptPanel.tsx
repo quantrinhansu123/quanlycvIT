@@ -61,9 +61,22 @@ async function copyToClipboard(value: string): Promise<void> {
 interface SubtaskPromptPanelProps {
   subtaskId: string;
   initialItems: SubtaskPromptItem[];
+  importRequest?: SubtaskPromptImportRequest | null;
+  onImported?: (requestId: string) => void;
 }
 
-export function SubtaskPromptPanel({ subtaskId, initialItems }: SubtaskPromptPanelProps) {
+export interface SubtaskPromptImportRequest {
+  requestId: string;
+  content: string;
+  imageUrls: string[];
+}
+
+export function SubtaskPromptPanel({
+  subtaskId,
+  initialItems,
+  importRequest,
+  onImported,
+}: SubtaskPromptPanelProps) {
   const { notify } = useFeedback();
   const initial = initialItems.length > 0 ? initialItems : [emptyItem(`prompt-empty-${subtaskId}`)];
   const [items, setItems] = useState<SubtaskPromptItem[]>(initial);
@@ -244,6 +257,50 @@ export function SubtaskPromptPanel({ subtaskId, initialItems }: SubtaskPromptPan
       notify({ type: "error", title: "Không thể sao chép", description: "Hãy chọn nội dung và sao chép thủ công." });
     }
   }
+
+  useEffect(() => {
+    if (!importRequest) return;
+
+    const content = importRequest.content.trim();
+    const imageUrls = [...new Set(importRequest.imageUrls.filter(Boolean))].slice(0, MAX_IMAGES_PER_ITEM);
+    const current = itemsRef.current;
+    const emptyIndex = current.findIndex(
+      (item) => !item.content.trim() && itemImageUrls(item).length === 0
+    );
+
+    if (emptyIndex < 0 && current.length >= MAX_PROMPT_ITEMS) {
+      notify({
+        type: "error",
+        title: "Prompt đã đủ yêu cầu",
+        description: `Chỉ được lưu tối đa ${MAX_PROMPT_ITEMS} yêu cầu.`,
+      });
+      onImported?.(importRequest.requestId);
+      return;
+    }
+
+    hasEditedRef.current = true;
+    const importedItem: SubtaskPromptItem = {
+      id: crypto.randomUUID(),
+      content,
+      imageUrls,
+      status: "unprocessed",
+    };
+    const next = emptyIndex >= 0
+      ? current.map((item, index) => index === emptyIndex ? importedItem : item)
+      : [...current, importedItem];
+
+    replaceItems(next);
+    setSelectedIds((selected) => [...new Set([...selected, importedItem.id])]);
+    persist(next);
+    notify({
+      type: "success",
+      title: "Đã đưa vào Prompt",
+      description: `Đã thêm nội dung và ${imageUrls.length} ảnh tương ứng.`,
+    });
+    onImported?.(importRequest.requestId);
+    // Mỗi requestId chỉ được nhập một lần; các hàm lưu dùng dữ liệu mới nhất từ ref.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [importRequest?.requestId]);
 
   return (
     <article className="min-w-0 max-w-full overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm [contain:inline-size]">

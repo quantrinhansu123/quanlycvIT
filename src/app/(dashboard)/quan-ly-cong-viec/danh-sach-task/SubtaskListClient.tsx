@@ -88,7 +88,9 @@ export function SubtaskListClient({
   const { confirm, notify } = useFeedback();
   const cache = useSessionDataCache();
   const splitView = useSplitView();
-  const compactList = Boolean(splitView?.detailOpen);
+  const compactList = Boolean(
+    splitView?.detailOpen && !splitView.detailCollapsed && !splitView.maximized
+  );
   const activeSubtaskId = compactList ? pathname.split("/").pop() : undefined;
   const isAdmin = accountRole === "admin";
   const isMember = accountRole === "member";
@@ -134,10 +136,10 @@ export function SubtaskListClient({
     page,
     pageSize,
   });
-
   const {
-    data: subtaskPage,
+    data: cachedSubtaskPage,
     status: listStatus,
+    isRevalidating: listRevalidating,
     error: listError,
     refresh: refreshSubtasks,
     setData: setSubtaskPage,
@@ -148,10 +150,18 @@ export function SubtaskListClient({
     initialData: initialSubtasks,
   });
 
+  // Giữ kết quả gần nhất trong lúc đổi bộ lọc hoặc chuyển route chi tiết. API tiếp tục
+  // tải nền, còn panel trái không bị xóa thành skeleton nên thao tác có cảm giác tức thì.
+  const [lastLoadedSubtaskPage, setLastLoadedSubtaskPage] = useState(initialSubtasks);
+  if (cachedSubtaskPage && cachedSubtaskPage !== lastLoadedSubtaskPage) {
+    setLastLoadedSubtaskPage(cachedSubtaskPage);
+  }
+  const subtaskPage = cachedSubtaskPage ?? lastLoadedSubtaskPage;
   const subtasks = subtaskPage?.items ?? EMPTY_SUBTASKS;
   const total = subtaskPage?.total ?? 0;
-  const loading = listStatus === "loading";
-  const error = listStatus === "error";
+  const loading = listStatus === "loading" && subtaskPage === undefined;
+  const filtering = (listStatus === "loading" || listRevalidating) && subtaskPage !== undefined;
+  const error = listStatus === "error" && subtaskPage === undefined;
 
   const directoryKeyBase = { accountId, role: accountRole };
 
@@ -431,7 +441,12 @@ export function SubtaskListClient({
 
   return (
     <div className="flex h-full min-h-0 min-w-0 max-w-full flex-col overflow-hidden bg-white [contain:inline-size]">
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-gray-100 px-3 py-2 xl:flex-nowrap">
+      <div
+        className={cn(
+          "flex shrink-0 flex-wrap items-center gap-2 border-b border-gray-100 px-3 py-2",
+          !compactList && "xl:flex-nowrap"
+        )}
+      >
         <button
           type="button"
           onClick={() => router.back()}
@@ -441,7 +456,7 @@ export function SubtaskListClient({
           <ArrowLeft className="h-4 w-4" />
         </button>
 
-        <div className={cn("relative flex-1", compactList ? "min-w-0" : "min-w-[180px] max-w-[525px] xl:min-w-0")}>
+        <div className={cn("relative flex-1", compactList ? "min-w-[180px]" : "min-w-[180px] max-w-[525px] xl:min-w-0")}>
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <input
             type="search"
@@ -452,8 +467,7 @@ export function SubtaskListClient({
           />
         </div>
 
-        {!compactList && (
-          <>
+        <>
             <SearchableFilterSelect
               className="w-[110px] shrink-0 2xl:w-[130px]"
               label="Dự án"
@@ -516,8 +530,7 @@ export function SubtaskListClient({
               <AlertTriangle className="h-4 w-4" />
               Task trễ hạn
             </button>
-          </>
-        )}
+        </>
 
         <div className={cn("flex shrink-0 items-center gap-2", !compactList && "ml-auto")}>
           {!compactList && (
@@ -559,7 +572,16 @@ export function SubtaskListClient({
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
+        {filtering && (
+          <div
+            className="absolute right-3 top-2 z-20 rounded-full border border-sky-100 bg-white/95 px-2.5 py-1 text-[11px] font-medium text-sky-700 shadow-sm"
+            role="status"
+            aria-live="polite"
+          >
+            Đang cập nhật...
+          </div>
+        )}
         <div className="account-table-scroll @container min-h-0 w-0 min-w-full flex-1 overflow-auto [contain:inline-size]">
         {loading ? (
           <TableSkeleton rows={5} />

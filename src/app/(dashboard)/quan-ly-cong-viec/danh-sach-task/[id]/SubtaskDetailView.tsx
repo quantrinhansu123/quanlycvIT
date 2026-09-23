@@ -21,6 +21,7 @@ import {
   Pencil,
   Plus,
   RotateCcw,
+  Send,
   TestTube2,
   UsersRound,
   type LucideIcon,
@@ -51,6 +52,7 @@ import { useCurrentAccount } from "@/hooks/useCurrentAccount";
 import { useSessionDataCache } from "@/components/providers/SessionDataCacheProvider";
 import { CACHE_RESOURCE } from "@/lib/client-cache/resources";
 import { useSplitView } from "@/components/layout/SplitViewShell";
+import type { SubtaskPromptImportRequest } from "@/components/subtasks/SubtaskPromptPanel";
 
 const SubtaskPromptPanel = dynamic(
   () => import("@/components/subtasks/SubtaskPromptPanel").then((mod) => mod.SubtaskPromptPanel),
@@ -123,6 +125,7 @@ export function SubtaskDetailView({
   const [reportAtCompletion, setReportAtCompletion] = useState(false);
   const [quickUpdating, setQuickUpdating] = useState(false);
   const [accepting, setAccepting] = useState(false);
+  const [promptImport, setPromptImport] = useState<SubtaskPromptImportRequest | null>(null);
 
   /**
    * Nhật ký hoạt động được ghi bằng trigger DB ngay khi mutation ghi xong nên chỉ cần
@@ -655,6 +658,10 @@ export function SubtaskDetailView({
               key={`${subtask.id}-${subtask.updatedAt ?? ""}`}
               subtaskId={subtask.id}
               initialItems={subtask.promptItems}
+              importRequest={promptImport}
+              onImported={(requestId) => {
+                setPromptImport((current) => current?.requestId === requestId ? null : current);
+              }}
             />
 
             {subtask.issues.length > 0 && (
@@ -700,9 +707,24 @@ export function SubtaskDetailView({
                   <div className="rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-4">
                     <div className="mb-2 flex items-center justify-between gap-3">
                       <span className="text-sm font-semibold text-gray-700">Lần 1</span>
-                      {subtask.createdAt && (
-                        <span className="text-xs text-gray-400">{formatDateVN(subtask.createdAt)}</span>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {subtask.createdAt && (
+                          <span className="text-xs text-gray-400">{formatDateVN(subtask.createdAt)}</span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setPromptImport({
+                            requestId: crypto.randomUUID(),
+                            content: subtask.description ?? "",
+                            imageUrls: subtask.images,
+                          })}
+                          disabled={!subtask.description?.trim() && subtask.images.length === 0}
+                          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-sky-200 bg-white px-2.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          <Send className="h-3.5 w-3.5" />
+                          Đưa vào Prompt
+                        </button>
+                      </div>
                     </div>
                     <div className="max-w-full overflow-x-auto text-sm leading-6 text-gray-700">
                       <DetailDescription
@@ -736,7 +758,22 @@ export function SubtaskDetailView({
                         <div key={entry.id} className="rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-4">
                           <div className="mb-2 flex items-center justify-between gap-3">
                             <span className="text-sm font-semibold text-gray-700">Lần {index + 2}</span>
-                            <span className="text-xs text-gray-400">{formatDateVN(entry.createdAt)}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-400">{formatDateVN(entry.createdAt)}</span>
+                              <button
+                                type="button"
+                                onClick={() => setPromptImport({
+                                  requestId: crypto.randomUUID(),
+                                  content: entry.description ?? "",
+                                  imageUrls: entry.images,
+                                })}
+                                disabled={!entry.description?.trim() && entry.images.length === 0}
+                                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-sky-200 bg-white px-2.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                <Send className="h-3.5 w-3.5" />
+                                Đưa vào Prompt
+                              </button>
+                            </div>
                           </div>
                           <div className="max-w-full overflow-x-auto text-sm leading-6 text-gray-700">
                             <DetailDescription description={entry.description} emptyText="Lần này chưa có mô tả." />

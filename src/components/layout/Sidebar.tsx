@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { Ban, ChevronDown, ChevronRight } from "lucide-react";
+import { IntentPrefetchLink } from "@/components/navigation/IntentPrefetchLink";
 import { NAV_ITEMS } from "@/constants/navigation";
 import { cn } from "@/lib/utils";
 import { useCurrentAccount } from "@/hooks/useCurrentAccount";
@@ -83,7 +83,7 @@ export function Sidebar({ collapsed, variant = "rail" }: SidebarProps) {
             if (!item.children) {
               return (
                 <li key={item.label}>
-                  <Link
+                  <IntentPrefetchLink
                     href={item.href}
                     className={cn(
                       "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-brand-50",
@@ -92,7 +92,7 @@ export function Sidebar({ collapsed, variant = "rail" }: SidebarProps) {
                   >
                     <item.icon className="h-[18px] w-[18px] shrink-0" />
                     {!collapsed && <span className="truncate">{item.label}</span>}
-                  </Link>
+                  </IntentPrefetchLink>
                 </li>
               );
             }
@@ -145,7 +145,7 @@ export function Sidebar({ collapsed, variant = "rail" }: SidebarProps) {
                       const isChildActive = activeChildHref === child.href;
                       return (
                         <li key={child.href}>
-                          <Link
+                          <IntentPrefetchLink
                             href={child.href}
                             className={cn(
                               "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-500 transition-all duration-200 hover:bg-brand-50",
@@ -155,7 +155,7 @@ export function Sidebar({ collapsed, variant = "rail" }: SidebarProps) {
                           >
                             <child.icon className="h-4 w-4 shrink-0" />
                             <span className="truncate">{child.label}</span>
-                          </Link>
+                          </IntentPrefetchLink>
                         </li>
                       );
                     })}
