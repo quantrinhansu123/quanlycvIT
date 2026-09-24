@@ -16,6 +16,18 @@ export async function proxy(request: NextRequest) {
 
   if (!supabaseUrl || !publishableKey) return NextResponse.next({ request });
 
+  const { pathname } = request.nextUrl;
+  const hasSupabaseSessionCookie = request.cookies
+    .getAll()
+    .some(({ name }) => /^sb-.+-auth-token(?:\.\d+)?$/.test(name));
+
+  // Skip JWKS loading and JWT parsing for requests that cannot have a Supabase session.
+  // This keeps anonymous page loads local and avoids a network request to Supabase.
+  if (!hasSupabaseSessionCookie) {
+    if (isPublicPath(pathname)) return NextResponse.next({ request });
+    return NextResponse.redirect(new URL("/dang-nhap", request.url));
+  }
+
   let response = NextResponse.next({ request });
   const supabase = createServerClient(supabaseUrl, publishableKey, {
     cookies: {
@@ -37,7 +49,6 @@ export async function proxy(request: NextRequest) {
     keys.length > 0 ? { jwks: { keys } } : undefined
   );
   const isAuthenticated = Boolean(data?.claims);
-  const { pathname } = request.nextUrl;
 
   if (!isAuthenticated && !isPublicPath(pathname)) {
     return NextResponse.redirect(new URL("/dang-nhap", request.url));

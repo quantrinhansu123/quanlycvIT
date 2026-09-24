@@ -300,6 +300,11 @@ const SUBTASK_SELECT =
 const SUBTASK_DETAIL_SELECT = `${SUBTASK_SELECT},prompt_items,van_de_giai_phap`;
 /** Fallback khi deployment chưa có cột van_de_giai_phap. */
 const SUBTASK_DETAIL_SELECT_WITHOUT_ISSUES = `${SUBTASK_SELECT},prompt_items`;
+/** Task detail page data, including its parent task in the same request. */
+const SUBTASK_PAGE_DETAIL_SELECT =
+  `${SUBTASK_DETAIL_SELECT},parent_work_task:cong_viec!task_cong_viec_id_fkey(${WORK_TASK_DIRECTORY_SELECT})`;
+const SUBTASK_PAGE_DETAIL_SELECT_WITHOUT_ISSUES =
+  `${SUBTASK_DETAIL_SELECT_WITHOUT_ISSUES},parent_work_task:cong_viec!task_cong_viec_id_fkey(${WORK_TASK_DIRECTORY_SELECT})`;
 /** Danh sách bảng: bỏ mô tả/đính kèm/cập nhật bổ sung để giảm payload. */
 const SUBTASK_LIST_SELECT =
   "id,ten_task,created_at,updated_at,ngay_bat_dau,ngay_ket_thuc,nguoi_phu_trach_id,nguoi_tao_id,nguoi_test_id,ghi_chu_test,trang_thai,uu_tien,tien_do_thuc_te,nhan_tag,cong_viec_id," +
@@ -1953,6 +1958,43 @@ export async function getSubtask(
   if (!detailed.data) return null;
   const [subtask] = hydrateSubtasks([detailed.data as unknown as SubtaskRow]);
   return subtask;
+}
+
+/** Fetches the task and parent work-task data together for the detail page. */
+export async function getSubtaskDetailPageData(
+  supabase: ApiSupabaseClient,
+  id: string
+): Promise<{ subtask: Subtask | null; parentWorkTask: WorkTaskDirectoryItem | null }> {
+  const select = (columns: string) =>
+    supabase.from("task").select(columns).eq("id", id).maybeSingle();
+
+  let { data, error } = await select(SUBTASK_PAGE_DETAIL_SELECT);
+
+  // Keep compatibility with deployments that have not added all detail columns yet.
+  if (error?.code === "42703" || error?.code === "PGRST204") {
+    const withoutIssues = await select(SUBTASK_PAGE_DETAIL_SELECT_WITHOUT_ISSUES);
+    if (!withoutIssues.error && withoutIssues.data) {
+      data = withoutIssues.data;
+      error = null;
+    } else {
+      const fallback = await select(
+        `${SUBTASK_SELECT},parent_work_task:cong_viec!task_cong_viec_id_fkey(${WORK_TASK_DIRECTORY_SELECT})`
+      );
+      data = fallback.data;
+      error = fallback.error;
+    }
+  }
+
+  throwDatabaseError(error);
+  if (!data) return { subtask: null, parentWorkTask: null };
+
+  const row = data as unknown as SubtaskRow & { parent_work_task: unknown | null };
+  return {
+    subtask: hydrateSubtasks([row])[0],
+    parentWorkTask: row.parent_work_task
+      ? mapWorkTaskDirectoryItem(row.parent_work_task)
+      : null,
+  };
 }
 
 export async function updateSubtaskPromptItems(

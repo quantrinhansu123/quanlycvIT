@@ -658,6 +658,7 @@ export function SubtaskDetailView({
               key={`${subtask.id}-${subtask.updatedAt ?? ""}`}
               subtaskId={subtask.id}
               initialItems={subtask.promptItems}
+              initialDataLoaded
               importRequest={promptImport}
               onImported={(requestId) => {
                 setPromptImport((current) => current?.requestId === requestId ? null : current);

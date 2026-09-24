@@ -4,6 +4,8 @@ import { useReportWebVitals } from "next/web-vitals";
 
 export function WebVitalsReporter() {
   useReportWebVitals((metric) => {
+    if (process.env.NODE_ENV !== "production") return;
+
     const payload = JSON.stringify({
       id: metric.id,
       name: metric.name,

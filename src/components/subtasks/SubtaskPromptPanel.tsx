@@ -61,6 +61,7 @@ async function copyToClipboard(value: string): Promise<void> {
 interface SubtaskPromptPanelProps {
   subtaskId: string;
   initialItems: SubtaskPromptItem[];
+  initialDataLoaded?: boolean;
   importRequest?: SubtaskPromptImportRequest | null;
   onImported?: (requestId: string) => void;
 }
@@ -74,6 +75,7 @@ export interface SubtaskPromptImportRequest {
 export function SubtaskPromptPanel({
   subtaskId,
   initialItems,
+  initialDataLoaded = false,
   importRequest,
   onImported,
 }: SubtaskPromptPanelProps) {
@@ -91,7 +93,7 @@ export function SubtaskPromptPanel({
 
   useEffect(() => {
     // SSR chi tiết đã kèm prompt_items — bỏ GET trùng khi đã có dữ liệu.
-    const hasInitialPrompts = initialItems.some(
+    const hasInitialPrompts = initialDataLoaded || initialItems.some(
       (item) => item.content.trim() || (item.imageUrls?.length ?? 0) > 0
     );
     if (hasInitialPrompts) return;
@@ -110,7 +112,7 @@ export function SubtaskPromptPanel({
     };
     // Chỉ refetch theo task; initialItems lấy từ lần mount (SSR / remount sau update).
     // eslint-disable-next-line react-hooks/exhaustive-deps -- tránh refetch khi parent re-render
-  }, [subtaskId]);
+  }, [subtaskId, initialDataLoaded]);
 
   const selectedItems = items.filter((item) => selectedIds.includes(item.id));
   const mergedPrompt = mergeSelectedPrompts(selectedItems);
