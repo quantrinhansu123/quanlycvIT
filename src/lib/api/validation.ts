@@ -1,7 +1,7 @@
 import { ApiException } from "@/lib/api/response";
 import type { ProjectColor, ProjectInput, ProjectStepConfig } from "@/types/project";
 import { DEFAULT_PROJECT_STEPS } from "@/types/project";
-import type { SubtaskInput, SubtaskIssueEntry, SubtaskPromptItem, SubtaskUpdateEntry, TaskFileAttachment, TaskLinkAttachment } from "@/types/subtask";
+import type { SubtaskHandover, SubtaskInput, SubtaskIssueEntry, SubtaskPromptItem, SubtaskUpdateEntry, TaskFileAttachment, TaskLinkAttachment } from "@/types/subtask";
 import type { TaskPriority, TaskStatus, WorkTaskInput } from "@/types/task";
 import type {
   DutyChecklistTemplateInput,
@@ -563,4 +563,23 @@ export function parseSubtaskInput(body: Record<string, unknown>): SubtaskInput {
     updates: subtaskUpdateEntries(body),
     issues: subtaskIssueEntries(body),
   };
+}
+
+export function parseSubtaskHandover(body: Record<string, unknown>): SubtaskHandover {
+  if (typeof body.text !== "string") {
+    throw new ApiException("Nội dung bàn giao phải là chuỗi văn bản.", 400);
+  }
+  if (body.text.length > 20_000) {
+    throw new ApiException("Nội dung bàn giao không được vượt quá 20.000 ký tự.", 400);
+  }
+
+  const imageUrl = typeof body.imageUrl === "string" ? body.imageUrl.trim() : "";
+  if (body.imageUrl !== undefined && typeof body.imageUrl !== "string") {
+    throw new ApiException("Link ảnh phải là chuỗi.", 400);
+  }
+  if (imageUrl.length > 2048 || (imageUrl && !isHttpUrl(imageUrl))) {
+    throw new ApiException("Link ảnh phải là URL HTTP hoặc HTTPS hợp lệ.", 400);
+  }
+
+  return { text: body.text, imageUrl };
 }

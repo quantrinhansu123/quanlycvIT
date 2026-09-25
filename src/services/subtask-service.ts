@@ -1,5 +1,5 @@
 import { apiClient } from "@/services/api-client";
-import type { Subtask, SubtaskInput, SubtaskPromptItem, SubtaskReport, SubtaskTestHistoryEntry, SubtaskTestResult } from "@/types/subtask";
+import type { Subtask, SubtaskHandover, SubtaskInput, SubtaskPromptItem, SubtaskReport, SubtaskTestHistoryEntry, SubtaskTestResult } from "@/types/subtask";
 import type {
   ProgressReportSubmission,
   TaskPriority,
@@ -131,6 +131,10 @@ export const subtaskService = {
     input: SubtaskInput
   ): Promise<Subtask | null> {
     return apiClient.put<Subtask>(`/subtasks/${id}`, input);
+  },
+
+  async updateHandover(id: string, handover: SubtaskHandover): Promise<SubtaskHandover> {
+    return apiClient.put<SubtaskHandover>(`/subtasks/${id}/handover`, handover);
   },
 
   async updatePromptItems(id: string, items: SubtaskPromptItem[]): Promise<SubtaskPromptItem[]> {

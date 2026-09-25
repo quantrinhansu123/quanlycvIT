@@ -632,6 +632,7 @@ export function TaskDetailView({
         ) : tab === "tasks" ? (
           <WorkTaskSubtasksPanel
             workTask={task}
+            projects={project ? [project] : []}
             members={members}
             onSubtasksChanged={load}
             readOnly={viewOnly}

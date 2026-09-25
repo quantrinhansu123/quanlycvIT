@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ClipboardPaste, FileText, ImagePlus, Paperclip, Plus, Trash2 } from "lucide-react";
+import { ClipboardPaste, ExternalLink, FileText, ImagePlus, Paperclip, Plus, Trash2 } from "lucide-react";
 import type { TaskFileAttachment, TaskLinkAttachment } from "@/types/task";
 import { cn } from "@/lib/utils";
 import {
@@ -17,6 +17,15 @@ interface PendingAttachmentFile {
 
 interface PendingAttachmentImage extends PendingAttachmentFile {
   previewUrl: string;
+}
+
+function getSafeExternalUrl(value: string): string | null {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
+  } catch {
+    return null;
+  }
 }
 
 interface TaskAttachmentFieldsProps {
@@ -296,46 +305,81 @@ export function TaskAttachmentFields({
       )}
 
       {links.length > 0 && (
-        <div className="space-y-2">
-          {links.map((link, index) => (
-            <div
-              key={index}
-              className="space-y-2 rounded-lg border border-gray-100 bg-gray-50/60 p-2"
-            >
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={link.label ?? ""}
-                  onChange={(event) => onUpdateLink(index, { label: event.target.value })}
-                  placeholder="Tên đường dẫn"
-                  className="h-9 w-[38%] rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
-                />
-                <input
-                  type="url"
-                  value={link.url}
-                  onChange={(event) => onUpdateLink(index, { url: event.target.value })}
-                  placeholder="https://..."
-                  className="h-9 min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
-                />
-                <button
-                  type="button"
-                  onClick={() => onRemoveLink(index)}
-                  disabled={submitting}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-600"
-                  aria-label="Xóa liên kết"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-              <textarea
-                value={link.description ?? ""}
-                onChange={(event) => onUpdateLink(index, { description: event.target.value })}
-                placeholder="Mô tả đường dẫn (không bắt buộc)"
-                rows={3}
-                className="min-h-20 w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
-              />
-            </div>
-          ))}
+        <div className="overflow-x-auto rounded-lg border border-gray-200">
+          <table className="w-full min-w-[760px] table-fixed border-collapse text-left text-sm">
+            <thead className="bg-gray-50 text-xs font-semibold text-gray-600">
+              <tr>
+                <th scope="col" className="w-[22%] border-b border-gray-200 px-3 py-2.5">Tên đường dẫn</th>
+                <th scope="col" className="w-[34%] border-b border-gray-200 px-3 py-2.5">URL</th>
+                <th scope="col" className="border-b border-gray-200 px-3 py-2.5">Mô tả</th>
+                <th scope="col" className="w-20 border-b border-gray-200 px-2 py-2.5"><span className="sr-only">Thao tác</span></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 bg-white">
+              {links.map((link, index) => {
+                const safeUrl = getSafeExternalUrl(link.url.trim());
+                return (
+                <tr key={index} className="align-top">
+                  <td className="px-2 py-2">
+                    <input
+                      type="text"
+                      value={link.label ?? ""}
+                      onChange={(event) => onUpdateLink(index, { label: event.target.value })}
+                      placeholder="Tên đường dẫn"
+                      aria-label={`Tên đường dẫn ${index + 1}`}
+                      className="h-10 w-full min-w-0 rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+                    />
+                  </td>
+                  <td className="px-2 py-2">
+                    <input
+                      type="url"
+                      value={link.url}
+                      onChange={(event) => onUpdateLink(index, { url: event.target.value })}
+                      placeholder="https://..."
+                      aria-label={`URL đường dẫn ${index + 1}`}
+                      className="h-10 w-full min-w-0 rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+                    />
+                  </td>
+                  <td className="px-2 py-2">
+                    <textarea
+                      value={link.description ?? ""}
+                      onChange={(event) => onUpdateLink(index, { description: event.target.value })}
+                      placeholder="Mô tả đường dẫn (không bắt buộc)"
+                      aria-label={`Mô tả đường dẫn ${index + 1}`}
+                      rows={2}
+                      className="min-h-10 w-full min-w-0 resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+                    />
+                  </td>
+                  <td className="px-2 py-2">
+                    <div className="flex items-center justify-center gap-1">
+                      <a
+                        href={safeUrl ?? undefined}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`Mở liên kết ${link.label || index + 1} trong tab mới`}
+                        title={safeUrl ? "Mở liên kết trong tab mới" : "Nhập URL hợp lệ để mở liên kết"}
+                        tabIndex={safeUrl ? 0 : -1}
+                        aria-disabled={!safeUrl}
+                        className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-brand-50 hover:text-brand-600 aria-disabled:pointer-events-none aria-disabled:opacity-40"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => onRemoveLink(index)}
+                        disabled={submitting}
+                        className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
+                        aria-label={`Xóa liên kết ${link.label || index + 1}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 

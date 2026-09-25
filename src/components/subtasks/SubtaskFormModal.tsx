@@ -24,7 +24,7 @@ import {
   type TaskStatus,
   type WorkTaskDirectoryItem,
 } from "@/types/task";
-import type { ProjectMember } from "@/types/project";
+import type { ProjectDirectoryItem, ProjectMember } from "@/types/project";
 import { subtaskService } from "@/services/subtask-service";
 import { toDateInputValue, getAppDateKey, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
@@ -41,6 +41,7 @@ import { runUploadBatch } from "@/lib/upload-concurrency";
 interface SubtaskFormModalProps {
   mode: "create" | "edit";
   subtask?: Subtask;
+  projects: ProjectDirectoryItem[];
   workTasks: WorkTaskDirectoryItem[];
   members: ProjectMember[];
   defaultWorkTaskId?: string;
@@ -60,6 +61,7 @@ interface UpdateEntryFormState {
 interface FormState {
   title: string;
   description: string;
+  projectId: string;
   workTaskId: string;
   assigneeIds: string[];
   testerId: string;
@@ -79,7 +81,7 @@ interface FormState {
 /** Phần của FormState lưu được vào bản nháp (GĐ7) — loại `files`/`links`/`images`. */
 type SubtaskDraftData = Pick<
   FormState,
-  "title" | "description" | "workTaskId" | "assigneeIds" | "testerId" | "status" | "priority" | "startDate" | "dueDate" | "progress" | "tagsText" | "issues"
+  "title" | "description" | "projectId" | "workTaskId" | "assigneeIds" | "testerId" | "status" | "priority" | "startDate" | "dueDate" | "progress" | "tagsText" | "issues"
 >;
 
 const MAX_ISSUE_ROWS = 50;
@@ -149,12 +151,15 @@ function isValidHttpUrl(value: string): boolean {
 function buildInitialState(
   subtask: Subtask | undefined,
   workTasks: WorkTaskDirectoryItem[],
+  projects: ProjectDirectoryItem[],
   defaultWorkTaskId?: string
 ): FormState {
   if (subtask) {
+    const selectedWorkTask = workTasks.find((item) => item.id === subtask.workTaskId);
     return {
       title: subtask.title,
       description: subtask.description ?? "",
+      projectId: selectedWorkTask?.projectId ?? "",
       workTaskId: subtask.workTaskId,
       assigneeIds: subtask.assignees.map((member) => member.id),
       testerId: subtask.tester?.id ?? "",
@@ -178,9 +183,11 @@ function buildInitialState(
   }
   const workTaskId = defaultWorkTaskId ?? workTasks[0]?.id ?? "";
   const selectedWorkTask = workTasks.find((item) => item.id === workTaskId);
+  const projectId = selectedWorkTask?.projectId ?? projects[0]?.id ?? "";
   return {
     title: "",
     description: "",
+    projectId,
     workTaskId,
     assigneeIds: [],
     testerId: "",
@@ -347,6 +354,7 @@ function WorkTaskSelect({
 export function SubtaskFormModal({
   mode,
   subtask,
+  projects,
   workTasks,
   members,
   defaultWorkTaskId,
@@ -368,7 +376,7 @@ export function SubtaskFormModal({
     mode === "create" ? crypto.randomUUID() : undefined
   );
   const [form, setForm] = useState<FormState>(() =>
-    buildInitialState(subtask, workTasks, defaultWorkTaskId)
+    buildInitialState(subtask, workTasks, projects, defaultWorkTaskId)
   );
   const [formTab, setFormTab] = useState<"info" | "issues" | "attachments">("info");
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
@@ -396,6 +404,7 @@ export function SubtaskFormModal({
     scheduleSave({
       title: form.title,
       description: form.description,
+      projectId: form.projectId,
       workTaskId: form.workTaskId,
       assigneeIds: form.assigneeIds,
       testerId: form.testerId,
@@ -410,6 +419,7 @@ export function SubtaskFormModal({
   }, [
     form.title,
     form.description,
+    form.projectId,
     form.workTaskId,
     form.assigneeIds,
     form.testerId,
@@ -448,6 +458,18 @@ export function SubtaskFormModal({
     () => workTasks.find((item) => item.id === form.workTaskId),
     [workTasks, form.workTaskId]
   );
+  const projectOptions = useMemo(
+    () => projects.map((project) => ({
+      value: project.id,
+      label: project.name,
+      sublabel: project.code,
+    })),
+    [projects]
+  );
+  const filteredWorkTasks = useMemo(
+    () => workTasks.filter((item) => item.projectId === form.projectId),
+    [workTasks, form.projectId]
+  );
   const workTaskAssignees = selectedWorkTask?.assignees ?? [];
   const workTaskStartDate = selectedWorkTask
     ? toDateInputValue(selectedWorkTask.startDate)
@@ -462,6 +484,7 @@ export function SubtaskFormModal({
     const allowed = new Set((workTask?.assignees ?? []).map((member) => member.id));
     setForm((prev) => ({
       ...prev,
+      projectId: workTask?.projectId ?? prev.projectId,
       workTaskId,
       assigneeIds: prev.assigneeIds.filter((id) => allowed.has(id)),
       startDate: getAppDateKey(),
@@ -470,6 +493,26 @@ export function SubtaskFormModal({
     setErrors((prev) => ({
       ...prev,
       workTaskId: undefined,
+      startDate: undefined,
+      dueDate: undefined,
+    }));
+  }
+
+  function handleProjectChange(projectId: string) {
+    setForm((prev) => ({
+      ...prev,
+      projectId,
+      workTaskId: "",
+      assigneeIds: [],
+      testerId: "",
+      startDate: getAppDateKey(),
+      dueDate: "",
+    }));
+    setErrors((prev) => ({
+      ...prev,
+      projectId: undefined,
+      workTaskId: undefined,
+      assigneeIds: undefined,
       startDate: undefined,
       dueDate: undefined,
     }));
@@ -619,7 +662,11 @@ export function SubtaskFormModal({
   function validate(): boolean {
     const nextErrors: Partial<Record<keyof FormState, string>> = {};
     if (!form.title.trim()) nextErrors.title = "Vui lòng nhập tên task";
+    if (!form.projectId) nextErrors.projectId = "Vui lòng chọn dự án";
     if (!form.workTaskId) nextErrors.workTaskId = "Vui lòng chọn công việc";
+    if (selectedWorkTask && selectedWorkTask.projectId !== form.projectId) {
+      nextErrors.workTaskId = "Công việc không thuộc dự án đã chọn";
+    }
     if (form.assigneeIds.length === 0) {
       nextErrors.assigneeIds = workTaskAssignees.length === 0
         ? "Công việc chưa có người phụ trách. Hãy cập nhật công việc trước."
@@ -855,10 +902,12 @@ export function SubtaskFormModal({
 
           {formTab === "info" ? (
             <div className="space-y-5" role="tabpanel">
-          {(workTasks.length === 0 || members.length === 0) && (
+          {(projects.length === 0 || workTasks.length === 0 || members.length === 0) && (
             <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-              {workTasks.length === 0
-                ? "Chưa có công việc. Hãy tạo công việc trước khi tạo task."
+              {projects.length === 0
+                ? "Chưa có dự án để chọn. Hãy tạo dự án trước khi tạo công việc và task."
+                : workTasks.length === 0
+                  ? "Chưa có công việc trong các dự án. Hãy tạo công việc trước khi tạo task."
                 : "Chưa có nhân sự đang hoạt động trong Supabase để giao task."}
             </div>
           )}
@@ -898,14 +947,34 @@ export function SubtaskFormModal({
 
           <div>
             <label className="mb-1.5 block text-sm font-medium text-gray-700">
+              Dự án <span className="text-rose-500">*</span>
+            </label>
+            <SingleSelectDropdown
+              options={projectOptions}
+              value={form.projectId}
+              onChange={handleProjectChange}
+              placeholder="Chọn dự án..."
+              emptyHint="Chưa có dự án để chọn"
+              searchable
+              searchPlaceholder="Tìm tên hoặc mã dự án..."
+              invalid={Boolean(errors.projectId)}
+            />
+            {errors.projectId && <p className="mt-1 text-xs text-rose-500">{errors.projectId}</p>}
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">
               Thuộc công việc <span className="text-rose-500">*</span>
             </label>
             <WorkTaskSelect
-              options={workTasks}
+              options={filteredWorkTasks}
               value={form.workTaskId}
               onChange={handleWorkTaskChange}
               invalid={Boolean(errors.workTaskId)}
             />
+            {form.projectId && filteredWorkTasks.length === 0 && (
+              <p className="mt-1 text-xs text-amber-700">Dự án này chưa có công việc. Hãy tạo công việc trong dự án trước.</p>
+            )}
             {errors.workTaskId && <p className="mt-1 text-xs text-rose-500">{errors.workTaskId}</p>}
           </div>
 

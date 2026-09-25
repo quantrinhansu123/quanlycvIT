@@ -37,6 +37,11 @@ export interface SubtaskIssueEntry {
   solution: string;
 }
 
+export interface SubtaskHandover {
+  text: string;
+  imageUrl: string;
+}
+
 export interface Subtask {
   id: string;
   title: string;
@@ -75,6 +80,8 @@ export interface Subtask {
   promptItems: SubtaskPromptItem[];
   /** Các dòng vấn đề và giải pháp. */
   issues: SubtaskIssueEntry[];
+  /** Nội dung bàn giao và link ảnh. */
+  handover?: SubtaskHandover;
 }
 
 export interface SubtaskInput {

@@ -670,6 +670,7 @@ export function SubtaskListClient({
         <SubtaskFormModal
           mode={formModal.mode}
           subtask={formModal.mode === "edit" ? formModal.subtask : undefined}
+          projects={projects}
           workTasks={workTasks}
           members={members}
           onClose={() => setFormModal(null)}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -8,19 +8,24 @@ import {
   AlertCircle,
   ArrowLeft,
   CalendarDays,
+  ClipboardPaste,
   CircleAlert,
   CircleCheck,
   Clock3,
+  ExternalLink,
   FileClock,
   Flag,
   History,
+  ImagePlus,
   Info,
+  LoaderCircle,
   Maximize2,
   Minimize2,
   PanelRightClose,
   Pencil,
   Plus,
   RotateCcw,
+  Save,
   Send,
   TestTube2,
   UsersRound,
@@ -29,7 +34,7 @@ import {
 import { projectService } from "@/services/project-service";
 import { taskService } from "@/services/task-service";
 import { subtaskService } from "@/services/subtask-service";
-import type { ProjectMember } from "@/types/project";
+import type { ProjectDirectoryItem, ProjectMember } from "@/types/project";
 import type { TaskFileAttachment, TaskLinkAttachment, WorkTaskDirectoryItem } from "@/types/task";
 import { SUBTASK_STATUS_OPTIONS, TASK_PRIORITY_OPTIONS } from "@/types/task";
 import type { Subtask, SubtaskReport, SubtaskTestHistoryEntry } from "@/types/subtask";
@@ -79,6 +84,15 @@ function getDayDistance(date: string): number {
   return Math.round((target.getTime() - today.getTime()) / DAY_IN_MS);
 }
 
+function isSafeImageUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
 interface SubtaskDetailViewProps {
   subtaskId: string;
   initialSubtask: Subtask | null;
@@ -112,6 +126,7 @@ export function SubtaskDetailView({
   const [workTasks, setWorkTasks] = useState<WorkTaskDirectoryItem[]>(initialWorkTasks);
   const [reports, setReports] = useState<SubtaskReport[]>(initialReports);
   const [members, setMembers] = useState<ProjectMember[]>(initialMembers);
+  const [projects, setProjects] = useState<ProjectDirectoryItem[]>([]);
   const [activity, setActivity] = useState<TaskActivityEvent[]>(initialActivity);
   const [activityTotal, setActivityTotal] = useState(initialActivityTotal);
   const [testHistory, setTestHistory] = useState<SubtaskTestHistoryEntry[]>(initialTestHistory);
@@ -121,11 +136,17 @@ export function SubtaskDetailView({
   const [error, setError] = useState(false);
   const [tab, setTab] = useState<Tab>("info");
   const [editing, setEditing] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [reportDrawerOpen, setReportDrawerOpen] = useState(false);
   const [reportAtCompletion, setReportAtCompletion] = useState(false);
   const [quickUpdating, setQuickUpdating] = useState(false);
   const [accepting, setAccepting] = useState(false);
   const [promptImport, setPromptImport] = useState<SubtaskPromptImportRequest | null>(null);
+  const [handoverText, setHandoverText] = useState(initialSubtask?.handover?.text ?? "");
+  const [handoverImageUrl, setHandoverImageUrl] = useState(initialSubtask?.handover?.imageUrl ?? "");
+  const [savingHandover, setSavingHandover] = useState(false);
+  const [uploadingHandoverImage, setUploadingHandoverImage] = useState(false);
+  const handoverImageInputRef = useRef<HTMLInputElement>(null);
 
   /**
    * Nhật ký hoạt động được ghi bằng trigger DB ngay khi mutation ghi xong nên chỉ cần
@@ -145,6 +166,8 @@ export function SubtaskDetailView({
     try {
       const subtaskData = await subtaskService.getSubtaskById(subtaskId);
       setSubtask(subtaskData);
+      setHandoverText(subtaskData?.handover?.text ?? "");
+      setHandoverImageUrl(subtaskData?.handover?.imageUrl ?? "");
       setError(false);
       void refreshActivity();
       if (tab === "reports") {
@@ -164,17 +187,92 @@ export function SubtaskDetailView({
     }
   }, [subtaskId, notify, tab, refreshActivity]);
 
+  async function handleSaveHandover() {
+    if (!subtask || savingHandover) return;
+    setSavingHandover(true);
+    try {
+      const handover = await subtaskService.updateHandover(subtask.id, {
+        text: handoverText,
+        imageUrl: handoverImageUrl.trim(),
+      });
+      setHandoverText(handover.text);
+      setHandoverImageUrl(handover.imageUrl);
+      setSubtask((current) => current ? { ...current, handover } : current);
+      notify({ type: "success", title: "Đã lưu nội dung bàn giao" });
+    } catch (saveError) {
+      notify({
+        type: "error",
+        title: "Không thể lưu nội dung bàn giao",
+        description: getErrorMessage(saveError, "Vui lòng thử lại."),
+      });
+    } finally {
+      setSavingHandover(false);
+    }
+  }
+
+  async function uploadHandoverImage(files: FileList | File[] | null) {
+    if (!canEditHandover) return;
+    const image = Array.from(files ?? []).find((file) => file.type.startsWith("image/"));
+    if (!image) {
+      notify({ type: "error", title: "Không tìm thấy ảnh trong dữ liệu đã chọn hoặc đã dán." });
+      return;
+    }
+
+    setUploadingHandoverImage(true);
+    try {
+      const imageUrl = await subtaskService.uploadImage(image);
+      setHandoverImageUrl(imageUrl);
+      notify({ type: "success", title: "Đã tải ảnh lên Cloudinary", description: "Link ảnh đã được điền vào mục Bàn giao." });
+    } catch (uploadError) {
+      notify({
+        type: "error",
+        title: "Không thể tải ảnh lên Cloudinary",
+        description: getErrorMessage(uploadError, "Ảnh phải là JPG, PNG, WEBP hoặc AVIF và tối đa 10 MB."),
+      });
+    } finally {
+      setUploadingHandoverImage(false);
+    }
+  }
+
+  async function pasteHandoverImage() {
+    if (!navigator.clipboard?.read) {
+      notify({ type: "error", title: "Trình duyệt không cho phép đọc clipboard", description: "Hãy dán ảnh bằng Ctrl+V trong mục Bàn giao." });
+      return;
+    }
+
+    try {
+      const clipboardItems = await navigator.clipboard.read();
+      const files: File[] = [];
+      for (const item of clipboardItems) {
+        for (const type of item.types.filter((clipboardType) => clipboardType.startsWith("image/"))) {
+          const blob = await item.getType(type);
+          const extension = type === "image/jpeg" ? "jpg" : type.split("/")[1] || "png";
+          files.push(new File([blob], `ban-giao-${Date.now()}-${files.length + 1}.${extension}`, { type }));
+        }
+      }
+      if (files.length === 0) {
+        notify({ type: "error", title: "Clipboard hiện không có ảnh." });
+        return;
+      }
+      await uploadHandoverImage(files);
+    } catch {
+      notify({ type: "error", title: "Không thể đọc ảnh trong clipboard", description: "Hãy dán ảnh bằng Ctrl+V trong mục Bàn giao." });
+    }
+  }
+
   /** Directory đầy đủ chỉ cần khi mở form sửa / báo cáo. */
   const ensureDirectory = useCallback(async () => {
-    if (directoryReady) return;
-    const [workTaskList, memberData] = await Promise.all([
+    if (directoryReady && projects.length > 0) return;
+    const [workTaskList, memberData, projectData] = await Promise.all([
       taskService.getTaskDirectory(),
       projectService.getDirectory(),
+      projectService.getProjectDirectory(),
     ]);
     setWorkTasks(workTaskList);
     setMembers(memberData);
+    setProjects(projectData);
     setDirectoryReady(true);
-  }, [directoryReady]);
+  }, [directoryReady, projects.length]);
 
   // Timeline: trì hoãn sau paint để không tranh băng thông với hydrate UI.
   useEffect(() => {
@@ -454,6 +552,13 @@ export function SubtaskDetailView({
     !subtask.acceptedAssigneeIds.includes(account.id)
   );
   const isTester = Boolean(account && account.id === subtask.testerId);
+  const canEditHandover = Boolean(
+    account && (
+      account.role === "admin" ||
+      account.role === "manager" ||
+      subtask.assignees.some((member) => member.id === account.id)
+    )
+  );
   const canTest = subtask.status === "testing" && (isTester || account?.role === "admin");
   const statusLocked = subtask.status === "done";
   const canUpdateStatus = account?.role === "admin" || (account?.role === "member" && !isTester);
@@ -527,7 +632,7 @@ export function SubtaskDetailView({
             {statusLocked && (
               <span className="inline-flex h-9 items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700">
                 <CircleCheck className="h-4 w-4" />
-                Chỉ xem
+                Đã hoàn thành
               </span>
             )}
             {splitView && (
@@ -541,6 +646,16 @@ export function SubtaskDetailView({
                 {splitView.maximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </button>
             )}
+            <Button
+              onClick={() => {
+                void ensureDirectory().then(() => setCreating(true));
+              }}
+              variant="secondary"
+              className="rounded-full"
+            >
+              <Plus className="h-4 w-4" />
+              <span className="hidden @xl/detail:inline">Thêm task</span>
+            </Button>
             {canTest ? (
               <>
                 <Button onClick={() => void handleTest(false)} variant="secondary" className="rounded-full border-rose-200 text-rose-600 hover:bg-rose-50">
@@ -664,6 +779,120 @@ export function SubtaskDetailView({
                 setPromptImport((current) => current?.requestId === requestId ? null : current);
               }}
             />
+
+            <section
+              className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm"
+              tabIndex={0}
+              aria-label="Bàn giao; có thể dán ảnh bằng Ctrl+V"
+              onPaste={(event) => {
+                const images = Array.from(event.clipboardData.items)
+                  .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+                  .map((item) => item.getAsFile())
+                  .filter((file): file is File => file !== null);
+                if (images.length === 0 || !canEditHandover) return;
+                event.preventDefault();
+                void uploadHandoverImage(images);
+              }}
+            >
+              <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-bold text-gray-900">Bàn giao</h2>
+                  <p className="mt-1 text-xs text-gray-500">Ghi nội dung bàn giao và đường dẫn ảnh liên quan.</p>
+                </div>
+                {canEditHandover && (
+                  <Button
+                    type="button"
+                    onClick={() => void handleSaveHandover()}
+                    disabled={savingHandover || uploadingHandoverImage}
+                    size="sm"
+                  >
+                    <Save className="h-3.5 w-3.5" />
+                    {savingHandover ? "Đang lưu..." : "Lưu bàn giao"}
+                  </Button>
+                )}
+              </div>
+
+              <div className="grid gap-4 @2xl/detail:grid-cols-2">
+                <label className="block text-xs font-semibold text-gray-600">
+                  Nội dung bàn giao
+                  <textarea
+                    value={handoverText}
+                    onChange={(event) => setHandoverText(event.target.value)}
+                    disabled={!canEditHandover || savingHandover}
+                    rows={5}
+                    maxLength={20_000}
+                    placeholder="Nhập nội dung bàn giao..."
+                    className="mt-1.5 min-h-28 w-full resize-y rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-normal leading-6 text-gray-800 outline-none placeholder:text-gray-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 disabled:bg-gray-50 disabled:text-gray-500"
+                  />
+                </label>
+                <div>
+                  <label htmlFor="handover-image-url" className="block text-xs font-semibold text-gray-600">
+                    Link ảnh
+                  </label>
+                  <input
+                    ref={handoverImageInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/avif"
+                    disabled={!canEditHandover || savingHandover || uploadingHandoverImage}
+                    className="hidden"
+                    onChange={(event) => {
+                      void uploadHandoverImage(event.target.files);
+                      event.target.value = "";
+                    }}
+                  />
+                  <input
+                    id="handover-image-url"
+                    type="url"
+                    value={handoverImageUrl}
+                    onChange={(event) => setHandoverImageUrl(event.target.value)}
+                    disabled={!canEditHandover || savingHandover || uploadingHandoverImage}
+                    maxLength={2048}
+                    placeholder="https://..."
+                    className="mt-1.5 h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm font-normal text-gray-800 outline-none placeholder:text-gray-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 disabled:bg-gray-50 disabled:text-gray-500"
+                  />
+                  {canEditHandover && (
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        disabled={savingHandover || uploadingHandoverImage}
+                        onClick={() => handoverImageInputRef.current?.click()}
+                      >
+                        {uploadingHandoverImage
+                          ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                          : <ImagePlus className="h-3.5 w-3.5" />}
+                        {uploadingHandoverImage ? "Đang tải ảnh..." : "Chọn ảnh tải lên"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        disabled={savingHandover || uploadingHandoverImage}
+                        onClick={() => void pasteHandoverImage()}
+                      >
+                        <ClipboardPaste className="h-3.5 w-3.5" />
+                        Dán ảnh <span className="text-[10px] text-gray-400">Ctrl+V</span>
+                      </Button>
+                      <span className="text-[11px] text-gray-400">Ảnh được tải lên Cloudinary, link sẽ tự điền vào ô trên.</span>
+                    </div>
+                  )}
+                  {handoverImageUrl.trim() && isSafeImageUrl(handoverImageUrl.trim()) && (
+                    <a
+                      href={handoverImageUrl.trim()}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:text-brand-700"
+                    >
+                      Mở ảnh bàn giao <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  )}
+                </div>
+              </div>
+              {!canEditHandover && (
+                <p className="mt-3 text-xs text-gray-400">Chỉ quản lý hoặc người được giao task mới có thể cập nhật mục này.</p>
+              )}
+            </section>
 
             {subtask.issues.length > 0 && (
               <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
@@ -998,12 +1227,29 @@ export function SubtaskDetailView({
         <SubtaskFormModal
           mode="edit"
           subtask={subtask}
+          projects={projects}
           workTasks={workTasks}
           members={members}
           onClose={() => setEditing(false)}
           onSaved={(saved) => {
             setEditing(false);
             setSubtask(saved);
+            cache.invalidate(CACHE_RESOURCE.subtasksList);
+            cache.invalidate(CACHE_RESOURCE.tasksList);
+          }}
+        />
+      )}
+
+      {creating && (
+        <SubtaskFormModal
+          mode="create"
+          defaultWorkTaskId={subtask.workTaskId}
+          projects={projects}
+          workTasks={workTasks}
+          members={members}
+          onClose={() => setCreating(false)}
+          onSaved={() => {
+            setCreating(false);
             cache.invalidate(CACHE_RESOURCE.subtasksList);
             cache.invalidate(CACHE_RESOURCE.tasksList);
           }}

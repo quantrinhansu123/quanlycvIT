@@ -13,6 +13,7 @@ import {
 } from "@/types/project";
 import type {
   Subtask,
+  SubtaskHandover,
   SubtaskInput,
   SubtaskIssueEntry,
   SubtaskPromptItem,
@@ -154,6 +155,8 @@ interface SubtaskRow {
   lien_ket_dinh_kem?: TaskLinkAttachment[] | null;
   cap_nhat_bo_sung?: SubtaskUpdateEntry[] | null;
   van_de_giai_phap?: unknown;
+  ban_giao_noi_dung?: string | null;
+  ban_giao_link_anh?: string | null;
   task_tien_de_id?: string | null;
   cong_viec_id: string;
   nguoi_tao_id: string | null;
@@ -297,7 +300,7 @@ const SUBTASK_SELECT =
   `tester:tai_khoan!nguoi_test_id(${ACCOUNT_SELECT}),` +
   `task_phu_trach(tai_khoan_id,la_chinh,xac_nhan_luc,tai_khoan(${ACCOUNT_SELECT}))`;
 /** Chi tiết Task cần thêm prompt_items / van_de_giai_phap; danh sách bỏ qua để giảm payload. */
-const SUBTASK_DETAIL_SELECT = `${SUBTASK_SELECT},prompt_items,van_de_giai_phap`;
+const SUBTASK_DETAIL_SELECT = `${SUBTASK_SELECT},prompt_items,van_de_giai_phap,ban_giao_noi_dung,ban_giao_link_anh`;
 /** Fallback khi deployment chưa có cột van_de_giai_phap. */
 const SUBTASK_DETAIL_SELECT_WITHOUT_ISSUES = `${SUBTASK_SELECT},prompt_items`;
 /** Task detail page data, including its parent task in the same request. */
@@ -1788,6 +1791,10 @@ function hydrateSubtasks(rows: SubtaskRow[]): Subtask[] {
       images: row.hinh_anh ?? [],
       updates: row.cap_nhat_bo_sung ?? [],
       issues: normalizeSubtaskIssueEntries(row.van_de_giai_phap),
+      handover: {
+        text: row.ban_giao_noi_dung ?? "",
+        imageUrl: row.ban_giao_link_anh ?? "",
+      },
       promptItems: row.prompt_items !== undefined
         ? normalizeSubtaskPromptItems(row.prompt_items)
         : [],
@@ -2017,6 +2024,32 @@ export async function updateSubtaskPromptItems(
   throwDatabaseError(error);
   if (!data) return null;
   return normalizeSubtaskPromptItems(data.prompt_items);
+}
+
+export async function updateSubtaskHandover(
+  supabase: ApiSupabaseClient,
+  id: string,
+  handover: SubtaskHandover
+): Promise<SubtaskHandover | null> {
+  const { data, error } = await supabase
+    .from("task")
+    .update({
+      ban_giao_noi_dung: handover.text,
+      ban_giao_link_anh: handover.imageUrl,
+    })
+    .eq("id", id)
+    .select("ban_giao_noi_dung,ban_giao_link_anh")
+    .maybeSingle();
+
+  if (error?.code === "42703" || error?.code === "PGRST204") {
+    throw new ApiException("Cơ sở dữ liệu chưa được cập nhật cho mục Bàn giao.", 503);
+  }
+  throwDatabaseError(error);
+  if (!data) return null;
+  return {
+    text: data.ban_giao_noi_dung ?? "",
+    imageUrl: data.ban_giao_link_anh ?? "",
+  };
 }
 
 function normalizeSubtaskPromptItems(value: unknown): SubtaskPromptItem[] {

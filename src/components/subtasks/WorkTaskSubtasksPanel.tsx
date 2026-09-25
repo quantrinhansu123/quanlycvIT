@@ -10,7 +10,7 @@ import {
   Search,
   Table as TableIcon,
 } from "lucide-react";
-import type { ProjectMember } from "@/types/project";
+import type { ProjectDirectoryItem, ProjectMember } from "@/types/project";
 import type { Subtask } from "@/types/subtask";
 import type { TaskPriority, TaskStatus, WorkTask } from "@/types/task";
 import { TASK_PRIORITY_OPTIONS, SUBTASK_STATUS_OPTIONS } from "@/types/task";
@@ -51,6 +51,7 @@ type QuickViewState = { subtask: Subtask; tab: "info" | "reports" | "timeline" }
 
 interface WorkTaskSubtasksPanelProps {
   workTask: WorkTask;
+  projects: ProjectDirectoryItem[];
   /** Toàn bộ nhân sự, dùng để hiển thị tên trong bảng. */
   members: ProjectMember[];
   onSubtasksChanged: () => void;
@@ -59,6 +60,7 @@ interface WorkTaskSubtasksPanelProps {
 
 export function WorkTaskSubtasksPanel({
   workTask,
+  projects,
   members,
   onSubtasksChanged,
   readOnly = false,
@@ -484,6 +486,7 @@ export function WorkTaskSubtasksPanel({
         <SubtaskFormModal
           mode={formModal.mode}
           subtask={formModal.mode === "edit" ? formModal.subtask : undefined}
+          projects={projects}
           workTasks={[workTask]}
           members={members}
           defaultWorkTaskId={workTask.id}
