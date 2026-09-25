@@ -27,7 +27,7 @@ export interface SubtaskPromptItem {
   content: string;
   /** Các link Cloudinary của ảnh tham chiếu (mỗi ảnh một URL). */
   imageUrls: string[];
-  status: "unprocessed" | "processed";
+  status: "unprocessed" | "processed" | "completed";
 }
 
 /** Một dòng vấn đề và giải pháp của Task. */

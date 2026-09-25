@@ -2070,7 +2070,9 @@ function normalizeSubtaskPromptItems(value: unknown): SubtaskPromptItem[] {
       id: entry.id,
       content: entry.content,
       imageUrls: imageUrls.slice(0, 10),
-      status: entry.status === "processed" ? "processed" as const : "unprocessed" as const,
+      status: entry.status === "processed" || entry.status === "completed"
+        ? entry.status as "processed" | "completed"
+        : "unprocessed" as const,
     }];
   });
 }

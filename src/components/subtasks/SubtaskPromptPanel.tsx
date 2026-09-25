@@ -11,8 +11,10 @@ import {
   Plus,
   Trash2,
   X,
+  ZoomIn,
 } from "lucide-react";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
+import { ImagePreviewDialog, type PreviewImage } from "@/components/ui/ImagePreviewDialog";
 import { cn } from "@/lib/utils";
 import { getErrorMessage } from "@/lib/errors";
 import { subtaskService } from "@/services/subtask-service";
@@ -30,6 +32,12 @@ function emptyItem(id = crypto.randomUUID()): SubtaskPromptItem {
 
 function itemImageUrls(item: SubtaskPromptItem): string[] {
   return item.imageUrls ?? [];
+}
+
+function fitPromptTextarea(element: HTMLTextAreaElement | null) {
+  if (!element) return;
+  element.style.height = "auto";
+  element.style.height = `${element.scrollHeight}px`;
 }
 
 function combinedPrompt(item: SubtaskPromptItem): string {
@@ -85,6 +93,7 @@ export function SubtaskPromptPanel({
   const itemsRef = useRef(initial);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [uploadingIds, setUploadingIds] = useState<Set<string>>(new Set());
+  const [previewImage, setPreviewImage] = useState<PreviewImage | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [copiedMerged, setCopiedMerged] = useState(false);
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -389,8 +398,12 @@ export function SubtaskPromptPanel({
                     <td className="px-2 py-3 text-xs font-semibold text-gray-500">{index + 1}</td>
                     <td className="px-2 py-3">
                       <textarea
+                        ref={fitPromptTextarea}
                         value={item.content}
-                        onChange={(event) => updateItem(item.id, { content: event.target.value })}
+                        onChange={(event) => {
+                          fitPromptTextarea(event.currentTarget);
+                          updateItem(item.id, { content: event.target.value });
+                        }}
                         onBlur={() => persist(itemsRef.current)}
                         maxLength={5000}
                         rows={3}
@@ -414,6 +427,18 @@ export function SubtaskPromptPanel({
                                   alt={`Ảnh ${imageIndex + 1} yêu cầu ${index + 1}`}
                                   className="h-14 w-full object-cover"
                                 />
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewImage({
+                                    name: `Ảnh ${imageIndex + 1} yêu cầu ${index + 1}`,
+                                    url,
+                                  })}
+                                  className="absolute bottom-1 right-1 flex h-7 w-7 items-center justify-center rounded-md bg-black/65 text-white opacity-90 shadow-sm transition hover:bg-sky-600 hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-white"
+                                  aria-label={`Phóng to ảnh tham chiếu ${imageIndex + 1} của yêu cầu ${index + 1}`}
+                                  title="Xem ảnh lớn"
+                                >
+                                  <ZoomIn className="h-4 w-4" />
+                                </button>
                                 <p className="truncate px-1.5 py-1 text-[9px] leading-tight text-sky-700" title={url}>
                                   {url}
                                 </p>
@@ -498,13 +523,16 @@ export function SubtaskPromptPanel({
                         )}
                         className={cn(
                           "h-9 w-full rounded-lg border bg-white px-2 text-xs font-semibold outline-none transition focus:ring-2",
-                          item.status === "processed"
-                            ? "border-emerald-200 text-emerald-700 focus:border-emerald-400 focus:ring-emerald-100"
-                            : "border-amber-200 text-amber-700 focus:border-amber-400 focus:ring-amber-100"
+                          item.status === "unprocessed"
+                            ? "border-amber-200 text-amber-700 focus:border-amber-400 focus:ring-amber-100"
+                            : item.status === "processed"
+                              ? "border-emerald-200 text-emerald-700 focus:border-emerald-400 focus:ring-emerald-100"
+                              : "border-sky-200 text-sky-700 focus:border-sky-400 focus:ring-sky-100"
                         )}
                       >
                         <option value="unprocessed">Chưa xử lý</option>
                         <option value="processed">Đã xử lý</option>
+                        <option value="completed">Đã hoàn thành</option>
                       </select>
                     </td>
                     <td className="px-2 py-3 text-center">
@@ -553,6 +581,10 @@ export function SubtaskPromptPanel({
           />
         </div>
       </div>
+      <ImagePreviewDialog
+        image={previewImage}
+        onClose={() => setPreviewImage(null)}
+      />
     </article>
   );
 }

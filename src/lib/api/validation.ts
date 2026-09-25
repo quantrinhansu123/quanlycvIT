@@ -232,7 +232,9 @@ export function parseSubtaskPromptItems(body: Record<string, unknown>): SubtaskP
     }
 
     const imageUrls = parsePromptImageUrls(entry);
-    const status = entry.status === "processed" ? "processed" : "unprocessed";
+    const status = entry.status === "processed" || entry.status === "completed"
+      ? entry.status
+      : "unprocessed";
     return { id: entry.id.trim(), content, imageUrls, status };
   });
 }
