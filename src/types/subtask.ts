@@ -26,9 +26,16 @@ export interface SubtaskPromptItem {
   id: string;
   content: string;
   createdAt?: string;
+  statusHistory?: SubtaskPromptStatusChange[];
   /** Các link Cloudinary của ảnh tham chiếu (mỗi ảnh một URL). */
   imageUrls: string[];
   status: "unprocessed" | "processed" | "completed";
+}
+
+export interface SubtaskPromptStatusChange {
+  from: SubtaskPromptItem["status"];
+  to: SubtaskPromptItem["status"];
+  at: string;
 }
 
 export interface SubtaskTimeRecord {

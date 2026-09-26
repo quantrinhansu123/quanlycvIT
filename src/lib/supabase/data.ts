@@ -2029,11 +2029,18 @@ export async function updateSubtaskPromptItems(
   );
   const timestampedItems = items.map((item) => {
     const previous = existingItems.get(item.id);
+    const statusChanged = Boolean(previous && previous.status !== item.status);
     return {
       ...item,
       ...(previous
         ? (previous.createdAt ? { createdAt: previous.createdAt } : {})
         : { createdAt: item.createdAt ?? new Date().toISOString() }),
+      statusHistory: [
+        ...(previous?.statusHistory ?? []),
+        ...(statusChanged
+          ? [{ from: previous!.status, to: item.status, at: new Date().toISOString() }]
+          : []),
+      ],
     };
   });
   const { data, error } = await supabase
@@ -2156,6 +2163,23 @@ function normalizeSubtaskPromptItems(value: unknown): SubtaskPromptItem[] {
       id: entry.id,
       content: entry.content,
       ...(typeof entry.createdAt === "string" ? { createdAt: entry.createdAt } : {}),
+      statusHistory: Array.isArray(entry.statusHistory)
+        ? entry.statusHistory.flatMap((change) => {
+            if (!change || typeof change !== "object" || Array.isArray(change)) return [];
+            const record = change as Record<string, unknown>;
+            const validStatuses = ["unprocessed", "processed", "completed"];
+            if (
+              typeof record.at !== "string" ||
+              !validStatuses.includes(String(record.from)) ||
+              !validStatuses.includes(String(record.to))
+            ) return [];
+            return [{
+              from: record.from as SubtaskPromptItem["status"],
+              to: record.to as SubtaskPromptItem["status"],
+              at: record.at,
+            }];
+          })
+        : [],
       imageUrls: imageUrls.slice(0, 10),
       status: entry.status === "processed" || entry.status === "completed"
         ? entry.status as "processed" | "completed"

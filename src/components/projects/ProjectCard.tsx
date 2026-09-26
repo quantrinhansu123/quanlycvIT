@@ -81,6 +81,12 @@ export function ProjectCard({ project, onEdit, onDelete, readOnly = false }: Pro
         <AvatarStack people={project.members} />
         <span className="text-xs font-semibold text-gray-500">{progress}% hoàn thành</span>
       </div>
+
+      <p className="text-xs font-medium text-sky-700">
+        {project.stats.inProgress > 0
+          ? `Dự án có ${project.stats.inProgress} task đang làm`
+          : "Dự án chưa có task đang làm"}
+      </p>
     </div>
   );
 }

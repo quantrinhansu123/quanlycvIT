@@ -80,6 +80,11 @@ export function ProjectTable({
                 {project.description && (
                   <p className="mt-0.5 truncate text-xs text-gray-400">{project.description}</p>
                 )}
+                <p className="mt-1 text-[11px] font-medium text-sky-700">
+                  {project.stats.inProgress > 0
+                    ? `Có ${project.stats.inProgress} task đang làm`
+                    : "Không có task đang làm"}
+                </p>
               </td>
               <td className="w-32 px-3 py-4 align-top">
                 <AvatarStack people={project.managers} />

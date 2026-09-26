@@ -143,10 +143,13 @@ export function SubtaskPromptPanel({
       .then(async () => {
         const savedItems = await subtaskService.updatePromptItems(subtaskId, payload);
         if (saveGenerationRef.current === generation) {
-          const createdAtById = new Map(savedItems.map((item) => [item.id, item.createdAt]));
+          const savedById = new Map(savedItems.map((item) => [item.id, item]));
           replaceItems(itemsRef.current.map((item) => ({
             ...item,
-            ...(createdAtById.get(item.id) ? { createdAt: createdAtById.get(item.id) } : {}),
+            ...(savedById.get(item.id)?.createdAt
+              ? { createdAt: savedById.get(item.id)!.createdAt }
+              : {}),
+            statusHistory: savedById.get(item.id)?.statusHistory ?? item.statusHistory ?? [],
           })));
           setSaveStatus("saved");
         }
@@ -551,6 +554,27 @@ export function SubtaskPromptPanel({
                         <option value="processed">Đã xử lý</option>
                         <option value="completed">Đã hoàn thành</option>
                       </select>
+                      {(item.statusHistory?.length ?? 0) > 0 && (() => {
+                        const history = item.statusHistory ?? [];
+                        const latest = history[history.length - 1];
+                        const statusLabels: Record<SubtaskPromptItem["status"], string> = {
+                          unprocessed: "Chưa xử lý",
+                          processed: "Đã xử lý",
+                          completed: "Đã hoàn thành",
+                        };
+                        const dateFormatter = new Intl.DateTimeFormat("vi-VN", {
+                          dateStyle: "short",
+                          timeStyle: "short",
+                        });
+                        const title = history.map((change) =>
+                          `${statusLabels[change.from]} → ${statusLabels[change.to]}: ${dateFormatter.format(new Date(change.at))}`
+                        ).join("\n");
+                        return (
+                          <p className="mt-1 text-[10px] text-gray-400" title={title}>
+                            Đổi lúc: {dateFormatter.format(new Date(latest.at))}
+                          </p>
+                        );
+                      })()}
                     </td>
                     <td className="px-2 py-3 text-center">
                       <button
