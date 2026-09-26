@@ -100,7 +100,7 @@ function adjustSummary(summary: AccountListSummary, removed?: EmployeeAccount, a
   return next;
 }
 
-export function AccountManagementPage() {
+export function AccountManagementPage({ initialData }: { initialData?: AccountPage }) {
   const { notify, confirm } = useFeedback();
   const router = useRouter();
   const cache = useSessionDataCache();
@@ -147,6 +147,7 @@ export function AccountManagementPage() {
       direction: sort.direction, page, pageSize,
     }, { signal }),
     ttl: CACHE_TTL.list,
+    initialData,
   });
 
   const accounts = accountPage?.items ?? EMPTY_ACCOUNTS;

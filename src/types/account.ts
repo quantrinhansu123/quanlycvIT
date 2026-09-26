@@ -56,6 +56,8 @@ export interface AccountInput {
 export interface EmployeeWorkSchedule {
   id: string;
   employeeId: string;
+  employeeName?: string;
+  employeeCode?: string;
   date: string;
   startTime: string;
   endTime: string;

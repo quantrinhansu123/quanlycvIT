@@ -53,6 +53,7 @@ export const NAV_ITEMS: NavItem[] = [
       },
     ],
   },
+  { label: "Lịch làm việc", href: "/nhan-vien/lich-lam-viec", icon: CalendarDays },
   {
     label: "Quản lý công việc",
     href: "/quan-ly-cong-viec",
@@ -104,6 +105,7 @@ export const BREADCRUMB_LABELS: Record<string, string> = {
   "nhan-vien": "Nhân viên",
   "phong-ban-chuc-vu": "Phòng Ban & Chức Vụ",
   "thong-ke-nhan-su": "Thống kê nhân sự",
+  "lich-lam-viec": "Lịch làm việc",
   "quan-ly-thu-chi": "Quản lý thu chi",
   "truc-nhat": "Trực nhật",
   "lich-truc": "Lịch trực",

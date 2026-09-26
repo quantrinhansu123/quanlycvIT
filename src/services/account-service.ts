@@ -43,6 +43,12 @@ export const accountService = {
     apiClient.post<boolean>(`/accounts/${id}/password`, { newPassword }),
   getWorkSchedule: (id: string) =>
     apiClient.get<EmployeeWorkSchedule[]>(`/accounts/${id}/work-schedule`),
+  getWorkSchedulesForPeriod: (startDate: string, endDate: string) =>
+    apiClient.get<EmployeeWorkSchedule[]>(`/work-schedules?startDate=${startDate}&endDate=${endDate}`),
+  createGlobalWorkSchedule: (employeeId: string, input: EmployeeWorkScheduleInput) =>
+    apiClient.post<EmployeeWorkSchedule>("/work-schedules", { employeeId, ...input }),
+  createWeeklyWorkSchedules: (employeeId: string, schedules: EmployeeWorkScheduleInput[]) =>
+    apiClient.post<EmployeeWorkSchedule[]>("/work-schedules", { employeeId, schedules }),
   createWorkSchedule: (id: string, input: EmployeeWorkScheduleInput) =>
     apiClient.post<EmployeeWorkSchedule>(`/accounts/${id}/work-schedule`, input),
   delete: (id: string) => apiClient.delete<boolean>(`/accounts/${id}`),

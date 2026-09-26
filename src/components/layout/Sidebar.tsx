@@ -20,14 +20,18 @@ function routeMatches(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+function isStandaloneWorkSchedule(pathname: string) {
+  return pathname === "/nhan-vien/lich-lam-viec" || pathname.startsWith("/nhan-vien/lich-lam-viec/");
+}
+
 export function Sidebar({ collapsed, variant = "rail" }: SidebarProps) {
   const pathname = usePathname();
   const { account } = useCurrentAccount();
   const activeGroupLabel =
-    NAV_ITEMS.find((item) => item.children && routeMatches(pathname, item.href))?.label ?? null;
+    NAV_ITEMS.find((item) => item.children && routeMatches(pathname, item.href) && !(item.href === "/nhan-vien" && isStandaloneWorkSchedule(pathname)))?.label ?? null;
   const [openGroup, setOpenGroup] = useState<string | null>(() => {
     const activeGroup = NAV_ITEMS.find(
-      (item) => item.children && routeMatches(pathname, item.href)
+      (item) => item.children && routeMatches(pathname, item.href) && !(item.href === "/nhan-vien" && isStandaloneWorkSchedule(pathname))
     );
 
     return activeGroup?.label ?? null;
@@ -74,7 +78,8 @@ export function Sidebar({ collapsed, variant = "rail" }: SidebarProps) {
         <ul className="flex flex-col gap-1">
           {NAV_ITEMS.map((item) => {
             const forbiddenForMember = account?.role === "member" && item.href === "/nhan-vien";
-            const isActiveGroup = routeMatches(pathname, item.href);
+            if (account?.role === "member" && item.href === "/nhan-vien/lich-lam-viec") return null;
+            const isActiveGroup = routeMatches(pathname, item.href) && !(item.href === "/nhan-vien" && isStandaloneWorkSchedule(pathname));
             const isOpen = openGroup === item.label;
             const activeChildHref = item.children
               ?.filter((child) => routeMatches(pathname, child.href))
