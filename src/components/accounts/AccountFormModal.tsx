@@ -57,9 +57,17 @@ export function AccountFormModal({ account, departments, onClose, onSave }: Prop
   const [error, setError] = useState("");
   const positions = useMemo(() => {
     const selected = departments.find((item) => item.id === form.departmentId);
-    const values = selected?.positions ?? [];
-    return form.position && !values.includes(form.position)
-      ? [form.position, ...values]
+    const values = [...new Map(
+      (selected?.positions ?? [])
+        .map((position) => position.trim())
+        .filter(Boolean)
+        .map((position) => [position.toLocaleLowerCase("vi"), position])
+    ).values()];
+    const currentPosition = form.position?.trim();
+    return currentPosition && !values.some(
+      (position) => position.toLocaleLowerCase("vi") === currentPosition.toLocaleLowerCase("vi")
+    )
+      ? [currentPosition, ...values]
       : values;
   }, [departments, form.departmentId, form.position]);
 
@@ -222,14 +230,18 @@ export function AccountFormModal({ account, departments, onClose, onSave }: Prop
                 </select>
               </Field>
               <Field label="Chức vụ">
-                {positions.length ? (
-                  <select className={inputClass} value={form.position ?? ""} onChange={(e) => set("position", e.target.value)}>
-                    <option value="">Chọn chức vụ</option>
-                    {positions.map((position) => <option key={position}>{position}</option>)}
-                  </select>
-                ) : (
-                  <input className={inputClass} value={form.position ?? ""} onChange={(e) => set("position", e.target.value)} placeholder="Nhập chức vụ" />
-                )}
+                <>
+                  <input
+                    className={inputClass}
+                    list="account-position-options"
+                    value={form.position ?? ""}
+                    onChange={(e) => set("position", e.target.value)}
+                    placeholder="Nhập mới hoặc chọn chức vụ"
+                  />
+                  <datalist id="account-position-options">
+                    {positions.map((position) => <option key={position} value={position} />)}
+                  </datalist>
+                </>
               </Field>
               <Field label="Vai trò hệ thống">
                 <select className={inputClass} value={form.role} onChange={(e) => set("role", e.target.value as AccountInput["role"])}>

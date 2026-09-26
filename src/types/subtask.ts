@@ -25,9 +25,17 @@ export interface SubtaskUpdateEntry {
 export interface SubtaskPromptItem {
   id: string;
   content: string;
+  createdAt?: string;
   /** Các link Cloudinary của ảnh tham chiếu (mỗi ảnh một URL). */
   imageUrls: string[];
   status: "unprocessed" | "processed" | "completed";
+}
+
+export interface SubtaskTimeRecord {
+  id: string;
+  type: "start" | "pause" | "end";
+  at: string;
+  actorId?: string;
 }
 
 /** Một dòng vấn đề và giải pháp của Task. */

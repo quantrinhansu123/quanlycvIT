@@ -51,18 +51,7 @@ export function useSessionQuery<T>({
     fetcherRef.current = fetcher;
   });
 
-  // Chạy đúng một lần khi component này mount lần đầu (kể cả trong SSR pass của
-  // Client Component) — đây là cơ chế được React "cho phép" để làm việc một lần
-  // trước render đầu tiên, khác với việc ghi ref/state trực tiếp trong thân render.
-  useState(() => {
-    if (key && initialData !== undefined && !cache.get<T>(key)) {
-      cache.set(key, initialData, ttl);
-    }
-    return null;
-  });
-
-  // Client hydrate: SessionDataCache là instance mới (rỗng), trong khi useState
-  // initializer có thể không chạy lại → seed lại một lần để tránh skeleton oan.
+  // Seed cache sau khi render commit vì cache.set() notify mọi component đang subscribe cùng key.
   useLayoutEffect(() => {
     if (didHydrateSeedRef.current) return;
     didHydrateSeedRef.current = true;
@@ -76,7 +65,9 @@ export function useSessionQuery<T>({
   const [revalidateTick, setRevalidateTick] = useState(0);
 
   const entry = key ? cache.get<T>(key) : undefined;
-  const data = entry?.data;
+  const data = entry?.data ?? (
+    !didHydrateSeedRef.current && key && initialData !== undefined ? initialData : undefined
+  );
 
   useEffect(() => {
     if (!key) return;

@@ -141,8 +141,15 @@ export function SubtaskPromptPanel({
     saveQueueRef.current = saveQueueRef.current
       .catch(() => undefined)
       .then(async () => {
-        await subtaskService.updatePromptItems(subtaskId, payload);
-        if (saveGenerationRef.current === generation) setSaveStatus("saved");
+        const savedItems = await subtaskService.updatePromptItems(subtaskId, payload);
+        if (saveGenerationRef.current === generation) {
+          const createdAtById = new Map(savedItems.map((item) => [item.id, item.createdAt]));
+          replaceItems(itemsRef.current.map((item) => ({
+            ...item,
+            ...(createdAtById.get(item.id) ? { createdAt: createdAtById.get(item.id) } : {}),
+          })));
+          setSaveStatus("saved");
+        }
       })
       .catch((error) => {
         if (saveGenerationRef.current === generation) setSaveStatus("error");
@@ -410,6 +417,16 @@ export function SubtaskPromptPanel({
                         placeholder="Gõ nội dung yêu cầu..."
                         className="min-h-20 w-full resize-y rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-sm leading-5 text-gray-800 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
                       />
+                      {(item.content.trim() || images.length > 0) && (
+                        <p className="mt-1.5 text-[10px] text-gray-400">
+                          Thời gian tạo: {item.createdAt
+                            ? new Intl.DateTimeFormat("vi-VN", {
+                                dateStyle: "short",
+                                timeStyle: "short",
+                              }).format(new Date(item.createdAt))
+                            : "sẽ ghi nhận khi lưu"}
+                        </p>
+                      )}
                     </td>
                     <td className="px-2 py-3">
                       <div className="space-y-2">

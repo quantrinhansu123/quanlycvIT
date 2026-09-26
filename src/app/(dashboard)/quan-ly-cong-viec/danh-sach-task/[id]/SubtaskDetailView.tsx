@@ -23,10 +23,13 @@ import {
   Minimize2,
   PanelRightClose,
   Pencil,
+  Pause,
+  Play,
   Plus,
   RotateCcw,
   Save,
   Send,
+  Square,
   TestTube2,
   UsersRound,
   type LucideIcon,
@@ -37,7 +40,7 @@ import { subtaskService } from "@/services/subtask-service";
 import type { ProjectDirectoryItem, ProjectMember } from "@/types/project";
 import type { TaskFileAttachment, TaskLinkAttachment, WorkTaskDirectoryItem } from "@/types/task";
 import { SUBTASK_STATUS_OPTIONS, TASK_PRIORITY_OPTIONS } from "@/types/task";
-import type { Subtask, SubtaskReport, SubtaskTestHistoryEntry } from "@/types/subtask";
+import type { Subtask, SubtaskReport, SubtaskTestHistoryEntry, SubtaskTimeRecord } from "@/types/subtask";
 import { isSubtaskOverdue } from "@/types/subtask";
 import type { TaskActivityEvent } from "@/types/activity";
 import { AvatarStack } from "@/components/ui/Avatar";
@@ -82,6 +85,33 @@ function getDayDistance(date: string): number {
   target.setHours(0, 0, 0, 0);
   today.setHours(0, 0, 0, 0);
   return Math.round((target.getTime() - today.getTime()) / DAY_IN_MS);
+}
+
+function getRecordedDuration(records: SubtaskTimeRecord[]): number {
+  let startedAt: number | null = null;
+  let total = 0;
+  for (const record of records) {
+    if (record.type === "start") {
+      startedAt = Date.parse(record.at);
+    } else if (startedAt !== null) {
+      const endedAt = Date.parse(record.at);
+      if (Number.isFinite(endedAt) && endedAt >= startedAt) total += endedAt - startedAt;
+      startedAt = null;
+    }
+  }
+  return total;
+}
+
+function formatRecordedDuration(milliseconds: number): string {
+  const minutes = Math.floor(milliseconds / 60_000);
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return hours > 0 ? `${hours} giờ ${remainingMinutes} phút` : `${minutes} phút`;
+}
+
+function formatTimeRecordDate(value: string): string {
+  return new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" })
+    .format(new Date(value));
 }
 
 function isSafeImageUrl(value: string): boolean {
@@ -130,6 +160,8 @@ export function SubtaskDetailView({
   const [activity, setActivity] = useState<TaskActivityEvent[]>(initialActivity);
   const [activityTotal, setActivityTotal] = useState(initialActivityTotal);
   const [testHistory, setTestHistory] = useState<SubtaskTestHistoryEntry[]>(initialTestHistory);
+  const [timeRecords, setTimeRecords] = useState<SubtaskTimeRecord[]>([]);
+  const [savingTimeRecord, setSavingTimeRecord] = useState(false);
   const [activityLoadingMore, setActivityLoadingMore] = useState(false);
   const [secondaryLoading, setSecondaryLoading] = useState(false);
   const [directoryReady, setDirectoryReady] = useState(initialMembers.length > 0);
@@ -147,6 +179,22 @@ export function SubtaskDetailView({
   const [savingHandover, setSavingHandover] = useState(false);
   const [uploadingHandoverImage, setUploadingHandoverImage] = useState(false);
   const handoverImageInputRef = useRef<HTMLInputElement>(null);
+
+  const recordTime = useCallback(async (type: SubtaskTimeRecord["type"]) => {
+    if (savingTimeRecord) return;
+    setSavingTimeRecord(true);
+    try {
+      setTimeRecords(await subtaskService.appendTimeRecord(subtaskId, type));
+    } catch (recordError) {
+      notify({
+        type: "error",
+        title: "Không thể ghi nhận thời gian",
+        description: getErrorMessage(recordError, "Vui lòng thử lại."),
+      });
+    } finally {
+      setSavingTimeRecord(false);
+    }
+  }, [notify, savingTimeRecord, subtaskId]);
 
   /**
    * Nhật ký hoạt động được ghi bằng trigger DB ngay khi mutation ghi xong nên chỉ cần
@@ -281,12 +329,14 @@ export function SubtaskDetailView({
       void Promise.all([
         subtaskService.getSubtaskActivity(subtaskId, 1, ACTIVITY_PAGE_SIZE),
         subtaskService.getSubtaskTestHistory(subtaskId),
+        subtaskService.getTimeRecords(subtaskId),
       ])
-        .then(([activityPage, historyData]) => {
+        .then(([activityPage, historyData, timeRecordData]) => {
           if (!active) return;
           setActivity(activityPage.items);
           setActivityTotal(activityPage.total);
           setTestHistory(historyData);
+          setTimeRecords(timeRecordData);
         })
         .catch(() => undefined);
     }, 400);
@@ -565,6 +615,8 @@ export function SubtaskDetailView({
   const statusOptions = account?.role === "member" && !statusLocked
     ? SUBTASK_STATUS_OPTIONS.filter((option) => option.value !== "done")
     : SUBTASK_STATUS_OPTIONS;
+  const lastTimeRecord = timeRecords.at(-1);
+  const recordedDuration = getRecordedDuration(timeRecords);
 
   return (
     <div className="min-h-full min-w-0 max-w-full overflow-x-clip bg-white pb-2 [contain:inline-size]">
@@ -1065,6 +1117,95 @@ export function SubtaskDetailView({
                   emptyHint="Công việc chưa có người phụ trách"
                   disabled={quickUpdating || statusLocked}
                 />
+
+                <div className="mt-5 border-t border-gray-100 pt-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="mb-1 text-xs font-medium text-gray-400">Ghi nhận thời gian:</p>
+                      <p className="text-sm font-semibold text-gray-800">
+                        Tổng thời gian: {formatRecordedDuration(recordedDuration)}
+                      </p>
+                    </div>
+                    {lastTimeRecord?.type === "start" && (
+                      <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700">
+                        Đang thực hiện
+                      </span>
+                    )}
+                    {lastTimeRecord?.type === "pause" && (
+                      <span className="rounded-full bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700">
+                        Đang tạm dừng
+                      </span>
+                    )}
+                  </div>
+                  {!statusLocked && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {lastTimeRecord?.type !== "start" && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={savingTimeRecord}
+                          onClick={() => void recordTime("start")}
+                        >
+                          <Play className="h-3.5 w-3.5" />
+                          {lastTimeRecord?.type === "pause"
+                            ? "Tiếp tục"
+                            : lastTimeRecord?.type === "end"
+                              ? "Bắt đầu phiên mới"
+                              : "Bắt đầu"}
+                        </Button>
+                      )}
+                      {lastTimeRecord?.type === "start" && (
+                        <>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            disabled={savingTimeRecord}
+                            onClick={() => void recordTime("pause")}
+                          >
+                            <Pause className="h-3.5 w-3.5" />
+                            Tạm dừng
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="danger"
+                            disabled={savingTimeRecord}
+                            onClick={() => void recordTime("end")}
+                          >
+                            <Square className="h-3.5 w-3.5" />
+                            Kết thúc
+                          </Button>
+                        </>
+                      )}
+                      {lastTimeRecord?.type === "pause" && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="danger"
+                          disabled={savingTimeRecord}
+                          onClick={() => void recordTime("end")}
+                        >
+                          <Square className="h-3.5 w-3.5" />
+                          Kết thúc
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                  {timeRecords.length > 0 && (
+                    <ul className="mt-3 space-y-1.5">
+                      {[...timeRecords].reverse().slice(0, 5).map((record) => (
+                        <li key={record.id} className="flex justify-between gap-2 text-[11px] text-gray-500">
+                          <span>{record.type === "start" ? "Bắt đầu" : record.type === "pause" ? "Tạm dừng" : "Kết thúc"}</span>
+                          <time dateTime={record.at}>{formatTimeRecordDate(record.at)}</time>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {timeRecords.length === 0 && (
+                    <p className="mt-2 text-[11px] text-gray-400">Chưa có mốc thời gian.</p>
+                  )}
+                </div>
 
                 <div className="mt-5 border-t border-gray-100 pt-4">
                   <p className="mb-2 text-xs font-medium text-gray-400">

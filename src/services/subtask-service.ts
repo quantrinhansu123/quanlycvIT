@@ -1,5 +1,5 @@
 import { apiClient } from "@/services/api-client";
-import type { Subtask, SubtaskHandover, SubtaskInput, SubtaskPromptItem, SubtaskReport, SubtaskTestHistoryEntry, SubtaskTestResult } from "@/types/subtask";
+import type { Subtask, SubtaskHandover, SubtaskInput, SubtaskPromptItem, SubtaskReport, SubtaskTestHistoryEntry, SubtaskTestResult, SubtaskTimeRecord } from "@/types/subtask";
 import type {
   ProgressReportSubmission,
   TaskPriority,
@@ -143,6 +143,17 @@ export const subtaskService = {
 
   async getPromptItems(id: string): Promise<SubtaskPromptItem[]> {
     return apiClient.get<SubtaskPromptItem[]>(`/subtasks/${id}/prompts`);
+  },
+
+  async getTimeRecords(id: string): Promise<SubtaskTimeRecord[]> {
+    return apiClient.get<SubtaskTimeRecord[]>(`/subtasks/${id}/time-records`);
+  },
+
+  async appendTimeRecord(
+    id: string,
+    type: SubtaskTimeRecord["type"]
+  ): Promise<SubtaskTimeRecord[]> {
+    return apiClient.post<SubtaskTimeRecord[]>(`/subtasks/${id}/time-records`, { type });
   },
 
   async deleteSubtask(id: string): Promise<boolean> {

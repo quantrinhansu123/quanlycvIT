@@ -216,6 +216,31 @@ export function ProjectDetailView({
         </div>
       </div>
 
+      <div className="sticky top-0 z-20 shrink-0 border-b border-gray-200 bg-white/95 px-4 py-2 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-none gap-2 overflow-x-auto">
+          <BottomTab
+            active={tab === "info"}
+            onClick={() => setTab("info")}
+            icon={Info}
+            label="Thông tin dự án"
+          />
+          <BottomTab
+            active={tab === "tasks"}
+            onClick={() => setTab("tasks")}
+            icon={ListTodo}
+            label="Công việc"
+            count={tasks.length}
+          />
+          <BottomTab
+            active={tab === "history"}
+            onClick={() => setTab("history")}
+            icon={History}
+            label="Lịch sử báo cáo"
+            count={0}
+          />
+        </div>
+      </div>
+
       <div
         className={cn(
           "mx-auto",
@@ -491,31 +516,6 @@ export function ProjectDetailView({
             />
           </section>
         )}
-      </div>
-
-      <div className="sticky bottom-0 z-20 shrink-0 border-t border-gray-200 bg-white/95 px-4 py-2 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-none gap-2 overflow-x-auto">
-          <BottomTab
-            active={tab === "info"}
-            onClick={() => setTab("info")}
-            icon={Info}
-            label="Thông tin dự án"
-          />
-          <BottomTab
-            active={tab === "tasks"}
-            onClick={() => setTab("tasks")}
-            icon={ListTodo}
-            label="Công việc"
-            count={tasks.length}
-          />
-          <BottomTab
-            active={tab === "history"}
-            onClick={() => setTab("history")}
-            icon={History}
-            label="Lịch sử báo cáo"
-            count={0}
-          />
-        </div>
       </div>
 
       {editing && !readOnly && (

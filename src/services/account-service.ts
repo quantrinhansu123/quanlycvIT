@@ -1,5 +1,14 @@
 import { apiClient } from "@/services/api-client";
-import type { AccountDirectory, AccountInput, AccountListFilters, AccountPage, Department, EmployeeAccount } from "@/types/account";
+import type {
+  AccountDirectory,
+  AccountInput,
+  AccountListFilters,
+  AccountPage,
+  Department,
+  EmployeeAccount,
+  EmployeeWorkSchedule,
+  EmployeeWorkScheduleInput,
+} from "@/types/account";
 
 function pageQuery(filters: AccountListFilters): string {
   const params = new URLSearchParams();
@@ -32,5 +41,9 @@ export const accountService = {
     apiClient.patch<EmployeeAccount[]>("/accounts/batch", { ids, status }),
   updatePassword: (id: string, newPassword: string) =>
     apiClient.post<boolean>(`/accounts/${id}/password`, { newPassword }),
+  getWorkSchedule: (id: string) =>
+    apiClient.get<EmployeeWorkSchedule[]>(`/accounts/${id}/work-schedule`),
+  createWorkSchedule: (id: string, input: EmployeeWorkScheduleInput) =>
+    apiClient.post<EmployeeWorkSchedule>(`/accounts/${id}/work-schedule`, input),
   delete: (id: string) => apiClient.delete<boolean>(`/accounts/${id}`),
 };

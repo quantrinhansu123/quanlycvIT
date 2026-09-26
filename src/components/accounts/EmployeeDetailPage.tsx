@@ -5,9 +5,9 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
-  ArrowLeft, BadgeCheck, BriefcaseBusiness, Building2, CalendarDays,
+  ArrowLeft, BadgeCheck, BriefcaseBusiness, Building2, CalendarDays, Clock3,
   CircleUserRound, CreditCard, Eye, EyeOff, KeyRound, Landmark, LoaderCircle,
-  LockKeyhole, Mail, MapPin, Pencil, Phone, ShieldCheck, UserRound,
+  LockKeyhole, Mail, MapPin, Pencil, Phone, Plus, ShieldCheck, UserRound,
 } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
@@ -17,7 +17,14 @@ import { getErrorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { useCurrentAccount } from "@/hooks/useCurrentAccount";
 import { accountService } from "@/services/account-service";
-import type { AccountInput, Department, EmployeeAccount } from "@/types/account";
+import type {
+  AccountInput,
+  Department,
+  EmployeeAccount,
+  EmployeeWorkSchedule,
+  EmployeeWorkScheduleInput,
+} from "@/types/account";
+import { getAppDateKey } from "@/lib/utils";
 
 const AccountFormModal = dynamic(
   () => import("@/components/accounts/AccountFormModal").then((mod) => mod.AccountFormModal),
@@ -45,12 +52,30 @@ export function EmployeeDetailPage({ employeeId }: { employeeId: string }) {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
-  const [tab, setTab] = useState<"information" | "password">("information");
+  const [tab, setTab] = useState<"information" | "schedule" | "password">("information");
+  const [workSchedules, setWorkSchedules] = useState<EmployeeWorkSchedule[]>([]);
+  const [workScheduleLoading, setWorkScheduleLoading] = useState(true);
+  const [addingWorkSchedule, setAddingWorkSchedule] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
+
+  async function loadWorkSchedule() {
+    setWorkScheduleLoading(true);
+    try {
+      setWorkSchedules(await accountService.getWorkSchedule(employeeId));
+    } catch (error) {
+      notify({
+        type: "error",
+        title: "Không thể tải lịch làm việc",
+        description: getErrorMessage(error, "Vui lòng thử tải lại."),
+      });
+    } finally {
+      setWorkScheduleLoading(false);
+    }
+  }
 
   async function load() {
     setLoading(true);
@@ -61,6 +86,7 @@ export function EmployeeDetailPage({ employeeId }: { employeeId: string }) {
       ]);
       setAccount(employee);
       setDepartments(directory);
+      void loadWorkSchedule();
     } catch (error) {
       notify({
         type: "error",
@@ -82,6 +108,13 @@ export function EmployeeDetailPage({ employeeId }: { employeeId: string }) {
     setEditing(false);
     notify({ type: "success", title: "Đã cập nhật hồ sơ nhân viên" });
     await load();
+  }
+
+  async function saveWorkSchedule(input: EmployeeWorkScheduleInput) {
+    await accountService.createWorkSchedule(employeeId, input);
+    setAddingWorkSchedule(false);
+    notify({ type: "success", title: "Đã thêm lịch làm việc" });
+    await loadWorkSchedule();
   }
 
   async function changePassword(event: React.FormEvent<HTMLFormElement>) {
@@ -195,7 +228,13 @@ export function EmployeeDetailPage({ employeeId }: { employeeId: string }) {
           </section>
         )}
 
-        {tab === "information" ? (
+        {tab === "schedule" ? (
+          <WorkScheduleSection
+            schedules={workSchedules}
+            loading={workScheduleLoading}
+            onAdd={() => setAddingWorkSchedule(true)}
+          />
+        ) : tab === "information" ? (
           <div className="mt-5 grid items-start gap-5 lg:grid-cols-2">
             <InfoCard title="Thông tin cá nhân">
               <InfoRow icon={UserRound} label="Họ và tên" value={account.name} />
@@ -283,6 +322,9 @@ export function EmployeeDetailPage({ employeeId }: { employeeId: string }) {
           <BottomTab active={tab === "information"} onClick={() => setTab("information")} icon={CircleUserRound}>
             Thông tin
           </BottomTab>
+          <BottomTab active={tab === "schedule"} onClick={() => setTab("schedule")} icon={CalendarDays}>
+            Lịch làm việc
+          </BottomTab>
           {canChangePassword && (
             <BottomTab active={tab === "password"} onClick={() => setTab("password")} icon={KeyRound}>
               Đổi mật khẩu
@@ -299,6 +341,153 @@ export function EmployeeDetailPage({ employeeId }: { employeeId: string }) {
           onSave={save}
         />
       )}
+      {addingWorkSchedule && (
+        <WorkScheduleModal
+          onClose={() => setAddingWorkSchedule(false)}
+          onSave={saveWorkSchedule}
+        />
+      )}
+    </div>
+  );
+}
+
+function WorkScheduleSection({
+  schedules,
+  loading,
+  onAdd,
+}: {
+  schedules: EmployeeWorkSchedule[];
+  loading: boolean;
+  onAdd: () => void;
+}) {
+  return (
+    <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-5 py-4">
+        <div>
+          <h2 className="text-base font-bold text-gray-900">Lịch làm việc</h2>
+          <p className="mt-1 text-sm text-gray-500">Lịch làm việc đã phân công cho nhân viên</p>
+        </div>
+        <Button size="sm" onClick={onAdd}>
+          <Plus className="h-4 w-4" /> Thêm mới
+        </Button>
+      </div>
+
+      {loading ? (
+        <div className="flex min-h-40 items-center justify-center text-sm text-gray-500">
+          <LoaderCircle className="mr-2 h-4 w-4 animate-spin text-brand-600" /> Đang tải lịch làm việc...
+        </div>
+      ) : schedules.length === 0 ? (
+        <div className="flex min-h-44 flex-col items-center justify-center px-5 text-center">
+          <CalendarDays className="h-9 w-9 text-gray-300" />
+          <p className="mt-3 text-sm font-semibold text-gray-700">Chưa có lịch làm việc</p>
+          <p className="mt-1 text-xs text-gray-500">Nhấn “Thêm mới” để tạo lịch cho nhân viên.</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[620px] text-left text-sm">
+            <thead className="bg-gray-50 text-xs font-semibold text-gray-500">
+              <tr>
+                <th className="px-5 py-3">Ngày</th>
+                <th className="px-5 py-3">Thứ</th>
+                <th className="px-5 py-3">Giờ làm việc</th>
+                <th className="px-5 py-3">Ghi chú</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {schedules.map((schedule) => (
+                <tr key={schedule.id} className="text-gray-700">
+                  <td className="whitespace-nowrap px-5 py-3.5 font-medium">{formatDate(schedule.date)}</td>
+                  <td className="px-5 py-3.5 capitalize">
+                    {new Intl.DateTimeFormat("vi-VN", { weekday: "long" })
+                      .format(new Date(`${schedule.date.slice(0, 10)}T00:00:00`))}
+                  </td>
+                  <td className="whitespace-nowrap px-5 py-3.5">
+                    <span className="inline-flex items-center gap-1.5">
+                      <Clock3 className="h-3.5 w-3.5 text-gray-400" />
+                      {schedule.startTime.slice(0, 5)} – {schedule.endTime.slice(0, 5)}
+                    </span>
+                  </td>
+                  <td className="max-w-[280px] px-5 py-3.5 text-gray-500">{schedule.note || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function WorkScheduleModal({
+  onClose,
+  onSave,
+}: {
+  onClose: () => void;
+  onSave: (input: EmployeeWorkScheduleInput) => Promise<void>;
+}) {
+  const [date, setDate] = useState(getAppDateKey());
+  const [startTime, setStartTime] = useState("09:00");
+  const [endTime, setEndTime] = useState("17:00");
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (endTime <= startTime) {
+      setError("Giờ kết thúc phải sau giờ bắt đầu.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await onSave({ date, startTime, endTime, note });
+    } catch (saveError) {
+      setError(getErrorMessage(saveError, "Không thể lưu lịch làm việc."));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !saving) onClose();
+      }}
+    >
+      <section role="dialog" aria-modal="true" aria-labelledby="work-schedule-title" className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+        <h2 id="work-schedule-title" className="text-lg font-bold text-gray-900">Thêm lịch làm việc</h2>
+        <p className="mt-1 text-sm text-gray-500">Chọn ngày và khung giờ làm việc.</p>
+        <form className="mt-5 space-y-4" onSubmit={(event) => void submit(event)}>
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-gray-700">Ngày làm việc</span>
+            <input className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" type="date" value={date} onChange={(event) => setDate(event.target.value)} required />
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-gray-700">Bắt đầu</span>
+              <input className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} required />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-gray-700">Kết thúc</span>
+              <input className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} required />
+            </label>
+          </div>
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-gray-700">Ghi chú</span>
+            <textarea className="min-h-20 w-full resize-y rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" value={note} onChange={(event) => setNote(event.target.value)} maxLength={1000} placeholder="Ca làm, địa điểm hoặc nội dung thêm..." />
+          </label>
+          {error && <p role="alert" className="text-sm text-rose-600">{error}</p>}
+          <div className="flex justify-end gap-2 pt-1">
+            <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>Hủy</Button>
+            <Button type="submit" disabled={saving}>
+              {saving && <LoaderCircle className="h-4 w-4 animate-spin" />}
+              Lưu lịch
+            </Button>
+          </div>
+        </form>
+      </section>
     </div>
   );
 }

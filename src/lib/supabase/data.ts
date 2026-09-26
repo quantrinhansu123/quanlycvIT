@@ -17,6 +17,7 @@ import type {
   SubtaskInput,
   SubtaskIssueEntry,
   SubtaskPromptItem,
+  SubtaskTimeRecord,
   SubtaskReport,
   SubtaskTestHistoryEntry,
   SubtaskTestResult,
@@ -2009,9 +2010,35 @@ export async function updateSubtaskPromptItems(
   id: string,
   items: SubtaskPromptItem[]
 ): Promise<SubtaskPromptItem[] | null> {
+  const existing = await supabase
+    .from("task")
+    .select("prompt_items")
+    .eq("id", id)
+    .maybeSingle();
+  if (existing.error?.code === "42703" || existing.error?.code === "PGRST204") {
+    throw new ApiException(
+      "Cơ sở dữ liệu chưa được cập nhật cho tính năng Prompt.",
+      503
+    );
+  }
+  throwDatabaseError(existing.error);
+  if (!existing.data) return null;
+
+  const existingItems = new Map(
+    normalizeSubtaskPromptItems(existing.data.prompt_items).map((item) => [item.id, item])
+  );
+  const timestampedItems = items.map((item) => {
+    const previous = existingItems.get(item.id);
+    return {
+      ...item,
+      ...(previous
+        ? (previous.createdAt ? { createdAt: previous.createdAt } : {})
+        : { createdAt: item.createdAt ?? new Date().toISOString() }),
+    };
+  });
   const { data, error } = await supabase
     .from("task")
-    .update({ prompt_items: items })
+    .update({ prompt_items: timestampedItems })
     .eq("id", id)
     .select("prompt_items")
     .maybeSingle();
@@ -2024,6 +2051,65 @@ export async function updateSubtaskPromptItems(
   throwDatabaseError(error);
   if (!data) return null;
   return normalizeSubtaskPromptItems(data.prompt_items);
+}
+
+export async function listSubtaskTimeRecords(
+  supabase: ApiSupabaseClient,
+  id: string
+): Promise<SubtaskTimeRecord[]> {
+  const { data, error } = await supabase
+    .from("task")
+    .select("time_records")
+    .eq("id", id)
+    .maybeSingle();
+  if (error?.code === "42703" || error?.code === "PGRST204") return [];
+  throwDatabaseError(error);
+  if (!data) return [];
+  return normalizeSubtaskTimeRecords(data.time_records);
+}
+
+export async function appendSubtaskTimeRecord(
+  supabase: ApiSupabaseClient,
+  id: string,
+  type: SubtaskTimeRecord["type"],
+  actorId: string
+): Promise<SubtaskTimeRecord[] | null> {
+  const { data, error } = await supabase.rpc("append_task_time_record", {
+    p_task_id: id,
+    p_type: type,
+    p_actor_id: actorId,
+  });
+  if (error?.code === "42883" || error?.code === "PGRST202" || error?.code === "42703") {
+    throw new ApiException(
+      "Cơ sở dữ liệu chưa được cập nhật cho tính năng ghi nhận thời gian.",
+      503
+    );
+  }
+  if (error?.code === "22023") {
+    throw new ApiException("Mốc thời gian không hợp lệ theo trạng thái hiện tại.", 409);
+  }
+  throwDatabaseError(error);
+  if (data === null) return null;
+  return normalizeSubtaskTimeRecords(data);
+}
+
+function normalizeSubtaskTimeRecords(value: unknown): SubtaskTimeRecord[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const entry = item as Record<string, unknown>;
+    if (
+      typeof entry.id !== "string" ||
+      (entry.type !== "start" && entry.type !== "pause" && entry.type !== "end") ||
+      typeof entry.at !== "string"
+    ) return [];
+    return [{
+      id: entry.id,
+      type: entry.type,
+      at: entry.at,
+      ...(typeof entry.actorId === "string" ? { actorId: entry.actorId } : {}),
+    }];
+  });
 }
 
 export async function updateSubtaskHandover(
@@ -2069,6 +2155,7 @@ function normalizeSubtaskPromptItems(value: unknown): SubtaskPromptItem[] {
     return [{
       id: entry.id,
       content: entry.content,
+      ...(typeof entry.createdAt === "string" ? { createdAt: entry.createdAt } : {}),
       imageUrls: imageUrls.slice(0, 10),
       status: entry.status === "processed" || entry.status === "completed"
         ? entry.status as "processed" | "completed"

@@ -53,6 +53,23 @@ export interface AccountInput {
   status: AccountStatus;
 }
 
+export interface EmployeeWorkSchedule {
+  id: string;
+  employeeId: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  note?: string;
+  createdAt: string;
+}
+
+export interface EmployeeWorkScheduleInput {
+  date: string;
+  startTime: string;
+  endTime: string;
+  note?: string;
+}
+
 export interface AccountDirectory {
   accounts: EmployeeAccount[];
   departments: Department[];
