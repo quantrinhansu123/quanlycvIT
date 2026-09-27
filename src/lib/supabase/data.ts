@@ -2527,7 +2527,53 @@ function hydrateTaskActivity(rows: TaskActivityRow[]): TaskActivityEvent[] {
     actorName: row.tac_gia?.ten_nv,
     actorColor: row.tac_gia ? avatarColor(row.tac_gia.id) : undefined,
     createdAt: row.created_at,
+    editable: row.loai === "note",
   }));
+}
+
+export async function createSubtaskActivityNote(
+  supabase: ApiSupabaseClient,
+  taskId: string,
+  result: string,
+  content: string
+): Promise<TaskActivityEvent> {
+  const { data: noteId, error: rpcError } = await supabase.rpc("append_task_activity_note", {
+    p_task_id: taskId,
+    p_result: result,
+    p_content: content,
+  });
+  throwDatabaseError(rpcError);
+  const { data, error } = await supabase
+    .from("task_hoat_dong")
+    .select(TASK_ACTIVITY_SELECT)
+    .eq("id", noteId)
+    .single();
+  throwDatabaseError(error);
+  return hydrateTaskActivity([data as unknown as TaskActivityRow])[0];
+}
+
+export async function updateSubtaskActivityNote(
+  supabase: ApiSupabaseClient,
+  taskId: string,
+  noteId: string,
+  result: string,
+  content: string
+): Promise<TaskActivityEvent | null> {
+  const { data: updatedId, error: rpcError } = await supabase.rpc("update_task_activity_note", {
+    p_task_id: taskId,
+    p_note_id: noteId,
+    p_result: result,
+    p_content: content,
+  });
+  throwDatabaseError(rpcError);
+  if (!updatedId) return null;
+  const { data, error } = await supabase
+    .from("task_hoat_dong")
+    .select(TASK_ACTIVITY_SELECT)
+    .eq("id", updatedId)
+    .maybeSingle();
+  throwDatabaseError(error);
+  return data ? hydrateTaskActivity([data as unknown as TaskActivityRow])[0] : null;
 }
 
 /**

@@ -1,0 +1,34 @@
+import { ApiException, apiSuccess, handleApiError, readJsonObject } from "@/lib/api/response";
+import { createApiSupabaseClient } from "@/lib/supabase/api";
+import { assertSubtaskReadable, requireRequestAccount } from "@/lib/supabase/authorization";
+import { createSubtaskActivityNote } from "@/lib/supabase/data";
+
+interface RouteParams {
+  params: Promise<{ id: string }>;
+}
+
+function parseNote(body: Record<string, unknown>) {
+  const result = typeof body.result === "string" ? body.result.trim() : "";
+  const content = typeof body.content === "string" ? body.content.trim() : "";
+  if (!result || result.length > 160) {
+    throw new ApiException("Kết quả là bắt buộc và tối đa 160 ký tự.", 400);
+  }
+  if (!content || content.length > 3000) {
+    throw new ApiException("Nội dung là bắt buộc và tối đa 3.000 ký tự.", 400);
+  }
+  return { result, content };
+}
+
+export async function POST(request: Request, { params }: RouteParams) {
+  try {
+    const { id } = await params;
+    const supabase = createApiSupabaseClient(request);
+    const access = await requireRequestAccount(supabase);
+    await assertSubtaskReadable(supabase, access, id);
+    const values = parseNote(await readJsonObject(request));
+    const note = await createSubtaskActivityNote(supabase, id, values.result, values.content);
+    return apiSuccess(note, 201, "Đã thêm ghi chú hoạt động.");
+  } catch (error) {
+    return handleApiError(error);
+  }
+}

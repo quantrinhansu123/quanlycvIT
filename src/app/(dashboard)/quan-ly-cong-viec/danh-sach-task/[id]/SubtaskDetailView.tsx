@@ -163,6 +163,8 @@ export function SubtaskDetailView({
   const [timeRecords, setTimeRecords] = useState<SubtaskTimeRecord[]>([]);
   const [savingTimeRecord, setSavingTimeRecord] = useState(false);
   const [activityLoadingMore, setActivityLoadingMore] = useState(false);
+  const [iterationEditor, setIterationEditor] = useState<{ id: string | null; description: string } | null>(null);
+  const [savingIteration, setSavingIteration] = useState(false);
   const [secondaryLoading, setSecondaryLoading] = useState(false);
   const [directoryReady, setDirectoryReady] = useState(initialMembers.length > 0);
   const [error, setError] = useState(false);
@@ -350,6 +352,8 @@ export function SubtaskDetailView({
   useEffect(() => {
     if (tab !== "reports") return;
     let active = true;
+    // Chỉ báo đang tải khi tab Báo cáo được mở; trạng thái này gắn với request bên ngoài.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSecondaryLoading(true);
     void subtaskService.getSubtaskReports(subtaskId)
       .then((reportData) => {
@@ -442,6 +446,59 @@ export function SubtaskDetailView({
       throw updateError;
     }
   }, [notify, refreshActivity, subtask]);
+
+  const handleSaveIteration = useCallback(async () => {
+    if (!subtask || !iterationEditor || savingIteration) return;
+    const description = iterationEditor.description.trim();
+    if (!description) {
+      notify({ type: "error", title: "Hãy nhập mô tả cho lần bổ sung." });
+      return;
+    }
+
+    setSavingIteration(true);
+    try {
+      const updates = iterationEditor.id
+        ? subtask.updates.map((entry) => entry.id === iterationEditor.id
+          ? { ...entry, description }
+          : entry)
+        : [
+            ...subtask.updates,
+            {
+              id: crypto.randomUUID(),
+              createdAt: new Date().toISOString(),
+              description,
+              files: [],
+              links: [],
+              images: [],
+            },
+          ];
+      const updated = await subtaskService.updateSubtask(subtask.id, {
+        title: subtask.title,
+        description: subtask.description,
+        workTaskId: subtask.workTaskId,
+        assigneeIds: subtask.assignees.map((member) => member.id),
+        testerId: subtask.tester?.id,
+        priority: subtask.priority,
+        startDate: subtask.startDate,
+        dueDate: subtask.dueDate,
+        progress: subtask.progress,
+        tags: subtask.tags,
+        files: subtask.files,
+        links: subtask.links,
+        images: subtask.images,
+        updates,
+        issues: subtask.issues,
+      });
+      if (!updated) throw new Error("Task không tồn tại hoặc đã bị xóa.");
+      setSubtask(updated);
+      setIterationEditor(null);
+      notify({ type: "success", title: iterationEditor.id ? "Đã cập nhật lần bổ sung" : "Đã thêm lần bổ sung" });
+    } catch (saveError) {
+      notify({ type: "error", title: "Không thể lưu lần bổ sung", description: getErrorMessage(saveError, "Vui lòng thử lại.") });
+    } finally {
+      setSavingIteration(false);
+    }
+  }, [iterationEditor, notify, savingIteration, subtask]);
 
   async function handleLoadMoreActivity() {
     if (activityLoadingMore || activity.length >= activityTotal) return;
@@ -984,12 +1041,24 @@ export function SubtaskDetailView({
                 iconClassName="text-violet-600"
                 title="Chi tiết Task"
                 subtitle="Mô tả Task và thời hạn thực hiện chi tiết"
+                headerAction={!statusLocked && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setIterationEditor({ id: null, description: "" })}
+                    disabled={savingIteration || Boolean(iterationEditor)}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Thêm lần
+                  </Button>
+                )}
               >
-                <div className="space-y-3">
-                  <div className="rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-4">
+                <div className="space-y-2.5">
+                  <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-3 sm:p-4">
                     <div className="mb-2 flex items-center justify-between gap-3">
                       <span className="text-sm font-semibold text-gray-700">Lần 1</span>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2.5">
                         {subtask.createdAt && (
                           <span className="text-xs text-gray-400">{formatDateVN(subtask.createdAt)}</span>
                         )}
@@ -1035,13 +1104,24 @@ export function SubtaskDetailView({
                     )}
                   </div>
                   {subtask.updates.length > 0 && (
-                    <div className="space-y-3">
+                    <div className="space-y-2.5">
                       {subtask.updates.map((entry, index) => (
-                        <div key={entry.id} className="rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-4">
-                          <div className="mb-2 flex items-center justify-between gap-3">
+                        <div key={entry.id} className="rounded-xl border border-gray-200 bg-gray-50/60 p-3 sm:p-4">
+                          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                             <span className="text-sm font-semibold text-gray-700">Lần {index + 2}</span>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5">
                               <span className="text-xs text-gray-400">{formatDateVN(entry.createdAt)}</span>
+                              {!statusLocked && (
+                                <button
+                                  type="button"
+                                  onClick={() => setIterationEditor({ id: entry.id, description: entry.description ?? "" })}
+                                  disabled={savingIteration || Boolean(iterationEditor)}
+                                  className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs font-medium text-gray-500 hover:bg-violet-50 hover:text-violet-700 disabled:opacity-50"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                  Sửa
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => setPromptImport({
@@ -1057,9 +1137,27 @@ export function SubtaskDetailView({
                               </button>
                             </div>
                           </div>
-                          <div className="max-w-full overflow-x-auto text-sm leading-6 text-gray-700">
-                            <DetailDescription description={entry.description} emptyText="Lần này chưa có mô tả." />
-                          </div>
+                          {iterationEditor?.id === entry.id ? (
+                            <div>
+                              <textarea
+                                autoFocus
+                                maxLength={5000}
+                                rows={3}
+                                value={iterationEditor.description}
+                                onChange={(event) => setIterationEditor((current) => current ? { ...current, description: event.target.value } : current)}
+                                placeholder="Nhập nội dung lần bổ sung..."
+                                className="w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm leading-6 text-gray-700 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+                              />
+                              <div className="mt-2 flex justify-end gap-2">
+                                <Button type="button" variant="ghost" size="sm" disabled={savingIteration} onClick={() => setIterationEditor(null)}>Hủy</Button>
+                                <Button type="button" size="sm" disabled={savingIteration} onClick={() => void handleSaveIteration()}>{savingIteration ? "Đang lưu..." : "Lưu"}</Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="max-w-full overflow-x-auto text-sm leading-6 text-gray-700">
+                              <DetailDescription description={entry.description} emptyText="Lần này chưa có mô tả." />
+                            </div>
+                          )}
                           {statusLocked ? (
                             <DetailAttachments
                               entityLabel="Task"
@@ -1081,6 +1179,24 @@ export function SubtaskDetailView({
                           )}
                         </div>
                       ))}
+                    </div>
+                  )}
+                  {iterationEditor?.id === null && (
+                    <div className="rounded-xl border border-dashed border-violet-300 bg-violet-50/40 p-3 sm:p-4">
+                      <div className="mb-2 text-sm font-semibold text-violet-800">Lần {subtask.updates.length + 2}</div>
+                      <textarea
+                        autoFocus
+                        maxLength={5000}
+                        rows={3}
+                        value={iterationEditor.description}
+                        onChange={(event) => setIterationEditor((current) => current ? { ...current, description: event.target.value } : current)}
+                        placeholder="Nhập nội dung lần bổ sung..."
+                        className="w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm leading-6 text-gray-700 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+                      />
+                      <div className="mt-2 flex justify-end gap-2">
+                        <Button type="button" variant="ghost" size="sm" disabled={savingIteration} onClick={() => setIterationEditor(null)}>Hủy</Button>
+                        <Button type="button" size="sm" disabled={savingIteration} onClick={() => void handleSaveIteration()}>{savingIteration ? "Đang lưu..." : "Lưu lần"}</Button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1295,10 +1411,14 @@ export function SubtaskDetailView({
                 subtitle="Nhật ký lịch trình xử lý & báo cáo"
               >
                 <TaskActivityTimeline
+                  taskId={subtaskId}
+                  currentAccountId={account?.id}
+                  canEditAnyNote={account?.role === "admin"}
                   events={activity}
                   hasMore={activity.length < activityTotal}
                   loadingMore={activityLoadingMore}
                   onLoadMore={handleLoadMoreActivity}
+                  onActivityChanged={refreshActivity}
                 />
               </Panel>
             </section>
@@ -1525,6 +1645,7 @@ function Panel({
   iconClassName,
   accentClassName,
   className,
+  headerAction,
   children,
 }: {
   title: string;
@@ -1533,6 +1654,7 @@ function Panel({
   iconClassName: string;
   accentClassName: string;
   className?: string;
+  headerAction?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -1544,11 +1666,16 @@ function Panel({
     >
       <div className={cn("h-1", accentClassName)} />
       <div className="p-6">
-        <h2 className="flex items-center gap-2 text-base font-bold text-gray-900">
-          <Icon className={cn("h-4 w-4", iconClassName)} />
-          {title}
-        </h2>
-        <p className="mb-7 mt-2 text-xs text-gray-500">{subtitle}</p>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="flex items-center gap-2 text-base font-bold text-gray-900">
+              <Icon className={cn("h-4 w-4 shrink-0", iconClassName)} />
+              {title}
+            </h2>
+          </div>
+          {headerAction}
+        </div>
+        <p className={cn("text-xs text-gray-500", headerAction ? "mb-4 mt-1.5" : "mb-7 mt-2")}>{subtitle}</p>
         {children}
       </div>
     </article>
