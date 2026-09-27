@@ -70,9 +70,9 @@ interface SubtaskListClientProps {
   accountId: string;
   accountRole: AccountRole;
   initialSubtasks: SubtaskPageResult;
-  initialWorkTasks: WorkTaskDirectoryItem[];
-  initialMembers: ProjectMember[];
-  initialProjects: ProjectDirectoryItem[];
+  initialWorkTasks?: WorkTaskDirectoryItem[];
+  initialMembers?: ProjectMember[];
+  initialProjects?: ProjectDirectoryItem[];
 }
 
 export function SubtaskListClient({

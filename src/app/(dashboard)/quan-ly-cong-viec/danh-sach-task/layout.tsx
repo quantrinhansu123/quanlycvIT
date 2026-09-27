@@ -9,17 +9,13 @@ import { loadSubtaskListInitialData } from "./loadSubtaskListInitialData";
 async function SubtaskListPanel() {
   const supabase = await createServerSupabaseClient();
   const access = await requireRequestAccount(supabase);
-  const { initialSubtasks, initialWorkTasks, initialMembers, initialProjects } =
-    await loadSubtaskListInitialData(supabase, access);
+  const { initialSubtasks } = await loadSubtaskListInitialData(supabase, access);
 
   return (
     <SubtaskListClient
       accountId={access.id}
       accountRole={access.role}
       initialSubtasks={initialSubtasks}
-      initialWorkTasks={initialWorkTasks}
-      initialMembers={initialMembers}
-      initialProjects={initialProjects}
     />
   );
 }
