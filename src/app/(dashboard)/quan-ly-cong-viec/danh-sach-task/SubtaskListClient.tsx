@@ -442,11 +442,9 @@ export function SubtaskListClient({
   return (
     <div className="flex h-full min-h-0 min-w-0 max-w-full flex-col overflow-hidden bg-white [contain:inline-size]">
       <div
-        className={cn(
-          "flex shrink-0 flex-wrap items-center gap-2 border-b border-gray-100 px-3 py-2",
-          !compactList && "xl:flex-nowrap"
-        )}
+        className="flex shrink-0 flex-col gap-2 border-b border-gray-100 px-3 py-2 xl:flex-row xl:flex-wrap xl:items-center"
       >
+        <div className="flex min-w-0 items-center gap-2">
         <button
           type="button"
           onClick={() => router.back()}
@@ -456,18 +454,58 @@ export function SubtaskListClient({
           <ArrowLeft className="h-4 w-4" />
         </button>
 
-        <div className={cn("relative flex-1", compactList ? "min-w-[180px]" : "min-w-[180px] max-w-[525px] xl:min-w-0")}>
+        <div className={cn("relative min-w-0 flex-1", compactList ? "xl:min-w-[180px]" : "xl:max-w-[525px]")}>
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <input
             type="search"
             value={searchInput}
             onChange={(event) => setSearchInput(event.target.value)}
             placeholder="Tìm task..."
-            className="h-9 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-xs text-gray-700 outline-none placeholder:text-gray-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+            className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 xl:h-9 xl:text-xs"
           />
         </div>
 
-        <>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {!compactList && (
+            <>
+              <Button size="sm" className="h-10 whitespace-nowrap px-2.5 xl:h-9" onClick={() => setFormModal({ mode: "create" })}>
+                <Plus className="h-4 w-4" />
+                <span className="hidden sm:inline">Thêm mới</span>
+              </Button>
+              <div className="hidden overflow-hidden rounded-lg border border-gray-200 bg-white sm:flex">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("table")}
+                  className={cn("flex h-9 w-9 items-center justify-center", viewMode === "table" ? "bg-gray-100 text-gray-700" : "text-gray-400 hover:bg-gray-50")}
+                  aria-label="Xem dạng bảng"
+                >
+                  <TableIcon className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("grid")}
+                  className={cn("flex h-9 w-9 items-center justify-center border-l border-gray-200", viewMode === "grid" ? "bg-gray-100 text-gray-700" : "text-gray-400 hover:bg-gray-50")}
+                  aria-label="Xem dạng lưới"
+                >
+                  <LayoutGrid className="h-4 w-4" />
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleExportPdf()}
+                title="Xuất PDF"
+                disabled={subtasks.length === 0}
+                className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 xl:h-9 xl:w-9"
+                aria-label="Xuất PDF"
+              >
+                <Download className="h-4 w-4" />
+              </button>
+            </>
+          )}
+        </div>
+        </div>
+
+        <div className="-mx-3 flex min-w-0 items-center gap-2 overflow-x-auto px-3 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden xl:mx-0 xl:w-full xl:px-0 2xl:w-auto 2xl:contents">
             <SearchableFilterSelect
               className="w-[110px] shrink-0 2xl:w-[130px]"
               label="Dự án"
@@ -530,45 +568,6 @@ export function SubtaskListClient({
               <AlertTriangle className="h-4 w-4" />
               Task trễ hạn
             </button>
-        </>
-
-        <div className={cn("flex shrink-0 items-center gap-2", !compactList && "ml-auto")}>
-          {!compactList && (
-            <>
-              <Button size="sm" className="whitespace-nowrap px-2.5" onClick={() => setFormModal({ mode: "create" })}>
-                <Plus className="h-4 w-4" />
-                Thêm mới
-              </Button>
-              <div className="flex overflow-hidden rounded-lg border border-gray-200 bg-white">
-                <button
-                  type="button"
-                  onClick={() => setViewMode("table")}
-                  className={cn("flex h-9 w-9 items-center justify-center", viewMode === "table" ? "bg-gray-100 text-gray-700" : "text-gray-400 hover:bg-gray-50")}
-                  aria-label="Xem dạng bảng"
-                >
-                  <TableIcon className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode("grid")}
-                  className={cn("flex h-9 w-9 items-center justify-center border-l border-gray-200", viewMode === "grid" ? "bg-gray-100 text-gray-700" : "text-gray-400 hover:bg-gray-50")}
-                  aria-label="Xem dạng lưới"
-                >
-                  <LayoutGrid className="h-4 w-4" />
-                </button>
-              </div>
-              <button
-                type="button"
-                onClick={() => void handleExportPdf()}
-                title="Xuất PDF"
-                disabled={subtasks.length === 0}
-                className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                aria-label="Xuất PDF"
-              >
-                <Download className="h-4 w-4" />
-              </button>
-            </>
-          )}
         </div>
       </div>
 
@@ -599,7 +598,7 @@ export function SubtaskListClient({
               </Button>
             }
           />
-        ) : compactList || viewMode === "table" ? (
+        ) : compactList ? (
           <SubtaskTable
             subtasks={subtasks}
             workTasksById={workTasksById}
@@ -625,6 +624,57 @@ export function SubtaskListClient({
             compact={compactList}
             activeId={activeSubtaskId}
           />
+        ) : viewMode === "table" ? (
+          <>
+          <div className="hidden sm:block">
+          <SubtaskTable
+            subtasks={subtasks}
+            workTasksById={workTasksById}
+            membersById={membersById}
+            projectsById={projectsById}
+            selectedIds={selectedIds}
+            onToggleSelect={toggleSelect}
+            onToggleSelectAll={toggleSelectAll}
+            onReport={setReportDrawer}
+            onViewReports={(subtask) => setQuickView({ subtask, tab: "reports" })}
+            onEdit={(subtask) => setFormModal({ mode: "edit", subtask })}
+            onDelete={handleDelete}
+            canApprove={isAdmin}
+            onApprove={handleApprove}
+            isMember={isMember}
+            currentAccountId={accountId}
+            acceptingId={acceptingId}
+            onAccept={handleAccept}
+            canReport={!isAdmin}
+            canTest
+            onPassTest={(subtask) => void handleTest(subtask, true)}
+            onFailTest={(subtask) => void handleTest(subtask, false)}
+          />
+          </div>
+          <div className="grid grid-cols-1 gap-2.5 p-3 sm:hidden">
+            {subtasks.map((subtask) => (
+              <SubtaskCard
+                key={subtask.id}
+                subtask={subtask}
+                workTask={workTasksById.get(subtask.workTaskId)}
+                assignee={membersById.get(subtask.assigneeId)}
+                onReport={setReportDrawer}
+                onViewReports={(t) => setQuickView({ subtask: t, tab: "reports" })}
+                onEdit={(t) => setFormModal({ mode: "edit", subtask: t })}
+                onDelete={handleDelete}
+                canApprove={isAdmin}
+                onApprove={handleApprove}
+                isMember={isMember}
+                currentAccountId={accountId}
+                acceptingId={acceptingId}
+                onAccept={handleAccept}
+                canTest
+                onPassTest={(item) => void handleTest(item, true)}
+                onFailTest={(item) => void handleTest(item, false)}
+              />
+            ))}
+          </div>
+          </>
         ) : (
           <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3">
             {subtasks.map((subtask) => (

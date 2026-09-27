@@ -61,7 +61,7 @@ export function SubtaskCard({
   );
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-gray-100 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
+    <div className="flex flex-col gap-2.5 rounded-xl border border-gray-100 bg-white p-3 shadow-sm transition-shadow hover:shadow-md sm:gap-3 sm:p-5">
       <div className="flex items-start justify-between gap-2">
         {workTask ? (
           <span className="truncate text-xs font-semibold text-gray-400">{workTask.title}</span>
@@ -110,7 +110,7 @@ export function SubtaskCard({
         href={`/quan-ly-cong-viec/danh-sach-task/${subtask.id}`}
         className="text-left"
       >
-        <p className="line-clamp-1 text-sm font-semibold text-gray-800 hover:text-brand-600">{subtask.title}</p>
+        <p className="line-clamp-2 text-sm font-semibold text-gray-800 hover:text-brand-600">{subtask.title}</p>
         {subtask.description && <p className="mt-1 line-clamp-2 text-xs text-gray-400">{subtask.description}</p>}
       </IntentPrefetchLink>
 
@@ -127,13 +127,13 @@ export function SubtaskCard({
         </div>
       ) : (
         (assignee ?? subtask.assignees[0]) && (
-          <div className="flex items-center gap-2 text-xs text-gray-500">
+          <div className="flex min-w-0 items-center gap-2 text-xs text-gray-500">
             <Avatar
               name={(assignee ?? subtask.assignees[0]).name}
               color={(assignee ?? subtask.assignees[0]).avatarColor}
               size="sm"
             />
-            {(assignee ?? subtask.assignees[0]).name}
+            <span className="truncate">{(assignee ?? subtask.assignees[0]).name}</span>
           </div>
         )
       )}
