@@ -1,7 +1,8 @@
 "use client";
 
+import { Fragment, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarDays, CheckCircle2, Eye, FilePenLine, History, Pencil, Trash2, XCircle } from "lucide-react";
+import { CalendarDays, CheckCircle2, Eye, FilePenLine, FolderOpen, History, ListTodo, Pencil, Trash2, XCircle } from "lucide-react";
 import type { Subtask } from "@/types/subtask";
 import { isSubtaskOverdue } from "@/types/subtask";
 import type { WorkTaskDirectoryItem } from "@/types/task";
@@ -50,6 +51,52 @@ interface SubtaskTableProps {
   compact?: boolean;
   /** Task đang xem chi tiết (để highlight trong chế độ compact). */
   activeId?: string;
+  /** Xếp nhóm các dòng theo 2 cấp: Dự án → Công việc. Chỉ áp dụng ở chế độ bảng đầy đủ. */
+  grouped?: boolean;
+}
+
+export interface SubtaskGroup {
+  key: string;
+  projectKey: string;
+  projectId?: string;
+  projectName: string;
+  workTaskId: string;
+  workTaskTitle: string;
+  items: Subtask[];
+}
+
+/** Gom danh sách task phẳng thành các nhóm Dự án → Công việc, sắp xếp theo tên. */
+export function buildSubtaskGroups(
+  subtasks: Subtask[],
+  workTasksById: Map<string, WorkTaskDirectoryItem>,
+  projectsById?: Map<string, ProjectDirectoryItem>
+): SubtaskGroup[] {
+  const byKey = new Map<string, SubtaskGroup>();
+  for (const subtask of subtasks) {
+    const workTask = workTasksById.get(subtask.workTaskId);
+    const projectId = workTask?.projectId;
+    const projectKey = projectId ?? "__none";
+    const key = `${projectKey}__${subtask.workTaskId}`;
+    let group = byKey.get(key);
+    if (!group) {
+      group = {
+        key,
+        projectKey,
+        projectId,
+        projectName: (projectId && projectsById?.get(projectId)?.name) ?? "Không thuộc dự án",
+        workTaskId: subtask.workTaskId,
+        workTaskTitle: workTask?.title ?? "Công việc khác",
+        items: [],
+      };
+      byKey.set(key, group);
+    }
+    group.items.push(subtask);
+  }
+  return [...byKey.values()].sort(
+    (a, b) =>
+      a.projectName.localeCompare(b.projectName, "vi") ||
+      a.workTaskTitle.localeCompare(b.workTaskTitle, "vi")
+  );
 }
 
 export function SubtaskTable({
@@ -78,6 +125,7 @@ export function SubtaskTable({
   readOnly = false,
   compact = false,
   activeId,
+  grouped = false,
 }: SubtaskTableProps) {
   const router = useRouter();
   const splitView = useSplitView();
@@ -91,6 +139,30 @@ export function SubtaskTable({
   const columnWidths = compact
     ? ["w-10", "min-w-0"]
     : subtaskColumnWidths(hideWorkTaskColumn, showProjectColumn);
+  const groupEnabled = grouped && !compact;
+  const allGroups = useMemo(
+    () => buildSubtaskGroups(subtasks, workTasksById, projectsById),
+    [subtasks, workTasksById, projectsById]
+  );
+  const orderedSubtasks = useMemo(
+    () => (groupEnabled ? allGroups.flatMap((group) => group.items) : subtasks),
+    [groupEnabled, allGroups, subtasks]
+  );
+  const groupByKey = useMemo(() => new Map(allGroups.map((group) => [group.key, group])), [allGroups]);
+  const groupKeyById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const group of allGroups) {
+      for (const item of group.items) map.set(item.id, group.key);
+    }
+    return map;
+  }, [allGroups]);
+  // Số cột của tbody để dòng tiêu đề nhóm trải full bảng.
+  const bodyColumnCount = compact ? 2 : 9 + (!hideWorkTaskColumn ? 1 : 0) + (showProjectColumn ? 1 : 0);
+  function projectTaskCount(projectKey: string): number {
+    return allGroups
+      .filter((group) => group.projectKey === projectKey)
+      .reduce((sum, group) => sum + group.items.length, 0);
+  }
 
   return (
     <div className="min-w-0">
@@ -138,7 +210,7 @@ export function SubtaskTable({
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
-          {subtasks.map((subtask) => {
+          {orderedSubtasks.map((subtask, rowIndex) => {
             const workTask = workTasksById.get(subtask.workTaskId);
             const assignee = membersById.get(subtask.assigneeId);
             const overdue = isSubtaskOverdue(subtask);
@@ -217,8 +289,49 @@ export function SubtaskTable({
             ];
 
             return (
+              <Fragment key={subtask.id}>
+                {(() => {
+                  if (!groupEnabled) return null;
+                  const group = groupByKey.get(groupKeyById.get(subtask.id) ?? "");
+                  if (!group) return null;
+                  const prevSubtask = rowIndex > 0 ? orderedSubtasks[rowIndex - 1] : undefined;
+                  const prevGroup = prevSubtask ? groupByKey.get(groupKeyById.get(prevSubtask.id) ?? "") : undefined;
+                  if (prevGroup?.key === group.key) return null;
+                  const showProject = prevGroup?.projectKey !== group.projectKey;
+                  return (
+                    <>
+                      {showProject && (
+                        <tr className="bg-gray-50/70">
+                          <td colSpan={bodyColumnCount} className="px-2 py-2">
+                            <div className="flex items-center gap-2">
+                              <FolderOpen className="h-4 w-4 shrink-0 text-brand-600" />
+                              <span className="truncate text-xs font-bold uppercase tracking-wide text-gray-700">
+                                {group.projectName}
+                              </span>
+                              <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-gray-500 ring-1 ring-gray-200">
+                                {projectTaskCount(group.projectKey)} task
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      <tr className="bg-white">
+                        <td colSpan={bodyColumnCount} className="px-2 py-1.5 pl-7">
+                          <div className="flex items-center gap-1.5">
+                            <ListTodo className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                            <span className="truncate text-xs font-semibold text-gray-600">
+                              {group.workTaskTitle}
+                            </span>
+                            <span className="whitespace-nowrap text-[10px] font-medium text-gray-400">
+                              · {group.items.length} task
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    </>
+                  );
+                })()}
               <tr
-                key={subtask.id}
                 className={cn(
                   "data-table-row group",
                   isActive && "bg-brand-50/70"
@@ -321,6 +434,7 @@ export function SubtaskTable({
                   </>
                 )}
               </tr>
+              </Fragment>
             );
           })}
         </tbody>

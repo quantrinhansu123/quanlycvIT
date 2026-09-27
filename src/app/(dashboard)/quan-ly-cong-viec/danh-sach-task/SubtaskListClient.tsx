@@ -7,7 +7,9 @@ import {
   AlertTriangle,
   ArrowLeft,
   Download,
+  FolderOpen,
   LayoutGrid,
+  ListTree,
   Plus,
   Search,
   Table as TableIcon,
@@ -28,7 +30,7 @@ import { SearchableFilterMultiSelect } from "@/components/ui/SearchableFilterMul
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { TableSkeleton } from "@/components/ui/Skeleton";
-import { SubtaskTable } from "@/components/subtasks/SubtaskTable";
+import { SubtaskTable, buildSubtaskGroups } from "@/components/subtasks/SubtaskTable";
 import { SubtaskCard } from "@/components/subtasks/SubtaskCard";
 import { ModalLoadingFallback } from "@/components/ui/ModalLoadingFallback";
 import { ListPaginationFooter } from "@/components/ui/ListPaginationFooter";
@@ -106,6 +108,7 @@ export function SubtaskListClient({
   const [needsTesting, setNeedsTesting] = useState(false);
 
   const [viewMode, setViewMode] = useState<ViewMode>("table");
+  const [grouped, setGrouped] = useState(true);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [formModal, setFormModal] = useState<FormModalState>(null);
   const [quickView, setQuickView] = useState<QuickViewState>(null);
@@ -195,6 +198,28 @@ export function SubtaskListClient({
   const workTasksById = useMemo(() => new Map(workTasks.map((t) => [t.id, t])), [workTasks]);
   const membersById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
   const projectsById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
+
+  // Gom task đang hiển thị (theo trang hiện tại) thành 2 cấp: Dự án → Công việc.
+  const nestedGroups = useMemo(() => {
+    if (!grouped) return null;
+    const flat = buildSubtaskGroups(subtasks, workTasksById, projectsById);
+    const nested: {
+      key: string;
+      projectName: string;
+      projectCount: number;
+      tasks: { key: string; workTaskTitle: string; items: Subtask[] }[];
+    }[] = [];
+    for (const group of flat) {
+      let project = nested.find((entry) => entry.key === group.projectKey);
+      if (!project) {
+        project = { key: group.projectKey, projectName: group.projectName, projectCount: 0, tasks: [] };
+        nested.push(project);
+      }
+      project.tasks.push({ key: group.key, workTaskTitle: group.workTaskTitle, items: group.items });
+      project.projectCount += group.items.length;
+    }
+    return nested;
+  }, [grouped, subtasks, workTasksById, projectsById]);
 
   // Bộ lọc "Công việc" chỉ hiển thị công việc thuộc dự án đang chọn.
   const workTaskOptions = useMemo(
@@ -439,6 +464,52 @@ export function SubtaskListClient({
     }
   }
 
+  function renderSubtaskCard(subtask: Subtask) {
+    return (
+      <SubtaskCard
+        key={subtask.id}
+        subtask={subtask}
+        workTask={workTasksById.get(subtask.workTaskId)}
+        assignee={membersById.get(subtask.assigneeId)}
+        onReport={setReportDrawer}
+        onViewReports={(t) => setQuickView({ subtask: t, tab: "reports" })}
+        onEdit={(t) => setFormModal({ mode: "edit", subtask: t })}
+        onDelete={handleDelete}
+        canApprove={isAdmin}
+        onApprove={handleApprove}
+        isMember={isMember}
+        currentAccountId={accountId}
+        acceptingId={acceptingId}
+        onAccept={handleAccept}
+        canTest
+        onPassTest={(item) => void handleTest(item, true)}
+        onFailTest={(item) => void handleTest(item, false)}
+      />
+    );
+  }
+
+  function renderProjectHeader(name: string, count: number) {
+    return (
+      <div className="flex items-center gap-2 px-1">
+        <FolderOpen className="h-4 w-4 shrink-0 text-brand-600" />
+        <span className="truncate text-xs font-bold uppercase tracking-wide text-gray-700">{name}</span>
+        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-500">
+          {count} task
+        </span>
+      </div>
+    );
+  }
+
+  function renderWorkTaskHeader(title: string, count: number) {
+    return (
+      <div className="flex items-center gap-1.5 pl-5">
+        <ListTodo className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+        <span className="truncate text-xs font-semibold text-gray-600">{title}</span>
+        <span className="whitespace-nowrap text-[10px] font-medium text-gray-400">· {count} task</span>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full min-h-0 min-w-0 max-w-full flex-col overflow-hidden bg-white [contain:inline-size]">
       <div
@@ -490,6 +561,19 @@ export function SubtaskListClient({
                   <LayoutGrid className="h-4 w-4" />
                 </button>
               </div>
+              <button
+                type="button"
+                onClick={() => setGrouped((current) => !current)}
+                title="Nhóm theo cấp Dự án và Công việc"
+                aria-pressed={grouped}
+                className={cn(
+                  "flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 text-xs font-medium xl:h-9",
+                  grouped ? "border-violet-300 bg-violet-50 text-violet-700" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                )}
+              >
+                <ListTree className="h-4 w-4" />
+                <span className="hidden sm:inline">Nhóm</span>
+              </button>
               <button
                 type="button"
                 onClick={() => void handleExportPdf()}
@@ -649,55 +733,51 @@ export function SubtaskListClient({
             canTest
             onPassTest={(subtask) => void handleTest(subtask, true)}
             onFailTest={(subtask) => void handleTest(subtask, false)}
+            grouped={grouped}
+            hideWorkTaskColumn={grouped}
           />
           </div>
           <div className="grid grid-cols-1 gap-2.5 p-3 sm:hidden">
-            {subtasks.map((subtask) => (
-              <SubtaskCard
-                key={subtask.id}
-                subtask={subtask}
-                workTask={workTasksById.get(subtask.workTaskId)}
-                assignee={membersById.get(subtask.assigneeId)}
-                onReport={setReportDrawer}
-                onViewReports={(t) => setQuickView({ subtask: t, tab: "reports" })}
-                onEdit={(t) => setFormModal({ mode: "edit", subtask: t })}
-                onDelete={handleDelete}
-                canApprove={isAdmin}
-                onApprove={handleApprove}
-                isMember={isMember}
-                currentAccountId={accountId}
-                acceptingId={acceptingId}
-                onAccept={handleAccept}
-                canTest
-                onPassTest={(item) => void handleTest(item, true)}
-                onFailTest={(item) => void handleTest(item, false)}
-              />
-            ))}
+            {nestedGroups ? (
+              <div className="space-y-5">
+                {nestedGroups.map((project) => (
+                  <section key={project.key} className="space-y-2">
+                    {renderProjectHeader(project.projectName, project.projectCount)}
+                    {project.tasks.map((task) => (
+                      <div key={task.key} className="space-y-2">
+                        {renderWorkTaskHeader(task.workTaskTitle, task.items.length)}
+                        <div className="grid grid-cols-1 gap-2.5">
+                          {task.items.map(renderSubtaskCard)}
+                        </div>
+                      </div>
+                    ))}
+                  </section>
+                ))}
+              </div>
+            ) : (
+              subtasks.map(renderSubtaskCard)
+            )}
           </div>
           </>
+        ) : nestedGroups ? (
+          <div className="space-y-6 p-5">
+            {nestedGroups.map((project) => (
+              <section key={project.key} className="space-y-3">
+                {renderProjectHeader(project.projectName, project.projectCount)}
+                {project.tasks.map((task) => (
+                  <div key={task.key} className="space-y-2">
+                    {renderWorkTaskHeader(task.workTaskTitle, task.items.length)}
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                      {task.items.map(renderSubtaskCard)}
+                    </div>
+                  </div>
+                ))}
+              </section>
+            ))}
+          </div>
         ) : (
           <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3">
-            {subtasks.map((subtask) => (
-              <SubtaskCard
-                key={subtask.id}
-                subtask={subtask}
-                workTask={workTasksById.get(subtask.workTaskId)}
-                assignee={membersById.get(subtask.assigneeId)}
-                onReport={setReportDrawer}
-                onViewReports={(t) => setQuickView({ subtask: t, tab: "reports" })}
-                onEdit={(t) => setFormModal({ mode: "edit", subtask: t })}
-                onDelete={handleDelete}
-                canApprove={isAdmin}
-                onApprove={handleApprove}
-                isMember={isMember}
-                currentAccountId={accountId}
-                acceptingId={acceptingId}
-                onAccept={handleAccept}
-                canTest
-                onPassTest={(subtask) => void handleTest(subtask, true)}
-                onFailTest={(subtask) => void handleTest(subtask, false)}
-              />
-            ))}
+            {subtasks.map(renderSubtaskCard)}
           </div>
         )}
         </div>

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 import { accountService } from "@/services/account-service";
-import type { EmployeeAccount, EmployeeWorkSchedule } from "@/types/account";
+import type { EmployeeAccount, EmployeeAttendance, EmployeeWorkSchedule } from "@/types/account";
 
 const WEEKDAYS = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
 const WEEKDAY_OPTIONS = ["Chủ nhật", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"];
@@ -17,6 +17,8 @@ export function WorkScheduleManagementPage() {
   const { notify } = useFeedback();
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [schedules, setSchedules] = useState<EmployeeWorkSchedule[]>([]);
+  const [onlineEmployees, setOnlineEmployees] = useState<EmployeeAttendance[]>([]);
+  const [onlineStatusError, setOnlineStatusError] = useState(false);
   const [employees, setEmployees] = useState<EmployeeAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -37,6 +39,30 @@ export function WorkScheduleManagementPage() {
   }, [month, notify]);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    let active = true;
+    const refreshOnlineEmployees = async () => {
+      const today = dateKey(new Date());
+      const tomorrowDate = new Date();
+      tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+      const tomorrow = dateKey(tomorrowDate);
+      try {
+        const attendance = await accountService.getAttendanceForPeriod(today, tomorrow);
+        if (active) {
+          setOnlineEmployees(attendance.filter((record) => record.checkIn && !record.checkOut));
+          setOnlineStatusError(false);
+        }
+      } catch {
+        if (active) setOnlineStatusError(true);
+      }
+    };
+    void refreshOnlineEmployees();
+    const interval = window.setInterval(() => { void refreshOnlineEmployees(); }, 60_000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, []);
   useEffect(() => {
     accountService.getAnalytics()
       .then((directory) => setEmployees(directory.accounts.filter((account) => account.status === "active")))
@@ -156,6 +182,13 @@ export function WorkScheduleManagementPage() {
             <Button onClick={() => setShowForm(true)}><Plus className="h-4 w-4" /> Thêm mới</Button>
           </div>
         </header>
+
+        <div className="border-b border-slate-100 px-5 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {!onlineStatusError && <span className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-700"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />Đang online <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs">{onlineEmployees.length}</span></span>}
+            {onlineStatusError ? <span className="text-sm text-amber-700">Không tải được trạng thái chấm công.</span> : onlineEmployees.length ? onlineEmployees.map((employee) => <span key={employee.id} className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-800">{employee.employeeName}</span>) : <span className="text-sm text-slate-500">Chưa có nhân viên check-in hôm nay.</span>}
+          </div>
+        </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
           <h2 className="text-base font-semibold capitalize text-slate-800">{new Intl.DateTimeFormat("vi-VN", { month: "long", year: "numeric" }).format(month)}</h2>

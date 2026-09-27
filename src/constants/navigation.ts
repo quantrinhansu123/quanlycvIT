@@ -5,6 +5,7 @@ import {
   Users,
   ChartNoAxesColumnIncreasing,
   UserRoundCog,
+  Clock3,
   Building2,
   Layers,
   ListChecks,
@@ -45,6 +46,11 @@ export const NAV_ITEMS: NavItem[] = [
         label: "Quản lý tài khoản",
         href: "/nhan-vien",
         icon: UserRoundCog,
+      },
+      {
+        label: "Chấm công",
+        href: "/nhan-vien/cham-cong",
+        icon: Clock3,
       },
       {
         label: "Phòng Ban & Chức Vụ",
@@ -103,6 +109,7 @@ export const BREADCRUMB_LABELS: Record<string, string> = {
   "danh-sach-task": "Danh sách Task",
   "ung-dung": "Ứng dụng",
   "nhan-vien": "Nhân viên",
+  "cham-cong": "Chấm công",
   "phong-ban-chuc-vu": "Phòng Ban & Chức Vụ",
   "thong-ke-nhan-su": "Thống kê nhân sự",
   "lich-lam-viec": "Lịch làm việc",

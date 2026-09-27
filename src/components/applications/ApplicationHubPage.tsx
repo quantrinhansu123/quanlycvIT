@@ -6,6 +6,7 @@ import {
   Ban,
   BarChart3,
   Building2,
+  Clock3,
   ChevronDown,
   ChevronRight,
   ClipboardList,
@@ -53,6 +54,7 @@ const BOOKMARK_STORAGE_KEY = "goal-app:bookmarked-modules";
 const MODULES: ApplicationModule[] = [
   { id: "employee-statistics", groupId: "employees", name: "Thống kê nhân sự", description: "Quản lý thống kê nhân sự", href: "/nhan-vien/thong-ke-nhan-su", icon: BarChart3, color: "text-emerald-600", background: "bg-emerald-50" },
   { id: "accounts", groupId: "employees", name: "Quản lý tài khoản", description: "Quản lý tài khoản nhân viên", href: "/nhan-vien", icon: UserRoundCog, color: "text-cyan-600", background: "bg-cyan-50" },
+  { id: "attendance", groupId: "employees", name: "Chấm công", description: "Theo dõi ngày, nhân viên, check-in và check-out", href: "/nhan-vien/cham-cong", icon: Clock3, color: "text-indigo-600", background: "bg-indigo-50" },
   { id: "departments", groupId: "employees", name: "Phòng Ban & Chức Vụ", description: "Quản lý phòng ban và chức vụ", href: "/nhan-vien/phong-ban-chuc-vu", icon: Building2, color: "text-orange-600", background: "bg-orange-50" },
 
   { id: "projects", groupId: "work", name: "Danh sách dự án", description: "Quản lý danh sách dự án", href: "/quan-ly-cong-viec/danh-sach-du-an", icon: Layers3, color: "text-violet-600", background: "bg-violet-50" },

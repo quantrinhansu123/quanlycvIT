@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ComingSoon } from "@/components/ui/ComingSoon";
 
 const MODULE_NAMES: Record<string, string> = {
@@ -16,6 +16,7 @@ export function generateStaticParams() {
 
 export default async function Page({ params }: { params: Promise<{ module: string }> }) {
   const { module } = await params;
+  if (module === "cham-cong") redirect("/nhan-vien/cham-cong");
   const title = MODULE_NAMES[module];
   if (!title) notFound();
   return <ComingSoon title={title} />;

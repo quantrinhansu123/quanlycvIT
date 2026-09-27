@@ -6,6 +6,8 @@ import type {
   AccountPage,
   Department,
   EmployeeAccount,
+  EmployeeAttendance,
+  EmployeeAttendanceInput,
   EmployeeWorkSchedule,
   EmployeeWorkScheduleInput,
 } from "@/types/account";
@@ -45,6 +47,10 @@ export const accountService = {
     apiClient.get<EmployeeWorkSchedule[]>(`/accounts/${id}/work-schedule`),
   getWorkSchedulesForPeriod: (startDate: string, endDate: string) =>
     apiClient.get<EmployeeWorkSchedule[]>(`/work-schedules?startDate=${startDate}&endDate=${endDate}`),
+  getAttendanceForPeriod: (startDate: string, endDate: string) =>
+    apiClient.get<EmployeeAttendance[]>(`/attendance?startDate=${startDate}&endDate=${endDate}`),
+  saveAttendance: (input: EmployeeAttendanceInput) =>
+    apiClient.post<EmployeeAttendance>("/attendance", input),
   createGlobalWorkSchedule: (employeeId: string, input: EmployeeWorkScheduleInput) =>
     apiClient.post<EmployeeWorkSchedule>("/work-schedules", { employeeId, ...input }),
   createWeeklyWorkSchedules: (employeeId: string, schedules: EmployeeWorkScheduleInput[]) =>

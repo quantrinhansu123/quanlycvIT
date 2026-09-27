@@ -72,6 +72,23 @@ export interface EmployeeWorkScheduleInput {
   note?: string;
 }
 
+export interface EmployeeAttendance {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  employeeCode: string;
+  date: string;
+  checkIn?: string;
+  checkOut?: string;
+}
+
+export interface EmployeeAttendanceInput {
+  employeeId: string;
+  date: string;
+  checkIn?: string;
+  checkOut?: string;
+}
+
 export interface AccountDirectory {
   accounts: EmployeeAccount[];
   departments: Department[];
