@@ -1,6 +1,7 @@
 import {
   CalendarDays,
   CircleCheck,
+  Clock3,
   FileClock,
   ListChecks,
   Pencil,
@@ -25,6 +26,48 @@ const ACTIVITY_ICONS: Record<TaskActivityType, LucideIcon> = {
   approved: CircleCheck,
   edited: Pencil,
 };
+
+const TASK_STATUS_LABELS: Record<string, string> = {
+  todo: "Chưa bắt đầu",
+  in_progress: "Đang làm",
+  inProgress: "Đang làm",
+  testing: "Đang kiểm thử",
+  review: "Chờ duyệt",
+  done: "Hoàn thành",
+};
+
+function formatActivityContent(detail?: Record<string, unknown>): string {
+  if (!detail || Object.keys(detail).length === 0) return "Không có nội dung chi tiết";
+
+  if (typeof detail.tien_do === "number") {
+    return `Tiến độ báo cáo: ${detail.tien_do}%`;
+  }
+
+  if (typeof detail.tu === "string" && typeof detail.den === "string") {
+    return `Trạng thái: ${TASK_STATUS_LABELS[detail.tu] ?? detail.tu} → ${TASK_STATUS_LABELS[detail.den] ?? detail.den}`;
+  }
+
+  const entries = Object.entries(detail).map(([key, value]) => {
+    const label = key === "trang_thai" ? "Trạng thái" : key;
+    const text = typeof value === "string" && key === "trang_thai"
+      ? TASK_STATUS_LABELS[value] ?? value
+      : String(value);
+    return `${label}: ${text}`;
+  });
+  return entries.join(" · ");
+}
+
+function formatActivityTimestamp(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Không rõ thời gian";
+  return new Intl.DateTimeFormat("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
 
 interface TaskActivityTimelineProps {
   events: TaskActivityEvent[];
@@ -74,15 +117,7 @@ export function TaskActivityTimeline({
               </span>
 
               <div className="rounded-xl border border-gray-200 bg-white px-3.5 py-3 shadow-sm">
-                <div className="flex items-start justify-between gap-3">
-                  <p className="text-sm font-bold leading-5 text-gray-900">
-                    {event.title}
-                  </p>
-                  <span className="shrink-0 text-xs text-gray-400">
-                    {formatRelativeTime(event.createdAt)}
-                  </span>
-                </div>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <span
                     className={cn(
                       "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold",
@@ -92,12 +127,28 @@ export function TaskActivityTimeline({
                     <span className={cn("h-1.5 w-1.5 rounded-full", meta.dot)} />
                     {meta.label}
                   </span>
-                  {event.actorName && (
-                    <span className="text-[11px] text-gray-500">
-                      bởi {event.actorName}
-                    </span>
-                  )}
                 </div>
+                <dl className="mt-3 grid grid-cols-1 gap-x-4 gap-y-2 border-t border-gray-100 pt-3 sm:grid-cols-2">
+                  <div className="min-w-0">
+                    <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Kết quả</dt>
+                    <dd className="mt-0.5 break-words text-xs font-medium text-gray-800">{event.title}</dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Nội dung</dt>
+                    <dd className="mt-0.5 break-words text-xs text-gray-600">{formatActivityContent(event.detail)}</dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Người thực hiện</dt>
+                    <dd className="mt-0.5 truncate text-xs font-medium text-gray-700">{event.actorName ?? "Không xác định"}</dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Thời gian</dt>
+                    <dd className="mt-0.5 flex items-center gap-1.5 text-xs text-gray-600" title={formatActivityTimestamp(event.createdAt)}>
+                      <Clock3 className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                      <time dateTime={event.createdAt}>{formatRelativeTime(event.createdAt) || formatActivityTimestamp(event.createdAt)}</time>
+                    </dd>
+                  </div>
+                </dl>
               </div>
             </article>
           );
