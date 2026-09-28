@@ -5,7 +5,8 @@ export type TaskActivityType =
   | "progress_reported"
   | "approved"
   | "edited"
-  | "note";
+  | "note"
+  | "cham_cong";
 
 export interface TaskActivityEvent {
   id: string;
@@ -45,4 +46,5 @@ export const TASK_ACTIVITY_META: Record<
   approved: { label: "Đã duyệt", badge: "bg-emerald-100 text-emerald-600", dot: "bg-emerald-500" },
   edited: { label: "Chỉnh sửa", badge: "bg-gray-100 text-gray-600", dot: "bg-gray-400" },
   note: { label: "Ghi chú", badge: "bg-violet-100 text-violet-600", dot: "bg-violet-500" },
+  cham_cong: { label: "Chấm công", badge: "bg-sky-100 text-sky-600", dot: "bg-sky-500" },
 };

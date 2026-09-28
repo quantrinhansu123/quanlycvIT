@@ -1,5 +1,5 @@
 import type { ApiSupabaseClient } from "@/lib/supabase/api";
-import { ApiException, throwDatabaseError } from "@/lib/api/response";
+import { ApiException, isSchemaCacheError, throwDatabaseError } from "@/lib/api/response";
 import { resolveAuthUserId, type RequestAccountAccess } from "@/lib/supabase/authorization";
 import {
   DEFAULT_PROJECT_STEPS,
@@ -2540,13 +2540,26 @@ export async function createSubtaskActivityNote(
   content: string,
   assigneeId?: string | null
 ): Promise<TaskActivityEvent> {
-  const { data: noteId, error: rpcError } = await supabase.rpc("append_task_activity_note", {
+  const first = await supabase.rpc("append_task_activity_note", {
     p_task_id: taskId,
     p_result: result,
     p_content: content,
     p_nguoi_phu_trach_id: assigneeId || null,
   });
-  throwDatabaseError(rpcError);
+  let noteId = first.data;
+  if (first.error && isSchemaCacheError(first.error) && assigneeId) {
+    // DB chưa chạy migration người phụ trách: lưu ghi chú, bỏ qua người phụ trách.
+    console.warn("Activity note assignee param missing, falling back:", first.error.message);
+    const retry = await supabase.rpc("append_task_activity_note", {
+      p_task_id: taskId,
+      p_result: result,
+      p_content: content,
+    });
+    throwDatabaseError(retry.error);
+    noteId = retry.data;
+  } else {
+    throwDatabaseError(first.error);
+  }
   const { data, error } = await supabase
     .from("task_hoat_dong")
     .select(TASK_ACTIVITY_SELECT)
@@ -2564,14 +2577,27 @@ export async function updateSubtaskActivityNote(
   content: string,
   assigneeId?: string | null
 ): Promise<TaskActivityEvent | null> {
-  const { data: updatedId, error: rpcError } = await supabase.rpc("update_task_activity_note", {
+  const first = await supabase.rpc("update_task_activity_note", {
     p_task_id: taskId,
     p_note_id: noteId,
     p_result: result,
     p_content: content,
     p_nguoi_phu_trach_id: assigneeId || null,
   });
-  throwDatabaseError(rpcError);
+  let updatedId = first.data;
+  if (first.error && isSchemaCacheError(first.error) && assigneeId) {
+    console.warn("Activity note assignee param missing, falling back:", first.error.message);
+    const retry = await supabase.rpc("update_task_activity_note", {
+      p_task_id: taskId,
+      p_note_id: noteId,
+      p_result: result,
+      p_content: content,
+    });
+    throwDatabaseError(retry.error);
+    updatedId = retry.data;
+  } else {
+    throwDatabaseError(first.error);
+  }
   if (!updatedId) return null;
   const { data, error } = await supabase
     .from("task_hoat_dong")
@@ -2580,6 +2606,22 @@ export async function updateSubtaskActivityNote(
     .maybeSingle();
   throwDatabaseError(error);
   return data ? hydrateTaskActivity([data as unknown as TaskActivityRow])[0] : null;
+}
+
+export async function deleteSubtaskActivityNote(
+  supabase: ApiSupabaseClient,
+  taskId: string,
+  noteId: string
+): Promise<boolean> {
+  const { data: deleted, error: rpcError } = await supabase.rpc("delete_task_activity_note", {
+    p_task_id: taskId,
+    p_note_id: noteId,
+  });
+  if (rpcError && isSchemaCacheError(rpcError)) {
+    throw new ApiException("Chức năng xóa ghi chú chưa được cập nhật trên database.", 400);
+  }
+  throwDatabaseError(rpcError);
+  return Boolean(deleted);
 }
 
 /**

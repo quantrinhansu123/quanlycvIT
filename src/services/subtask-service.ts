@@ -203,6 +203,10 @@ export const subtaskService = {
     return apiClient.patch<TaskActivityEvent>(`/subtasks/${taskId}/activity-notes/${noteId}`, input);
   },
 
+  async deleteSubtaskActivityNote(taskId: string, noteId: string): Promise<boolean> {
+    return apiClient.delete<boolean>(`/subtasks/${taskId}/activity-notes/${noteId}`);
+  },
+
   async addSubtaskReport(
     subtaskId: string,
     input: ProgressReportSubmission

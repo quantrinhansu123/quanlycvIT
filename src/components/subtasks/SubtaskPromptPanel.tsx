@@ -2,9 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  Check,
   ClipboardPaste,
-  Copy,
   ImagePlus,
   LoaderCircle,
   MessageSquareText,
@@ -40,32 +38,6 @@ function fitPromptTextarea(element: HTMLTextAreaElement | null) {
   element.style.height = `${element.scrollHeight}px`;
 }
 
-function combinedPrompt(item: SubtaskPromptItem): string {
-  return [item.content.trim(), ...itemImageUrls(item)].filter(Boolean).join("\n");
-}
-
-function mergeSelectedPrompts(items: SubtaskPromptItem[]): string {
-  return items
-    .map((item) => combinedPrompt(item))
-    .filter(Boolean)
-    .join("\n\n");
-}
-
-async function copyToClipboard(value: string): Promise<void> {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(value);
-    return;
-  }
-  const textarea = document.createElement("textarea");
-  textarea.value = value;
-  textarea.style.position = "fixed";
-  textarea.style.opacity = "0";
-  document.body.appendChild(textarea);
-  textarea.select();
-  document.execCommand("copy");
-  textarea.remove();
-}
-
 interface SubtaskPromptPanelProps {
   subtaskId: string;
   initialItems: SubtaskPromptItem[];
@@ -95,7 +67,6 @@ export function SubtaskPromptPanel({
   const [uploadingIds, setUploadingIds] = useState<Set<string>>(new Set());
   const [previewImage, setPreviewImage] = useState<PreviewImage | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
-  const [copiedMerged, setCopiedMerged] = useState(false);
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const saveGenerationRef = useRef(0);
   const hasEditedRef = useRef(false);
@@ -123,8 +94,6 @@ export function SubtaskPromptPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- tránh refetch khi parent re-render
   }, [subtaskId, initialDataLoaded]);
 
-  const selectedItems = items.filter((item) => selectedIds.includes(item.id));
-  const mergedPrompt = mergeSelectedPrompts(selectedItems);
   const allSelected = items.length > 0 && items.every((item) => selectedIds.includes(item.id));
   const someSelected = selectedIds.length > 0 && !allSelected;
 
@@ -267,18 +236,6 @@ export function SubtaskPromptPanel({
     }
   }
 
-  async function handleCopyMerged() {
-    if (!mergedPrompt) return;
-    try {
-      await copyToClipboard(mergedPrompt);
-      setCopiedMerged(true);
-      window.setTimeout(() => setCopiedMerged(false), 1500);
-      notify({ type: "success", title: "Đã sao chép Prompt ghép" });
-    } catch {
-      notify({ type: "error", title: "Không thể sao chép", description: "Hãy chọn nội dung và sao chép thủ công." });
-    }
-  }
-
   useEffect(() => {
     if (!importRequest) return;
 
@@ -334,7 +291,7 @@ export function SubtaskPromptPanel({
               Prompt
             </h2>
             <p className="mt-2 text-xs text-gray-500">
-              Nhập yêu cầu, tải nhiều ảnh (mỗi ảnh một link Cloudinary). Tick chọn để ghép Prompt rồi sao chép.
+              Nhập yêu cầu, tải nhiều ảnh (mỗi ảnh một link Cloudinary). Tick chọn yêu cầu để ghép Prompt.
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -591,35 +548,6 @@ export function SubtaskPromptPanel({
               })}
             </tbody>
           </table>
-        </div>
-
-        <div className="mt-4 rounded-xl border border-sky-100 bg-sky-50/50 p-3 @md/detail:p-4">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <span className="text-xs font-semibold text-sky-800">Prompt ghép</span>
-              <p className="mt-0.5 text-[11px] text-sky-700/80">
-                {selectedIds.length === 0
-                  ? "Tick chọn một hoặc nhiều yêu cầu để ghép Prompt."
-                  : `Đã chọn ${selectedIds.length} yêu cầu`}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => void handleCopyMerged()}
-              disabled={!mergedPrompt}
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-sky-200 bg-white px-2.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {copiedMerged ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-              {copiedMerged ? "Đã sao chép" : "Sao chép"}
-            </button>
-          </div>
-          <textarea
-            value={mergedPrompt}
-            readOnly
-            rows={5}
-            placeholder="Prompt ghép sẽ hiện tại đây khi bạn chọn yêu cầu..."
-            className="min-h-28 w-full resize-y rounded-xl border border-sky-100 bg-white px-3 py-2.5 text-sm leading-6 text-gray-700 outline-none"
-          />
         </div>
       </div>
       <ImagePreviewDialog

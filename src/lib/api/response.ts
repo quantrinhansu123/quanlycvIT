@@ -55,8 +55,19 @@ export function apiError(message: string, status: number) {
   return jsonResponse({ success: false, message, data: null }, status, 0);
 }
 
-export function throwDatabaseError(error: DatabaseError | null): void {
-  if (!error) return;
+/** Lỗi PostgREST khi schema cache chưa có cột/quan hệ/hàm mới — thường do migration chưa chạy trên DB. */
+export function isSchemaCacheError(error: DatabaseError | null | undefined): boolean {
+  if (!error) return false;
+  const message = typeof error.message === "string" ? error.message : "";
+  const code = typeof error.code === "string" ? error.code : "";
+  return (
+    message.includes("schema cache") ||
+    code === "PGRST200" ||
+    code === "PGRST202"
+  );
+}
+
+export function throwDatabaseError(error: DatabaseError | null): void {  if (!error) return;
 
   if (error.code === "23505") {
     throw new ApiException("Dữ liệu bị trùng với bản ghi đã tồn tại.", 409);

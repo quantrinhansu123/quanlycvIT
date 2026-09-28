@@ -7,10 +7,12 @@ import {
   Clock3,
   FileClock,
   ListChecks,
+  LoaderCircle,
   MessageSquareText,
   Pencil,
   PlayCircle,
   Plus,
+  Trash2,
   UserCheck,
   type LucideIcon,
 } from "lucide-react";
@@ -34,6 +36,7 @@ const ACTIVITY_ICONS: Record<TaskActivityType, LucideIcon> = {
   approved: CircleCheck,
   edited: Pencil,
   note: MessageSquareText,
+  cham_cong: Clock3,
 };
 
 const TASK_STATUS_LABELS: Record<string, string> = {
@@ -105,9 +108,10 @@ export function TaskActivityTimeline({
   onLoadMore,
   onActivityChanged,
 }: TaskActivityTimelineProps) {
-  const { notify } = useFeedback();
+  const { confirm, notify } = useFeedback();
   const [editor, setEditor] = useState<{ id?: string; result: string; content: string; assigneeId: string } | null>(null);
   const [savingNote, setSavingNote] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [noteError, setNoteError] = useState("");
 
   function openNewNote() {
@@ -145,6 +149,27 @@ export function TaskActivityTimeline({
       setNoteError(getErrorMessage(error, "Không thể lưu ghi chú. Vui lòng thử lại."));
     } finally {
       setSavingNote(false);
+    }
+  }
+
+  async function handleDeleteNote(event: TaskActivityEvent) {
+    if (deletingId) return;
+    const confirmed = await confirm({
+      title: "Xóa hoạt động?",
+      description: `“${event.title}” sẽ bị xóa khỏi timeline vĩnh viễn. Hành động này không thể hoàn tác.`,
+      confirmLabel: "Xóa",
+      tone: "danger",
+    });
+    if (!confirmed) return;
+    setDeletingId(event.id);
+    try {
+      await subtaskService.deleteSubtaskActivityNote(taskId, event.id);
+      notify({ type: "success", title: "Đã xóa khỏi timeline" });
+      await onActivityChanged?.();
+    } catch (error) {
+      notify({ type: "error", title: "Không thể xóa", description: getErrorMessage(error, "Vui lòng thử lại.") });
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -253,16 +278,30 @@ export function TaskActivityTimeline({
                     <span className={cn("h-1.5 w-1.5 rounded-full", meta.dot)} />
                     {meta.label}
                   </span>
-                  {event.editable && (canEditAnyNote || event.actorId === currentAccountId) && (
-                    <button
-                      type="button"
-                      onClick={() => openEditNote(event)}
-                      className="ml-auto inline-flex h-7 items-center gap-1 rounded-lg px-2 text-xs font-medium text-gray-500 hover:bg-violet-50 hover:text-violet-700"
-                      aria-label={`Chỉnh sửa ghi chú ${event.title}`}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                      Chỉnh sửa
-                    </button>
+                  {(canEditAnyNote || event.actorId === currentAccountId) && (
+                    <div className="ml-auto flex items-center gap-1">
+                      {event.editable && (
+                        <button
+                          type="button"
+                          onClick={() => openEditNote(event)}
+                          className="inline-flex h-7 items-center gap-1 rounded-lg px-2 text-xs font-medium text-gray-500 hover:bg-violet-50 hover:text-violet-700"
+                          aria-label={`Chỉnh sửa ghi chú ${event.title}`}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          Chỉnh sửa
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => void handleDeleteNote(event)}
+                        disabled={deletingId === event.id}
+                        className="inline-flex h-7 items-center gap-1 rounded-lg px-2 text-xs font-medium text-gray-500 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+                        aria-label={`Xóa hoạt động ${event.title}`}
+                      >
+                        {deletingId === event.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                        Xóa
+                      </button>
+                    </div>
                   )}
                 </div>
                 <dl className="mt-3 grid grid-cols-1 gap-x-4 gap-y-2 border-t border-gray-100 pt-3 sm:grid-cols-2">

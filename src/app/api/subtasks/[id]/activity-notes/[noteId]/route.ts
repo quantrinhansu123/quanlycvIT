@@ -2,7 +2,7 @@ import { ApiException, apiSuccess, handleApiError, readJsonObject, throwDatabase
 import { createApiSupabaseClient } from "@/lib/supabase/api";
 import type { ApiSupabaseClient } from "@/lib/supabase/api";
 import { assertSubtaskReadable, requireRequestAccount } from "@/lib/supabase/authorization";
-import { updateSubtaskActivityNote } from "@/lib/supabase/data";
+import { updateSubtaskActivityNote, deleteSubtaskActivityNote } from "@/lib/supabase/data";
 
 interface RouteParams {
   params: Promise<{ id: string; noteId: string }>;
@@ -41,6 +41,20 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     const note = await updateSubtaskActivityNote(supabase, id, noteId, result, content, assigneeId);
     if (!note) throw new ApiException("Không tìm thấy ghi chú hoạt động.", 404);
     return apiSuccess(note, 200, "Đã cập nhật ghi chú hoạt động.");
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+export async function DELETE(request: Request, { params }: RouteParams) {
+  try {
+    const { id, noteId } = await params;
+    const supabase = createApiSupabaseClient(request);
+    const access = await requireRequestAccount(supabase);
+    await assertSubtaskReadable(supabase, access, id);
+    const deleted = await deleteSubtaskActivityNote(supabase, id, noteId);
+    if (!deleted) throw new ApiException("Không tìm thấy ghi chú hoạt động.", 404);
+    return apiSuccess(true, 200, "Đã xóa ghi chú hoạt động.");
   } catch (error) {
     return handleApiError(error);
   }

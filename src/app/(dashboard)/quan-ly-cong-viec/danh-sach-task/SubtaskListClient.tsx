@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   Download,
+  Filter,
   FolderOpen,
   LayoutGrid,
   ListTree,
@@ -14,6 +15,7 @@ import {
   Search,
   Table as TableIcon,
   ListTodo,
+  X,
 } from "lucide-react";
 import { taskService } from "@/services/task-service";
 import { subtaskService, type SubtaskListFilters, type SubtaskPage as SubtaskPageResult } from "@/services/subtask-service";
@@ -97,6 +99,7 @@ export function SubtaskListClient({
   const isAdmin = accountRole === "admin";
   const isMember = accountRole === "member";
 
+  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [projectId, setProjectId] = useState("");
@@ -510,36 +513,36 @@ export function SubtaskListClient({
     );
   }
 
-  return (
+return (
     <div className="flex h-full min-h-0 min-w-0 max-w-full flex-col overflow-hidden bg-white [contain:inline-size]">
-      <div
-        className="flex shrink-0 flex-col gap-2 border-b border-gray-100 px-3 py-2 xl:flex-row xl:flex-wrap xl:items-center"
-      >
-        <div className="flex min-w-0 items-center gap-2">
+      {/* Main Toolbar */}
+      <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-gray-100 bg-white/95 backdrop-blur-sm px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <button
           type="button"
           onClick={() => router.back()}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 transition-colors"
           aria-label="Quay lại"
         >
           <ArrowLeft className="h-4 w-4" />
         </button>
 
-        <div className={cn("relative min-w-0 flex-1", compactList ? "xl:min-w-[180px]" : "xl:max-w-[525px]")}>
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <input
-            type="search"
-            value={searchInput}
-            onChange={(event) => setSearchInput(event.target.value)}
-            placeholder="Tìm task..."
-            className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 xl:h-9 xl:text-xs"
-          />
+        <div className={cn("relative min-w-[140px] flex-1", compactList ? "xl:min-w-[180px]" : "xl:max-w-[525px]")}>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              type="search"
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              placeholder="Tìm task..."
+              className="h-9 w-full rounded-lg border border-gray-200 bg-gray-50 pl-9 pr-3 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 focus:bg-white transition-all xl:text-xs"
+            />
+          </div>
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
           {!compactList && (
             <>
-              <Button size="sm" className="h-10 whitespace-nowrap px-2.5 xl:h-9" onClick={() => setFormModal({ mode: "create" })}>
+              <Button size="sm" className="h-9 shrink-0 whitespace-nowrap px-3 bg-brand-600 hover:bg-brand-700 text-white font-medium" onClick={() => setFormModal({ mode: "create" })}>
                 <Plus className="h-4 w-4" />
                 <span className="hidden sm:inline">Thêm mới</span>
               </Button>
@@ -547,7 +550,7 @@ export function SubtaskListClient({
                 <button
                   type="button"
                   onClick={() => setViewMode("table")}
-                  className={cn("flex h-9 w-9 items-center justify-center", viewMode === "table" ? "bg-gray-100 text-gray-700" : "text-gray-400 hover:bg-gray-50")}
+                  className={cn("flex h-9 w-9 items-center justify-center rounded-l-lg", viewMode === "table" ? "bg-brand-50 text-brand-700" : "text-gray-400 hover:bg-gray-50")}
                   aria-label="Xem dạng bảng"
                 >
                   <TableIcon className="h-4 w-4" />
@@ -555,7 +558,7 @@ export function SubtaskListClient({
                 <button
                   type="button"
                   onClick={() => setViewMode("grid")}
-                  className={cn("flex h-9 w-9 items-center justify-center border-l border-gray-200", viewMode === "grid" ? "bg-gray-100 text-gray-700" : "text-gray-400 hover:bg-gray-50")}
+                  className={cn("flex h-9 w-9 items-center justify-center border-l border-gray-200 rounded-r-lg", viewMode === "grid" ? "bg-brand-50 text-brand-700" : "text-gray-400 hover:bg-gray-50")}
                   aria-label="Xem dạng lưới"
                 >
                   <LayoutGrid className="h-4 w-4" />
@@ -567,7 +570,7 @@ export function SubtaskListClient({
                 title="Nhóm theo cấp Dự án và Công việc"
                 aria-pressed={grouped}
                 className={cn(
-                  "flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 text-xs font-medium xl:h-9",
+                  "flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 text-xs font-medium transition-colors",
                   grouped ? "border-violet-300 bg-violet-50 text-violet-700" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
                 )}
               >
@@ -579,7 +582,7 @@ export function SubtaskListClient({
                 onClick={() => void handleExportPdf()}
                 title="Xuất PDF"
                 disabled={subtasks.length === 0}
-                className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 xl:h-9 xl:w-9"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
                 aria-label="Xuất PDF"
               >
                 <Download className="h-4 w-4" />
@@ -587,72 +590,149 @@ export function SubtaskListClient({
             </>
           )}
         </div>
-        </div>
+      </div>
 
-        <div className="-mx-3 flex min-w-0 items-center gap-2 overflow-x-auto px-3 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden xl:mx-0 xl:w-full xl:px-0 2xl:w-auto 2xl:contents">
-            <SearchableFilterSelect
-              className="w-[110px] shrink-0 2xl:w-[130px]"
-              label="Dự án"
-              searchPlaceholder="Tìm dự án..."
-              value={projectId}
-              onChange={handleProjectChange}
-              options={projects.map((p) => ({ value: p.id, label: p.name }))}
+      {/* Filter Bar - collapsible on mobile */}
+      <div className={cn("border-b border-gray-100 bg-white transition-all duration-200", filterDrawerOpen ? "block" : "hidden md:block")}>
+        <div className="flex flex-wrap items-center gap-2 overflow-x-auto px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex items-center gap-2 shrink-0">
+            <Filter className="h-4 w-4 text-gray-400 shrink-0" />
+            <span className="text-xs font-medium text-gray-500 hidden sm:inline">Bộ lọc</span>
+          </div>
+          <SearchableFilterSelect
+            className="w-[110px] shrink-0 2xl:w-[130px]"
+            label="Dự án"
+            searchPlaceholder="Tìm dự án..."
+            value={projectId}
+            onChange={handleProjectChange}
+            options={projects.map((p) => ({ value: p.id, label: p.name }))}
+          />
+          <SearchableFilterMultiSelect
+            className="w-[120px] shrink-0 2xl:w-[140px]"
+            label="Công việc"
+            searchPlaceholder="Tìm công việc..."
+            value={workTaskIds}
+            onChange={setWorkTaskIds}
+            options={workTaskOptions.map((t) => ({ value: t.id, label: t.title }))}
+          />
+          {!isMember && (
+            <MemberFilterMultiSelect
+              className="w-[130px] shrink-0 2xl:w-[150px]"
+              label="Người thực hiện"
+              value={assigneeIds}
+              onChange={setAssigneeIds}
+              options={members}
             />
-            <SearchableFilterMultiSelect
-              className="w-[120px] shrink-0 2xl:w-[140px]"
-              label="Công việc"
-              searchPlaceholder="Tìm công việc..."
-              value={workTaskIds}
-              onChange={setWorkTaskIds}
-              options={workTaskOptions.map((t) => ({ value: t.id, label: t.title }))}
-            />
-            {!isMember && (
-              <MemberFilterMultiSelect
-                className="w-[130px] shrink-0 2xl:w-[150px]"
-                label="Người thực hiện"
-                value={assigneeIds}
-                onChange={setAssigneeIds}
-                options={members}
-              />
+          )}
+          <SearchableFilterMultiSelect
+            className="w-[112px] shrink-0 2xl:w-[124px]"
+            label="Mức độ ưu tiên"
+            searchPlaceholder="Tìm mức ưu tiên..."
+            value={priorities}
+            onChange={(values) => setPriorities(values as TaskPriority[])}
+            options={TASK_PRIORITY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+          />
+          <SearchableFilterMultiSelect
+            className="w-[92px] shrink-0 2xl:w-[104px]"
+            label="Trạng thái"
+            searchPlaceholder="Tìm trạng thái..."
+            value={statuses}
+            onChange={(values) => setStatuses(values as TaskStatus[])}
+            options={SUBTASK_STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+          />
+          <button
+            type="button"
+            onClick={() => setNeedsTesting((current) => !current)}
+            className={cn(
+              "flex h-9 shrink-0 items-center whitespace-nowrap rounded-lg border px-2.5 text-xs font-medium transition-colors",
+              needsTesting ? "border-violet-300 bg-violet-50 text-violet-700" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
             )}
-            <SearchableFilterMultiSelect
-              className="w-[112px] shrink-0 2xl:w-[124px]"
-              label="Mức độ ưu tiên"
-              searchPlaceholder="Tìm mức ưu tiên..."
-              value={priorities}
-              onChange={(values) => setPriorities(values as TaskPriority[])}
-              options={TASK_PRIORITY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
-            />
-            <SearchableFilterMultiSelect
-              className="w-[92px] shrink-0 2xl:w-[104px]"
-              label="Trạng thái"
-              searchPlaceholder="Tìm trạng thái..."
-              value={statuses}
-              onChange={(values) => setStatuses(values as TaskStatus[])}
-              options={SUBTASK_STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
-            />
-            <button
-              type="button"
-              onClick={() => setNeedsTesting((current) => !current)}
-              className={cn(
-                "flex h-9 shrink-0 items-center whitespace-nowrap rounded-lg border px-2.5 text-xs font-medium",
-                needsTesting ? "border-violet-300 bg-violet-50 text-violet-700" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+          >
+            Cần tôi test
+          </button>
+          <button
+            type="button"
+            onClick={() => setOverdueOnly((prev) => !prev)}
+            className={cn(
+              "flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 text-xs font-medium transition-colors",
+              overdueOnly ? "border-rose-300 bg-rose-50 text-rose-600" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+            )}
+          >
+            <AlertTriangle className="h-4 w-4" />
+            Task trễ hạn
+          </button>
+          {/* Active filter chips */}
+          {(projectId || workTaskIds.length || assigneeIds.length || priorities.length || statuses.length || needsTesting || overdueOnly) && (
+            <div className="flex flex-wrap items-center gap-1.5 ml-auto border-l border-gray-200 pl-2">
+              {projectId && projects.find(p => p.id === projectId) && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 text-brand-700 px-2 py-0.5 text-xs font-medium">
+                  {projects.find(p => p.id === projectId)!.name}
+                  <button type="button" onClick={() => handleProjectChange("")} className="hover:bg-brand-100 rounded-full p-0.5" aria-label="Xóa lọc dự án"><X className="h-3 w-3" /></button>
+                </span>
               )}
-            >
-              Cần tôi test
-            </button>
-            <button
-              type="button"
-              onClick={() => setOverdueOnly((prev) => !prev)}
-              className={cn(
-                "flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 text-xs font-medium",
-                overdueOnly ? "border-rose-300 bg-rose-50 text-rose-600" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+              {workTaskIds.map(id => workTasks.find(t => t.id === id)).filter(Boolean).map(t => (
+                <span key={t!.id} className="inline-flex items-center gap-1 rounded-full bg-sky-50 text-sky-700 px-2 py-0.5 text-xs font-medium">
+                  {t!.title}
+                  <button type="button" onClick={() => setWorkTaskIds(curr => curr.filter(x => x !== t!.id))} className="hover:bg-sky-100 rounded-full p-0.5" aria-label={`Xóa lọc ${t!.title}`}><X className="h-3 w-3" /></button>
+                </span>
+              ))}
+              {assigneeIds.map(id => members.find(m => m.id === id)).filter(Boolean).map(m => (
+                <span key={m!.id} className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 text-xs font-medium">
+                  {m!.name}
+                  <button type="button" onClick={() => setAssigneeIds(curr => curr.filter(x => x !== m!.id))} className="hover:bg-emerald-100 rounded-full p-0.5" aria-label={`Xóa lọc ${m!.name}`}><X className="h-3 w-3" /></button>
+                </span>
+              ))}
+              {priorities.map(p => (
+                <span key={p} className="inline-flex items-center gap-1 rounded-full bg-amber-50 text-amber-700 px-2 py-0.5 text-xs font-medium">
+                  {TASK_PRIORITY_OPTIONS.find(o => o.value === p)?.label}
+                  <button type="button" onClick={() => setPriorities(curr => curr.filter(x => x !== p))} className="hover:bg-amber-100 rounded-full p-0.5" aria-label={`Xóa lọc ${p}`}><X className="h-3 w-3" /></button>
+                </span>
+              ))}
+              {statuses.map(s => (
+                <span key={s} className="inline-flex items-center gap-1 rounded-full bg-violet-50 text-violet-700 px-2 py-0.5 text-xs font-medium">
+                  {SUBTASK_STATUS_OPTIONS.find(o => o.value === s)?.label}
+                  <button type="button" onClick={() => setStatuses(curr => curr.filter(x => x !== s))} className="hover:bg-violet-100 rounded-full p-0.5" aria-label={`Xóa lọc ${s}`}><X className="h-3 w-3" /></button>
+                </span>
+              ))}
+              {needsTesting && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 text-violet-700 px-2 py-0.5 text-xs font-medium">
+                  Cần tôi test
+                  <button type="button" onClick={() => setNeedsTesting(false)} className="hover:bg-violet-100 rounded-full p-0.5" aria-label="Xóa lọc"><X className="h-3 w-3" /></button>
+                </span>
               )}
-            >
-              <AlertTriangle className="h-4 w-4" />
-              Task trễ hạn
-            </button>
+              {overdueOnly && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 text-rose-700 px-2 py-0.5 text-xs font-medium">
+                  Task trễ hạn
+                  <button type="button" onClick={() => setOverdueOnly(false)} className="hover:bg-rose-100 rounded-full p-0.5" aria-label="Xóa lọc"><X className="h-3 w-3" /></button>
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => { handleProjectChange(""); setWorkTaskIds([]); setAssigneeIds([]); setPriorities([]); setStatuses([]); setNeedsTesting(false); setOverdueOnly(false); }}
+                className="flex h-9 items-center gap-1 rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 px-2 text-xs font-medium transition-colors"
+              >
+                <X className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Xóa tất cả</span>
+              </button>
+            </div>
+          )}
         </div>
+      </div>
+
+      {/* Mobile filter toggle */}
+      <div className="md:hidden border-b border-gray-100 bg-white px-3 py-2">
+        <button
+          type="button"
+          onClick={() => setFilterDrawerOpen(o => !o)}
+          className={cn(
+            "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+            filterDrawerOpen ? "bg-gray-50 text-gray-700" : "text-gray-500 hover:bg-gray-50"
+          )}
+        >
+          <Filter className="h-4 w-4 shrink-0" />
+          <span>Bộ lọc</span>
+          {filterDrawerOpen ? <X className="h-4 w-4 ml-auto" /> : <span className="ml-auto text-gray-400">Mở rộng</span>}
+        </button>
       </div>
 
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
