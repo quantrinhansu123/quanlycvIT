@@ -8,10 +8,13 @@ interface AttendanceRow {
   ngay: string;
   gio_checkin: string | null;
   gio_checkout: string | null;
+  task_id: string | null;
+  viec_chi_tiet: string | null;
   nhan_vien: { ten_nv: string; ma_nv: string } | null;
+  task: { ten_task: string } | null;
 }
 
-const SELECT = "id,nhan_vien_id,ngay,gio_checkin,gio_checkout,nhan_vien:tai_khoan!nhan_vien_cham_cong_nhan_vien_id_fkey(ten_nv,ma_nv)";
+const SELECT = "id,nhan_vien_id,ngay,gio_checkin,gio_checkout,task_id,viec_chi_tiet,nhan_vien:tai_khoan!nhan_vien_cham_cong_nhan_vien_id_fkey(ten_nv,ma_nv),task:task(ten_task)";
 
 function mapRow(row: AttendanceRow): EmployeeAttendance {
   return {
@@ -22,6 +25,9 @@ function mapRow(row: AttendanceRow): EmployeeAttendance {
     date: row.ngay,
     checkIn: row.gio_checkin?.slice(0, 5) ?? undefined,
     checkOut: row.gio_checkout?.slice(0, 5) ?? undefined,
+    taskId: row.task_id ?? undefined,
+    taskTitle: row.task?.ten_task ?? undefined,
+    workDetail: row.viec_chi_tiet ?? undefined,
   };
 }
 
@@ -53,6 +59,8 @@ export async function saveAttendance(
       ngay: input.date,
       gio_checkin: input.checkIn || null,
       gio_checkout: input.checkOut || null,
+      task_id: input.taskId || null,
+      viec_chi_tiet: input.workDetail || null,
       nguoi_cap_nhat_id: updaterId,
       updated_at: new Date().toISOString(),
     }, { onConflict: "nhan_vien_id,ngay" })

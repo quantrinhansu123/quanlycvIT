@@ -80,6 +80,9 @@ export interface EmployeeAttendance {
   date: string;
   checkIn?: string;
   checkOut?: string;
+  taskId?: string;
+  taskTitle?: string;
+  workDetail?: string;
 }
 
 export interface EmployeeAttendanceInput {
@@ -87,6 +90,8 @@ export interface EmployeeAttendanceInput {
   date: string;
   checkIn?: string;
   checkOut?: string;
+  taskId?: string;
+  workDetail?: string;
 }
 
 export interface AccountDirectory {

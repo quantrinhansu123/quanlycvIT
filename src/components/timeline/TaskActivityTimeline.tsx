@@ -84,6 +84,8 @@ interface TaskActivityTimelineProps {
   currentAccountId?: string;
   canEditAnyNote?: boolean;
   events: TaskActivityEvent[];
+  /** Danh sách thành viên để chọn Người phụ trách cho ghi chú. */
+  members?: { id: string; name: string }[];
   /** Còn sự kiện cũ hơn chưa tải (phân trang) — hiển thị nút "Xem thêm". */
   hasMore?: boolean;
   loadingMore?: boolean;
@@ -97,19 +99,20 @@ export function TaskActivityTimeline({
   currentAccountId,
   canEditAnyNote = false,
   events,
+  members = [],
   hasMore = false,
   loadingMore = false,
   onLoadMore,
   onActivityChanged,
 }: TaskActivityTimelineProps) {
   const { notify } = useFeedback();
-  const [editor, setEditor] = useState<{ id?: string; result: string; content: string } | null>(null);
+  const [editor, setEditor] = useState<{ id?: string; result: string; content: string; assigneeId: string } | null>(null);
   const [savingNote, setSavingNote] = useState(false);
   const [noteError, setNoteError] = useState("");
 
   function openNewNote() {
     setNoteError("");
-    setEditor({ result: "", content: "" });
+    setEditor({ result: "", content: "", assigneeId: "" });
   }
 
   function openEditNote(event: TaskActivityEvent) {
@@ -118,6 +121,7 @@ export function TaskActivityTimeline({
       id: event.id,
       result: event.title,
       content: typeof event.detail?.noi_dung === "string" ? event.detail.noi_dung : "",
+      assigneeId: event.assigneeId ?? "",
     });
   }
 
@@ -127,7 +131,11 @@ export function TaskActivityTimeline({
     setSavingNote(true);
     setNoteError("");
     try {
-      const values = { result: editor.result.trim(), content: editor.content.trim() };
+      const values = {
+        result: editor.result.trim(),
+        content: editor.content.trim(),
+        assigneeId: editor.assigneeId || undefined,
+      };
       if (editor.id) await subtaskService.updateSubtaskActivityNote(taskId, editor.id, values);
       else await subtaskService.addSubtaskActivityNote(taskId, values);
       setEditor(null);
@@ -161,6 +169,19 @@ export function TaskActivityTimeline({
             placeholder="VD: Đã hoàn thành kiểm tra"
             className="mt-1.5 h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm font-normal text-gray-800 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
           />
+        </label>
+        <label className="block text-xs font-semibold text-gray-600">
+          Người phụ trách
+          <select
+            value={editor.assigneeId}
+            onChange={(event) => setEditor((current) => current ? { ...current, assigneeId: event.target.value } : current)}
+            className="mt-1.5 h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm font-normal text-gray-800 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+          >
+            <option value="">Không chọn</option>
+            {members.map((member) => (
+              <option key={member.id} value={member.id}>{member.name}</option>
+            ))}
+          </select>
         </label>
         <label className="block text-xs font-semibold text-gray-600 sm:col-span-2">
           Nội dung
@@ -253,6 +274,12 @@ export function TaskActivityTimeline({
                     <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Nội dung</dt>
                     <dd className="mt-0.5 break-words text-xs text-gray-600">{formatActivityContent(event.detail)}</dd>
                   </div>
+                  {event.assigneeName && (
+                    <div className="min-w-0">
+                      <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Người phụ trách</dt>
+                      <dd className="mt-0.5 truncate text-xs font-medium text-gray-700">{event.assigneeName}</dd>
+                    </div>
+                  )}
                   <div className="min-w-0">
                     <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Người thực hiện</dt>
                     <dd className="mt-0.5 truncate text-xs font-medium text-gray-700">{event.actorName ?? "Không xác định"}</dd>

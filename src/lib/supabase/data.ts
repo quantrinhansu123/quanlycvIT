@@ -2526,6 +2526,8 @@ function hydrateTaskActivity(rows: TaskActivityRow[]): TaskActivityEvent[] {
     actorId: row.tac_gia ? accountReference(row.tac_gia) : undefined,
     actorName: row.tac_gia?.ten_nv,
     actorColor: row.tac_gia ? avatarColor(row.tac_gia.id) : undefined,
+    assigneeId: typeof row.chi_tiet?.nguoi_phu_trach_id === "string" ? row.chi_tiet.nguoi_phu_trach_id : undefined,
+    assigneeName: typeof row.chi_tiet?.nguoi_phu_trach_ten === "string" ? row.chi_tiet.nguoi_phu_trach_ten : undefined,
     createdAt: row.created_at,
     editable: row.loai === "note",
   }));
@@ -2535,12 +2537,14 @@ export async function createSubtaskActivityNote(
   supabase: ApiSupabaseClient,
   taskId: string,
   result: string,
-  content: string
+  content: string,
+  assigneeId?: string | null
 ): Promise<TaskActivityEvent> {
   const { data: noteId, error: rpcError } = await supabase.rpc("append_task_activity_note", {
     p_task_id: taskId,
     p_result: result,
     p_content: content,
+    p_nguoi_phu_trach_id: assigneeId || null,
   });
   throwDatabaseError(rpcError);
   const { data, error } = await supabase
@@ -2557,13 +2561,15 @@ export async function updateSubtaskActivityNote(
   taskId: string,
   noteId: string,
   result: string,
-  content: string
+  content: string,
+  assigneeId?: string | null
 ): Promise<TaskActivityEvent | null> {
   const { data: updatedId, error: rpcError } = await supabase.rpc("update_task_activity_note", {
     p_task_id: taskId,
     p_note_id: noteId,
     p_result: result,
     p_content: content,
+    p_nguoi_phu_trach_id: assigneeId || null,
   });
   throwDatabaseError(rpcError);
   if (!updatedId) return null;

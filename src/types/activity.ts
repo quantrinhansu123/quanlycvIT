@@ -16,6 +16,9 @@ export interface TaskActivityEvent {
   actorId?: string;
   actorName?: string;
   actorColor?: string;
+  /** Người phụ trách của ghi chú (chỉ loại note). */
+  assigneeId?: string;
+  assigneeName?: string;
   createdAt: string;
   editable?: boolean;
 }
@@ -23,6 +26,8 @@ export interface TaskActivityEvent {
 export interface TaskActivityNoteInput {
   result: string;
   content: string;
+  /** Id tài khoản phụ trách (không bắt buộc). */
+  assigneeId?: string;
 }
 
 export const TASK_ACTIVITY_META: Record<

@@ -35,16 +35,24 @@ export async function POST(request: Request) {
     const date = typeof body.date === "string" ? body.date.trim() : "";
     const checkIn = typeof body.checkIn === "string" ? body.checkIn.trim() : "";
     const checkOut = typeof body.checkOut === "string" ? body.checkOut.trim() : "";
+    const taskId = typeof body.taskId === "string" ? body.taskId.trim() : "";
+    const workDetail = typeof body.workDetail === "string" ? body.workDetail.trim() : "";
     if (!employeeId) throw new ApiException("Vui lòng chọn nhân viên.", 400);
     if (!validDate(date)) throw new ApiException("Ngày chấm công không hợp lệ.", 400);
     const validTime = (time: string) => !time || /^([01]\d|2[0-3]):[0-5]\d$/.test(time);
     if (!validTime(checkIn) || !validTime(checkOut)) {
       throw new ApiException("Giờ check-in hoặc check-out không hợp lệ.", 400);
     }
+    if (taskId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(taskId)) {
+      throw new ApiException("Task được chọn không hợp lệ.", 400);
+    }
+    if (workDetail.length > 2000) {
+      throw new ApiException("Danh sách việc chi tiết quá dài (tối đa 2000 ký tự).", 400);
+    }
     if (!checkIn && !checkOut) throw new ApiException("Hãy nhập ít nhất giờ check-in hoặc check-out.", 400);
     // Cho phép ca qua đêm: check-out <= check-in được hiểu là sáng hôm sau.
     // Không chặn ở đây; cách tính giờ làm sẽ tự cộng 24h.
-    const attendance = await saveAttendance(supabase, access.id, { employeeId, date, checkIn, checkOut });
+    const attendance = await saveAttendance(supabase, access.id, { employeeId, date, checkIn, checkOut, taskId, workDetail });
     return apiSuccess(attendance, 200, "Đã lưu chấm công.");
   } catch (error) {
     return handleApiError(error);

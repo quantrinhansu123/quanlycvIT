@@ -1415,6 +1415,7 @@ export function SubtaskDetailView({
                   currentAccountId={account?.id}
                   canEditAnyNote={account?.role === "admin"}
                   events={activity}
+                  members={members}
                   hasMore={activity.length < activityTotal}
                   loadingMore={activityLoadingMore}
                   onLoadMore={handleLoadMoreActivity}
