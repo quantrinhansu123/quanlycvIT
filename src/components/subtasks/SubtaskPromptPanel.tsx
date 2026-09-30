@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  Check,
   ClipboardPaste,
+  Copy,
   ImagePlus,
   LoaderCircle,
   MessageSquareText,
@@ -30,6 +32,32 @@ function emptyItem(id = crypto.randomUUID()): SubtaskPromptItem {
 
 function itemImageUrls(item: SubtaskPromptItem): string[] {
   return item.imageUrls ?? [];
+}
+
+function combinedPrompt(item: SubtaskPromptItem): string {
+  return [item.content.trim(), ...itemImageUrls(item)].filter(Boolean).join("\n");
+}
+
+function mergeSelectedPrompts(items: SubtaskPromptItem[]): string {
+  return items
+    .map((item) => combinedPrompt(item))
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+async function copyToClipboard(value: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  textarea.remove();
 }
 
 function fitPromptTextarea(element: HTMLTextAreaElement | null) {
@@ -67,6 +95,8 @@ export function SubtaskPromptPanel({
   const [uploadingIds, setUploadingIds] = useState<Set<string>>(new Set());
   const [previewImage, setPreviewImage] = useState<PreviewImage | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [showMergedPopup, setShowMergedPopup] = useState(false);
+  const [copiedMerged, setCopiedMerged] = useState(false);
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const saveGenerationRef = useRef(0);
   const hasEditedRef = useRef(false);
@@ -96,6 +126,29 @@ export function SubtaskPromptPanel({
 
   const allSelected = items.length > 0 && items.every((item) => selectedIds.includes(item.id));
   const someSelected = selectedIds.length > 0 && !allSelected;
+  const selectedItems = items.filter((item) => selectedIds.includes(item.id));
+  const mergedPrompt = mergeSelectedPrompts(selectedItems);
+
+  async function handleCopyMerged() {
+    if (!mergedPrompt) return;
+    try {
+      await copyToClipboard(mergedPrompt);
+      setCopiedMerged(true);
+      window.setTimeout(() => setCopiedMerged(false), 1500);
+      notify({ type: "success", title: "Đã sao chép Prompt tổng" });
+    } catch {
+      notify({ type: "error", title: "Không thể sao chép", description: "Hãy chọn nội dung và sao chép thủ công." });
+    }
+  }
+
+  useEffect(() => {
+    if (!showMergedPopup) return;
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setShowMergedPopup(false);
+    }
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [showMergedPopup]);
 
   function replaceItems(next: SubtaskPromptItem[]) {
     itemsRef.current = next;
@@ -312,6 +365,16 @@ export function SubtaskPromptPanel({
               <Plus className="h-4 w-4" />
               Thêm yêu cầu
             </button>
+            {selectedIds.length > 0 && (
+              <button
+                type="button"
+                onClick={() => { setCopiedMerged(false); setShowMergedPopup(true); }}
+                className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-sky-200 bg-sky-50 px-3 text-sm font-semibold text-sky-700 transition hover:bg-sky-100"
+              >
+                <MessageSquareText className="h-4 w-4" />
+                Prompt ({selectedIds.length})
+              </button>
+            )}
           </div>
         </div>
 
@@ -554,6 +617,57 @@ export function SubtaskPromptPanel({
         image={previewImage}
         onClose={() => setPreviewImage(null)}
       />
+      {showMergedPopup && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"
+          onMouseDown={(event) => { if (event.target === event.currentTarget) setShowMergedPopup(false); }}
+        >
+          <section role="dialog" aria-modal="true" aria-label="Prompt tổng" className="w-full max-w-2xl rounded-2xl bg-white p-5 shadow-xl">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="flex items-center gap-2 text-base font-bold text-gray-900">
+                  <MessageSquareText className="h-4 w-4 text-sky-600" />
+                  Prompt tổng ({selectedIds.length} yêu cầu)
+                </h3>
+                <p className="mt-1 text-xs text-gray-500">Nội dung ghép từ các yêu cầu đã tick chọn.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowMergedPopup(false)}
+                aria-label="Đóng"
+                className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <textarea
+              value={mergedPrompt}
+              readOnly
+              rows={12}
+              placeholder="Chưa có nội dung để ghép."
+              className="min-h-48 w-full resize-y rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm leading-6 text-gray-700 outline-none"
+            />
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowMergedPopup(false)}
+                className="inline-flex h-9 items-center rounded-xl border border-gray-200 bg-white px-4 text-sm font-semibold text-gray-600 hover:bg-gray-50"
+              >
+                Đóng
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleCopyMerged()}
+                disabled={!mergedPrompt}
+                className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-sky-600 px-4 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {copiedMerged ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                {copiedMerged ? "Đã sao chép" : "Sao chép"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </article>
   );
 }

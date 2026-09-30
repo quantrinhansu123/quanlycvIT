@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
-  AlertTriangle,
   ArrowLeft,
   Download,
   Filter,
@@ -107,8 +106,6 @@ export function SubtaskListClient({
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [priorities, setPriorities] = useState<TaskPriority[]>([]);
   const [statuses, setStatuses] = useState<TaskStatus[]>([]);
-  const [overdueOnly, setOverdueOnly] = useState(false);
-  const [needsTesting, setNeedsTesting] = useState(false);
 
   const [viewMode, setViewMode] = useState<ViewMode>("table");
   const [grouped, setGrouped] = useState(true);
@@ -129,8 +126,6 @@ export function SubtaskListClient({
       assigneeIds: assigneeIds.length > 0 ? assigneeIds : undefined,
       priorities: priorities.length > 0 ? priorities : undefined,
       statuses: statuses.length > 0 ? statuses : undefined,
-      overdueOnly,
-      needsTesting,
     };
   }
 
@@ -138,7 +133,7 @@ export function SubtaskListClient({
     accountId,
     role: accountRole,
     resource: CACHE_RESOURCE.subtasksList,
-    filters: { search, projectId, workTaskIds, assigneeIds, priorities, statuses, overdueOnly, needsTesting },
+    filters: { search, projectId, workTaskIds, assigneeIds, priorities, statuses },
     page,
     pageSize,
   });
@@ -298,7 +293,7 @@ export function SubtaskListClient({
     // Bộ lọc thay đổi thì quay về trang đầu để không rơi vào trang trống.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(1);
-  }, [search, projectId, workTaskIds, assigneeIds, priorities, statuses, overdueOnly, needsTesting]);
+  }, [search, projectId, workTaskIds, assigneeIds, priorities, statuses]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -594,7 +589,7 @@ return (
 
       {/* Filter Bar - collapsible on mobile */}
       <div className={cn("border-b border-gray-100 bg-white transition-all duration-200", filterDrawerOpen ? "block" : "hidden md:block")}>
-        <div className="flex flex-wrap items-center gap-2 overflow-x-auto px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex items-center gap-2 overflow-x-auto px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="flex items-center gap-2 shrink-0">
             <Filter className="h-4 w-4 text-gray-400 shrink-0" />
             <span className="text-xs font-medium text-gray-500 hidden sm:inline">Bộ lọc</span>
@@ -640,30 +635,9 @@ return (
             onChange={(values) => setStatuses(values as TaskStatus[])}
             options={SUBTASK_STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
           />
-          <button
-            type="button"
-            onClick={() => setNeedsTesting((current) => !current)}
-            className={cn(
-              "flex h-9 shrink-0 items-center whitespace-nowrap rounded-lg border px-2.5 text-xs font-medium transition-colors",
-              needsTesting ? "border-violet-300 bg-violet-50 text-violet-700" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
-            )}
-          >
-            Cần tôi test
-          </button>
-          <button
-            type="button"
-            onClick={() => setOverdueOnly((prev) => !prev)}
-            className={cn(
-              "flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 text-xs font-medium transition-colors",
-              overdueOnly ? "border-rose-300 bg-rose-50 text-rose-600" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
-            )}
-          >
-            <AlertTriangle className="h-4 w-4" />
-            Task trễ hạn
-          </button>
           {/* Active filter chips */}
-          {(projectId || workTaskIds.length || assigneeIds.length || priorities.length || statuses.length || needsTesting || overdueOnly) && (
-            <div className="flex flex-wrap items-center gap-1.5 ml-auto border-l border-gray-200 pl-2">
+          {(projectId || workTaskIds.length || assigneeIds.length || priorities.length || statuses.length) && (
+            <div className="flex shrink-0 items-center gap-1.5 ml-auto border-l border-gray-200 pl-2">
               {projectId && projects.find(p => p.id === projectId) && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 text-brand-700 px-2 py-0.5 text-xs font-medium">
                   {projects.find(p => p.id === projectId)!.name}
@@ -694,21 +668,9 @@ return (
                   <button type="button" onClick={() => setStatuses(curr => curr.filter(x => x !== s))} className="hover:bg-violet-100 rounded-full p-0.5" aria-label={`Xóa lọc ${s}`}><X className="h-3 w-3" /></button>
                 </span>
               ))}
-              {needsTesting && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 text-violet-700 px-2 py-0.5 text-xs font-medium">
-                  Cần tôi test
-                  <button type="button" onClick={() => setNeedsTesting(false)} className="hover:bg-violet-100 rounded-full p-0.5" aria-label="Xóa lọc"><X className="h-3 w-3" /></button>
-                </span>
-              )}
-              {overdueOnly && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 text-rose-700 px-2 py-0.5 text-xs font-medium">
-                  Task trễ hạn
-                  <button type="button" onClick={() => setOverdueOnly(false)} className="hover:bg-rose-100 rounded-full p-0.5" aria-label="Xóa lọc"><X className="h-3 w-3" /></button>
-                </span>
-              )}
               <button
                 type="button"
-                onClick={() => { handleProjectChange(""); setWorkTaskIds([]); setAssigneeIds([]); setPriorities([]); setStatuses([]); setNeedsTesting(false); setOverdueOnly(false); }}
+                onClick={() => { handleProjectChange(""); setWorkTaskIds([]); setAssigneeIds([]); setPriorities([]); setStatuses([]); }}
                 className="flex h-9 items-center gap-1 rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 px-2 text-xs font-medium transition-colors"
               >
                 <X className="h-3.5 w-3.5" />
