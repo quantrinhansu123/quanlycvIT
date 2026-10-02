@@ -135,6 +135,8 @@ html[data-theme="dark"] .data-table-row:hover > td {
 .account-table-scroll {
   scrollbar-width: none;
   scrollbar-color: transparent transparent;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .account-table-scroll:hover {

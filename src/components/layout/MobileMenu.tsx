@@ -1,6 +1,7 @@
 "use client";
 
 import { X } from "lucide-react";
+import { useEffect } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 
 interface MobileMenuProps {
@@ -9,12 +10,21 @@ interface MobileMenuProps {
 }
 
 export function MobileMenu({ open, onClose }: MobileMenuProps) {
+  useEffect(() => {
+    if (!open) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [open, onClose]);
+
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden lg:hidden">
+    <div className="fixed inset-0 z-50 overflow-hidden lg:hidden" role="dialog" aria-modal="true" aria-label="Menu điều hướng">
       <div className="absolute inset-0 bg-gray-900/50" onClick={onClose} aria-hidden="true" />
-      <div className="relative z-10 flex h-full w-[min(280px,100%)] flex-col bg-white shadow-xl">
+      <div className="relative z-10 flex h-full w-[min(300px,88vw)] flex-col bg-white shadow-xl">
         <button
           type="button"
           onClick={onClose}

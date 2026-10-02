@@ -517,7 +517,51 @@ export function AccountManagementPage({ initialData }: { initialData?: AccountPa
         </div>
       </div>
 
-      <div className="account-table-scroll min-h-0 w-0 min-w-full flex-1 overflow-auto [contain:inline-size]">
+      <div className="md:hidden min-h-0 flex-1 space-y-3 overflow-y-auto bg-gray-50 p-3">
+        {loading ? [1, 2, 3].map((row) => <div key={row} className="h-36 animate-pulse rounded-xl bg-gray-100" />) : visible.length === 0 ? (
+          <div className="rounded-xl border border-gray-200 bg-white px-4 py-10 text-center text-sm text-gray-400">
+            Không tìm thấy tài khoản phù hợp.
+          </div>
+        ) : visible.map((account) => (
+          <article key={account.id} className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+            <div className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                checked={selected.includes(account.id)}
+                onChange={() => setSelected((current) => current.includes(account.id) ? current.filter((id) => id !== account.id) : [...current, account.id])}
+                className="mt-1 h-4 w-4 shrink-0 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                aria-label={`Chọn ${account.name}`}
+              />
+              {account.avatarUrl ? (
+                <Image src={account.avatarUrl} alt="" width={40} height={40} className="h-10 w-10 shrink-0 rounded-full object-cover ring-2 ring-gray-100" />
+              ) : <Avatar name={account.name} color={avatarColor(account.name)} size="md" />}
+              <div className="min-w-0 flex-1">
+                <button type="button" onClick={() => router.push(`/nhan-vien/${account.id}`)} className="block max-w-full truncate text-left text-sm font-semibold text-gray-900 hover:text-brand-600">
+                  {account.name}
+                </button>
+                <p className="mt-0.5 truncate text-xs text-gray-500">{account.employeeCode} · @{account.username ?? "—"}</p>
+              </div>
+              <span className={cn("shrink-0 rounded-full px-2 py-1 text-[10px] font-medium", account.status === "active" ? "bg-brand-50 text-brand-700" : "bg-gray-100 text-gray-600")}>
+                {account.status === "active" ? "Hoạt động" : "Đã khóa"}
+              </span>
+            </div>
+            <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-gray-100 pt-3 text-xs">
+              <div className="min-w-0"><dt className="text-gray-400">Phòng ban</dt><dd className="mt-0.5 truncate font-medium text-gray-700">{account.department?.name ?? "—"}</dd></div>
+              <div className="min-w-0"><dt className="text-gray-400">Chức vụ</dt><dd className="mt-0.5 truncate font-medium text-gray-700">{account.position ?? "—"}</dd></div>
+              <div className="min-w-0"><dt className="text-gray-400">Vai trò</dt><dd className="mt-0.5 truncate font-medium text-gray-700">{ROLE_LABEL[account.role]}</dd></div>
+              <div className="min-w-0"><dt className="text-gray-400">Liên hệ</dt><dd className="mt-0.5 truncate font-medium text-gray-700">{account.phone ?? account.email ?? "—"}</dd></div>
+            </dl>
+            <div className="mt-3 flex items-center justify-end gap-1 border-t border-gray-100 pt-2">
+              <ActionIconButton icon={Eye} label="Xem chi tiết" onClick={() => router.push(`/nhan-vien/${account.id}`)} />
+              <ActionIconButton icon={Pencil} label="Chỉnh sửa" tone="warning" onClick={() => void openEdit(account.id)} />
+              <ActionIconButton icon={account.status === "active" ? LockKeyhole : UnlockKeyhole} label={account.status === "active" ? "Khóa tài khoản" : "Mở khóa tài khoản"} onClick={() => void toggleStatus(account)} />
+              <ActionIconButton icon={Trash2} label="Xóa tài khoản" tone="danger" onClick={() => void remove(account)} />
+            </div>
+          </article>
+        ))}
+      </div>
+
+      <div className="account-table-scroll hidden min-h-0 w-0 min-w-full flex-1 overflow-auto [contain:inline-size] md:block">
         <table className="w-full min-w-[1680px] border-collapse text-left text-xs">
           <thead className="sticky top-0 z-10 bg-gray-50 text-xs font-semibold text-gray-700">
             <tr className="border-b border-gray-200">
