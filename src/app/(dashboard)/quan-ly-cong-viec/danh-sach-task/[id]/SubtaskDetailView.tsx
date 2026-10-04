@@ -112,6 +112,26 @@ function formatTimeRecordDate(value: string): string {
     .format(new Date(value));
 }
 
+type IterationDraft = {
+  id: string | null;
+  description: string;
+  files: TaskFileAttachment[];
+  links: TaskLinkAttachment[];
+  images: string[];
+  acceptance: AcceptanceRow;
+};
+
+function emptyIterationDraft(): IterationDraft {
+  return {
+    id: null,
+    description: "",
+    files: [],
+    links: [],
+    images: [],
+    acceptance: emptyAcceptanceRow(),
+  };
+}
+
 function isSafeImageUrl(value: string): boolean {
   try {
     const url = new URL(value);
@@ -161,7 +181,7 @@ export function SubtaskDetailView({
   const [timeRecords, setTimeRecords] = useState<SubtaskTimeRecord[]>([]);
   const [savingTimeRecord, setSavingTimeRecord] = useState(false);
   const [activityLoadingMore, setActivityLoadingMore] = useState(false);
-  const [iterationEditor, setIterationEditor] = useState<{ id: string | null; description: string } | null>(null);
+  const [iterationEditor, setIterationEditor] = useState<IterationDraft | null>(null);
   const [savingIteration, setSavingIteration] = useState(false);
   const [secondaryLoading, setSecondaryLoading] = useState(false);
   const [directoryReady, setDirectoryReady] = useState(initialMembers.length > 0);
@@ -269,6 +289,28 @@ export function SubtaskDetailView({
     try {
       const imageUrl = await subtaskService.uploadImage(file);
       await saveAcceptance(sourceId, { imageUrl });
+    } catch (uploadError) {
+      notify({
+        type: "error",
+        title: "Không thể tải ảnh nghiệm thu",
+        description: getErrorMessage(uploadError, "Ảnh phải là JPG, PNG, WEBP hoặc AVIF và tối đa 10 MB."),
+      });
+    } finally {
+      setUploadingAcceptanceId(null);
+    }
+  }
+
+  async function uploadDraftAcceptanceImage(file: File | null) {
+    if (!file || !file.type.startsWith("image/")) {
+      notify({ type: "error", title: "Hãy chọn một ảnh JPG, PNG, WEBP hoặc AVIF." });
+      return;
+    }
+    setUploadingAcceptanceId("draft");
+    try {
+      const imageUrl = await subtaskService.uploadImage(file);
+      setIterationEditor((current) => current
+        ? { ...current, acceptance: { ...current.acceptance, imageUrl } }
+        : current);
     } catch (uploadError) {
       notify({
         type: "error",
@@ -427,6 +469,7 @@ export function SubtaskDetailView({
 
     setSavingIteration(true);
     try {
+      const createdId = iterationEditor.id ?? crypto.randomUUID();
       const updates = iterationEditor.id
         ? subtask.updates.map((entry) => entry.id === iterationEditor.id
           ? { ...entry, description }
@@ -434,17 +477,45 @@ export function SubtaskDetailView({
         : [
             ...subtask.updates,
             {
-              id: crypto.randomUUID(),
+              id: createdId,
               createdAt: new Date().toISOString(),
               description,
-              files: [],
-              links: [],
-              images: [],
+              files: iterationEditor.files,
+              links: iterationEditor.links,
+              images: iterationEditor.images,
             },
           ];
       const updated = await subtaskService.updateUpdates(subtask.id, updates);
       if (!updated) throw new Error("Task không tồn tại hoặc đã bị xóa.");
-      setSubtask(updated);
+      if (!iterationEditor.id) {
+        const rows = {
+          ...(updated.handover?.rows ?? {}),
+          [createdId]: iterationEditor.acceptance,
+        };
+        const statuses = Object.fromEntries(
+          Object.entries(rows).map(([id, row]) => [id, row.status === "accepted" ? "handedOver" as const : "pending" as const]),
+        );
+        try {
+          const handover = await subtaskService.updateHandover(subtask.id, {
+            text: rows[INITIAL_HANDOVER_SOURCE_ID]?.note ?? "",
+            imageUrl: rows[INITIAL_HANDOVER_SOURCE_ID]?.imageUrl ?? "",
+            statuses,
+            rows,
+          });
+          setSubtask({ ...updated, handover: handover ?? updated.handover });
+        } catch (handoverError) {
+          setSubtask(updated);
+          setIterationEditor(null);
+          notify({
+            type: "error",
+            title: "Đã thêm lần, chưa lưu được trạng thái",
+            description: getErrorMessage(handoverError, "Có thể chỉnh trạng thái ngay trên lần vừa thêm."),
+          });
+          return;
+        }
+      } else {
+        setSubtask(updated);
+      }
       setIterationEditor(null);
       notify({ type: "success", title: iterationEditor.id ? "Đã cập nhật lần bổ sung" : "Đã thêm lần bổ sung" });
     } catch (saveError) {
@@ -878,9 +949,8 @@ export function SubtaskDetailView({
               </section>
             )}
 
-            <section className="grid grid-cols-1 gap-5 @3xl/detail:grid-cols-3">
+            <section>
               <Panel
-                className="@3xl/detail:col-span-2"
                 accentClassName="bg-violet-600"
                 icon={Info}
                 iconClassName="text-violet-600"
@@ -891,7 +961,7 @@ export function SubtaskDetailView({
                     type="button"
                     variant="secondary"
                     size="sm"
-                    onClick={() => setIterationEditor({ id: null, description: "" })}
+                    onClick={() => setIterationEditor(emptyIterationDraft())}
                     disabled={savingIteration || Boolean(iterationEditor)}
                   >
                     <Plus className="h-4 w-4" />
@@ -922,6 +992,13 @@ export function SubtaskDetailView({
                         </button>
                       </div>
                     </div>
+                    <AcceptanceFields
+                      row={subtask.handover?.rows?.[INITIAL_HANDOVER_SOURCE_ID] ?? emptyAcceptanceRow()}
+                      disabled={!canEditHandover || savingAcceptance}
+                      uploading={uploadingAcceptanceId === INITIAL_HANDOVER_SOURCE_ID}
+                      onSave={(patch) => void saveAcceptance(INITIAL_HANDOVER_SOURCE_ID, patch)}
+                      onUpload={(file) => void uploadAcceptanceImage(INITIAL_HANDOVER_SOURCE_ID, file)}
+                    />
                     <div className="max-w-full overflow-x-auto text-sm leading-6 text-gray-700">
                       <DetailDescription
                         description={subtask.description}
@@ -947,13 +1024,6 @@ export function SubtaskDetailView({
                         onSave={handleAttachmentSave}
                       />
                     )}
-                    <AcceptanceFields
-                      row={subtask.handover?.rows?.[INITIAL_HANDOVER_SOURCE_ID] ?? emptyAcceptanceRow()}
-                      disabled={!canEditHandover || savingAcceptance}
-                      uploading={uploadingAcceptanceId === INITIAL_HANDOVER_SOURCE_ID}
-                      onSave={(patch) => void saveAcceptance(INITIAL_HANDOVER_SOURCE_ID, patch)}
-                      onUpload={(file) => void uploadAcceptanceImage(INITIAL_HANDOVER_SOURCE_ID, file)}
-                    />
                   </div>
                   {subtask.updates.length > 0 && (
                     <div className="space-y-2.5">
@@ -966,7 +1036,14 @@ export function SubtaskDetailView({
                               {!statusLocked && (
                                 <button
                                   type="button"
-                                  onClick={() => setIterationEditor({ id: entry.id, description: entry.description ?? "" })}
+                                  onClick={() => setIterationEditor({
+                                    id: entry.id,
+                                    description: entry.description ?? "",
+                                    files: entry.files,
+                                    links: entry.links,
+                                    images: entry.images,
+                                    acceptance: subtask.handover?.rows?.[entry.id] ?? emptyAcceptanceRow(),
+                                  })}
                                   disabled={savingIteration || Boolean(iterationEditor)}
                                   className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs font-medium text-gray-500 hover:bg-violet-50 hover:text-violet-700 disabled:opacity-50"
                                 >
@@ -989,6 +1066,13 @@ export function SubtaskDetailView({
                               </button>
                             </div>
                           </div>
+                          <AcceptanceFields
+                            row={subtask.handover?.rows?.[entry.id] ?? emptyAcceptanceRow()}
+                            disabled={!canEditHandover || savingAcceptance}
+                            uploading={uploadingAcceptanceId === entry.id}
+                            onSave={(patch) => void saveAcceptance(entry.id, patch)}
+                            onUpload={(file) => void uploadAcceptanceImage(entry.id, file)}
+                          />
                           {iterationEditor?.id === entry.id ? (
                             <div>
                               <textarea
@@ -1029,13 +1113,6 @@ export function SubtaskDetailView({
                               onSave={(value) => handleUpdateAttachmentSave(entry.id, value)}
                             />
                           )}
-                          <AcceptanceFields
-                            row={subtask.handover?.rows?.[entry.id] ?? emptyAcceptanceRow()}
-                            disabled={!canEditHandover || savingAcceptance}
-                            uploading={uploadingAcceptanceId === entry.id}
-                            onSave={(patch) => void saveAcceptance(entry.id, patch)}
-                            onUpload={(file) => void uploadAcceptanceImage(entry.id, file)}
-                          />
                         </div>
                       ))}
                     </div>
@@ -1043,6 +1120,15 @@ export function SubtaskDetailView({
                   {iterationEditor?.id === null && (
                     <div className="rounded-xl border border-dashed border-violet-300 bg-violet-50/40 p-3 sm:p-4">
                       <div className="mb-2 text-sm font-semibold text-violet-800">Lần {subtask.updates.length + 2}</div>
+                      <AcceptanceFields
+                        row={iterationEditor.acceptance}
+                        disabled={savingIteration || !canEditHandover}
+                        uploading={uploadingAcceptanceId === "draft"}
+                        onSave={(patch) => setIterationEditor((current) => current
+                          ? { ...current, acceptance: { ...current.acceptance, ...patch } }
+                          : current)}
+                        onUpload={(file) => void uploadDraftAcceptanceImage(file)}
+                      />
                       <textarea
                         autoFocus
                         maxLength={5000}
@@ -1052,9 +1138,22 @@ export function SubtaskDetailView({
                         placeholder="Nhập nội dung lần bổ sung..."
                         className="w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm leading-6 text-gray-700 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
                       />
+                      <InlineTaskAttachmentEditor
+                        entityLabel="Task"
+                        files={iterationEditor.files}
+                        links={iterationEditor.links}
+                        images={iterationEditor.images}
+                        onUploadFile={subtaskService.uploadFile}
+                        onUploadImage={subtaskService.uploadImage}
+                        onSave={async (value) => {
+                          setIterationEditor((current) => current
+                            ? { ...current, files: value.files, links: value.links, images: value.images }
+                            : current);
+                        }}
+                      />
                       <div className="mt-2 flex justify-end gap-2">
                         <Button type="button" variant="ghost" size="sm" disabled={savingIteration} onClick={() => setIterationEditor(null)}>Hủy</Button>
-                        <Button type="button" size="sm" disabled={savingIteration} onClick={() => void handleSaveIteration()}>{savingIteration ? "Đang lưu..." : "Lưu lần"}</Button>
+                        <Button type="button" size="sm" disabled={savingIteration || uploadingAcceptanceId === "draft"} onClick={() => void handleSaveIteration()}>{savingIteration ? "Đang lưu..." : "Lưu lần"}</Button>
                       </div>
                     </div>
                   )}
@@ -1071,6 +1170,30 @@ export function SubtaskDetailView({
                     icon={Clock3}
                   />
                 </div>
+              </Panel>
+
+            </section>
+
+            <section className="grid grid-cols-1 gap-5 @3xl/detail:grid-cols-3">
+              <Panel
+                className="@3xl/detail:col-span-2"
+                accentClassName="bg-emerald-500"
+                icon={RotateCcw}
+                iconClassName="text-emerald-500"
+                title="Timeline hoạt động Task"
+                subtitle="Nhật ký lịch trình xử lý & báo cáo"
+              >
+                <TaskActivityTimeline
+                  taskId={subtaskId}
+                  currentAccountId={account?.id}
+                  canEditAnyNote={account?.role === "admin"}
+                  events={activity}
+                  members={members}
+                  hasMore={activity.length < activityTotal}
+                  loadingMore={activityLoadingMore}
+                  onLoadMore={handleLoadMoreActivity}
+                  onActivityChanged={refreshActivity}
+                />
               </Panel>
 
               <Panel
@@ -1260,28 +1383,6 @@ export function SubtaskDetailView({
                 </div>
               </Panel>
             </section>
-
-            <section className="grid grid-cols-1 gap-5">
-              <Panel
-                accentClassName="bg-emerald-500"
-                icon={RotateCcw}
-                iconClassName="text-emerald-500"
-                title="Timeline hoạt động Task"
-                subtitle="Nhật ký lịch trình xử lý & báo cáo"
-              >
-                <TaskActivityTimeline
-                  taskId={subtaskId}
-                  currentAccountId={account?.id}
-                  canEditAnyNote={account?.role === "admin"}
-                  events={activity}
-                  members={members}
-                  hasMore={activity.length < activityTotal}
-                  loadingMore={activityLoadingMore}
-                  onLoadMore={handleLoadMoreActivity}
-                  onActivityChanged={refreshActivity}
-                />
-              </Panel>
-            </section>
           </div>
         ) : (
           <section className="min-h-[520px] rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
@@ -1429,31 +1530,33 @@ function AcceptanceFields({
   }, [row.note]);
 
   return (
-    <div className="mt-3 grid grid-cols-1 gap-3 border-t border-gray-200 pt-3 sm:grid-cols-3">
-      <div>
+    <div className="mb-3 flex items-end gap-3 overflow-x-auto border-b border-gray-200 pb-3">
+      <div className="shrink-0">
         <p className="mb-1.5 text-xs font-semibold text-gray-500">Ảnh nghiệm thu</p>
-        {isSafeImageUrl(row.imageUrl) && (
-          <a href={row.imageUrl} target="_blank" rel="noreferrer" className="mb-2 block">
-            <img src={row.imageUrl} alt="Ảnh nghiệm thu" className="h-24 w-full rounded-lg border border-gray-200 object-cover" />
-          </a>
-        )}
-        <label className={`inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 text-xs font-semibold text-gray-700 ${disabled || uploading ? "pointer-events-none opacity-50" : "hover:bg-gray-50"}`}>
-          {uploading ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <ImagePlus className="h-3.5 w-3.5" />}
-          {uploading ? "Đang tải..." : "Tải ảnh"}
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/avif"
-            className="sr-only"
-            disabled={disabled || uploading}
-            onChange={(event) => {
-              const file = event.target.files?.[0] ?? null;
-              if (file) onUpload(file);
-              event.target.value = "";
-            }}
-          />
-        </label>
+        <div className="flex h-9 items-center gap-2">
+          {isSafeImageUrl(row.imageUrl) && (
+            <a href={row.imageUrl} target="_blank" rel="noreferrer" className="block h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-gray-200">
+              <img src={row.imageUrl} alt="Ảnh nghiệm thu" className="h-full w-full object-cover" />
+            </a>
+          )}
+          <label className={`inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 text-xs font-semibold text-gray-700 ${disabled || uploading ? "pointer-events-none opacity-50" : "hover:bg-gray-50"}`}>
+            {uploading ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <ImagePlus className="h-3.5 w-3.5" />}
+            {uploading ? "Đang tải..." : "Tải ảnh"}
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/avif"
+              className="sr-only"
+              disabled={disabled || uploading}
+              onChange={(event) => {
+                const file = event.target.files?.[0] ?? null;
+                if (file) onUpload(file);
+                event.target.value = "";
+              }}
+            />
+          </label>
+        </div>
       </div>
-      <label className="block text-xs font-semibold text-gray-500">
+      <label className="w-40 shrink-0 text-xs font-semibold text-gray-500">
         Trạng thái
         <select
           value={row.status}
@@ -1465,19 +1568,19 @@ function AcceptanceFields({
           <option value="accepted">Hoàn thành</option>
         </select>
       </label>
-      <label className="block text-xs font-semibold text-gray-500">
+      <label className="min-w-48 flex-1 text-xs font-semibold text-gray-500">
         Note
-        <textarea
+        <input
+          type="text"
           value={note}
           disabled={disabled}
           maxLength={5000}
-          rows={3}
           placeholder="Ghi chú nghiệm thu..."
           onChange={(event) => setNote(event.target.value)}
           onBlur={() => {
             if (note !== row.note) onSave({ note });
           }}
-          className="mt-1.5 w-full resize-y rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-sm font-normal leading-5 text-gray-800 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 disabled:bg-gray-50"
+          className="mt-1.5 h-9 w-full rounded-lg border border-gray-200 bg-white px-2.5 text-sm font-normal text-gray-800 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 disabled:bg-gray-50"
         />
       </label>
     </div>
