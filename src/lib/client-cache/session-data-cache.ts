@@ -160,12 +160,15 @@ export class SessionDataCache {
   }
 
   /**
-   * Xóa entry theo key chính xác, hoặc theo "resource" (tiền tố trước dấu `|`) —
+   * Đánh dấu dữ liệu cũ theo key chính xác, hoặc theo "resource" (tiền tố trước dấu `|`) —
    * dùng sau mutation để buộc các trang/tab khác refetch dữ liệu mới nhất.
+   *
+   * Entry còn hạn vẫn được giữ để danh sách không biến mất trong lúc tải lại.
+   * Request đang chạy thì bị hủy để response cũ không ghi đè kết quả mới.
    *
    * `exceptKey`: bỏ qua đúng key này khi invalidate theo resource — dùng khi component
    * gọi mutation đã tự `setData()` cập nhật ngay key hiện tại của nó, để tránh vừa ghi
-   * xong lại bị chính invalidate() xóa mất (không cần quan tâm thứ tự gọi setData/invalidate).
+   * xong lại bị chính invalidate() đánh dấu cũ và tải đè (không cần quan tâm thứ tự gọi setData/invalidate).
    */
   invalidate(resourceOrKey: string, exceptKey?: string): void {
     const isExactKey = this.entries.has(resourceOrKey) || this.pending.has(resourceOrKey);
@@ -175,7 +178,9 @@ export class SessionDataCache {
     };
 
     for (const key of Array.from(this.entries.keys())) {
-      if (matches(key)) this.entries.delete(key);
+      if (!matches(key)) continue;
+      const entry = this.entries.get(key);
+      if (entry) entry.staleAt = 0;
     }
     for (const [key, pendingEntry] of Array.from(this.pending.entries())) {
       if (matches(key)) {

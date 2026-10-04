@@ -58,9 +58,9 @@ interface TaskListClientProps {
   accountId: string;
   accountRole: AccountRole;
   initialTasks: TaskPageResult;
-  initialProjects: ProjectDirectoryItem[];
-  initialMembers: ProjectMember[];
-  initialDependencyTasks: WorkTaskDirectoryItem[];
+  initialProjects?: ProjectDirectoryItem[];
+  initialMembers?: ProjectMember[];
+  initialDependencyTasks?: WorkTaskDirectoryItem[];
 }
 
 function matchesTaskFilters(task: WorkTask, filters: TaskFilters): boolean {
@@ -170,10 +170,15 @@ export function TaskListClient({
     initialData: initialTasks,
   });
 
-  const tasks = taskPage?.items ?? EMPTY_TASKS;
-  const total = taskPage?.total ?? 0;
-  const loading = listStatus === "loading";
-  const error = listStatus === "error";
+  const [lastLoadedTaskPage, setLastLoadedTaskPage] = useState(initialTasks);
+  if (taskPage && taskPage !== lastLoadedTaskPage) {
+    setLastLoadedTaskPage(taskPage);
+  }
+  const visibleTaskPage = taskPage ?? lastLoadedTaskPage;
+  const tasks = visibleTaskPage?.items ?? EMPTY_TASKS;
+  const total = visibleTaskPage?.total ?? 0;
+  const loading = listStatus === "loading" && visibleTaskPage === undefined;
+  const error = listStatus === "error" && visibleTaskPage === undefined;
 
   const directoryKeyBase = { accountId, role: accountRole };
 
@@ -247,6 +252,20 @@ export function TaskListClient({
     }, 300);
     return () => clearTimeout(timer);
   }, [searchInput]);
+
+  async function openEdit(task: WorkTask) {
+    try {
+      const full = await taskService.getTaskById(task.id);
+      if (!full) throw new Error("Không tìm thấy công việc.");
+      setFormModal({ mode: "edit", task: full });
+    } catch (editError) {
+      notify({
+        type: "error",
+        title: "Không thể mở công việc",
+        description: getErrorMessage(editError, "Vui lòng thử lại."),
+      });
+    }
+  }
 
   function toggleSelect(id: string) {
     if (optimisticTasks.some((task) => task.id === id && task.status === "done")) return;
@@ -335,9 +354,10 @@ export function TaskListClient({
           if (!saved) throw new Error("Không tìm thấy công việc để cập nhật.");
 
           const isVisible = matchesTaskFilters(saved, filters);
+          const visibleSnapshot = tasks;
           setTaskPage((previous) => {
-            const currentItems = previous?.items ?? [];
-            const currentTotal = previous?.total ?? 0;
+            const currentItems = previous?.items?.length ? previous.items : visibleSnapshot;
+            const currentTotal = Math.max(previous?.total ?? 0, visibleSnapshot.length);
             let nextItems: WorkTask[];
             if (!isVisible) {
               nextItems = currentItems.filter((item) => item.id !== saved.id);
@@ -531,7 +551,7 @@ export function TaskListClient({
             selectedIds={selectedIds}
             onToggleSelect={toggleSelect}
             onToggleSelectAll={toggleSelectAll}
-            onEdit={(task) => setFormModal({ mode: "edit", task })}
+            onEdit={(task) => void openEdit(task)}
             onDelete={handleDelete}
             deletingId={deletingId}
             readOnly={readOnly}
@@ -544,7 +564,7 @@ export function TaskListClient({
                 task={task}
                 project={projectsById.get(task.projectId)}
                 assignee={membersById.get(task.assigneeId)}
-                onEdit={(t) => setFormModal({ mode: "edit", task: t })}
+                onEdit={(task) => void openEdit(task)}
                 onDelete={handleDelete}
                 deletingId={deletingId}
                 readOnly={readOnly}

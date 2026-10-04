@@ -299,6 +299,12 @@ const WORK_TASK_SELECT =
   `legacy_assignee:tai_khoan!nguoi_phu_trach_id(${ACCOUNT_SELECT}),` +
   `cong_viec_phu_trach(tai_khoan_id,la_chinh,tai_khoan(${ACCOUNT_SELECT})),` +
   "task(tien_do_thuc_te,trang_thai)";
+/** Bảng danh sách: bỏ ảnh, tệp và liên kết. Mở form sửa thì tải bản đủ. */
+const WORK_TASK_LIST_SELECT =
+  "id,ten_cv,mo_ta,created_at,updated_at,du_an_id,nguoi_phu_trach_id,trang_thai,uu_tien,ngay_bat_dau,ngay_hoan_thanh,tien_do_thuc_te,nhan_tag,cong_viec_tien_de_id," +
+  `legacy_assignee:tai_khoan!nguoi_phu_trach_id(${ACCOUNT_SELECT}),` +
+  `cong_viec_phu_trach(tai_khoan_id,la_chinh,tai_khoan(${ACCOUNT_SELECT})),` +
+  "task(tien_do_thuc_te,trang_thai)";
 /** Thẻ công việc trong dự án không cần file/ảnh/link. */
 const WORK_TASK_SUMMARY_SELECT =
   "id,ten_cv,mo_ta,created_at,updated_at,du_an_id,nguoi_phu_trach_id,trang_thai,uu_tien,ngay_bat_dau,ngay_hoan_thanh,tien_do_thuc_te,nhan_tag,cong_viec_tien_de_id," +
@@ -338,6 +344,11 @@ const SUBTASK_LIST_SELECT =
   `creator:tai_khoan!nguoi_tao_id(${ACCOUNT_SELECT}),` +
   `tester:tai_khoan!nguoi_test_id(${ACCOUNT_SELECT}),` +
   `task_phu_trach(tai_khoan_id,la_chinh,xac_nhan_luc,tai_khoan(${ACCOUNT_SELECT}))`;
+/** Danh sách theo công việc hoặc chấm công: có mô tả, không kèm file/ảnh/lần cập nhật. */
+const SUBTASK_COLLECTION_SELECT = SUBTASK_LIST_SELECT.replace(
+  "id,ten_task,created_at",
+  "id,ten_task,mo_ta,created_at",
+);
 const TASK_ACTIVITY_SELECT =
   "id,task_id,loai,tieu_de,chi_tiet,created_at," + `tac_gia:tai_khoan(${ACCOUNT_SELECT})`;
 const SUBTASK_TEST_HISTORY_SELECT =
@@ -1285,7 +1296,7 @@ export async function listWorkTasksPage(
     return next;
   };
 
-  const select = filters.lite ? WORK_TASK_DASHBOARD_SELECT : WORK_TASK_SELECT;
+  const select = filters.lite ? WORK_TASK_DASHBOARD_SELECT : WORK_TASK_LIST_SELECT;
   const { from, to } = pageRange(filters.page, filters.pageSize);
   const [pageResult, countResult] = await Promise.all([
     applyWorkTaskFilters(
@@ -1852,7 +1863,7 @@ export async function listSubtasks(
 
   let query = supabase
     .from("task")
-    .select(SUBTASK_SELECT)
+    .select(SUBTASK_COLLECTION_SELECT)
     .order("created_at", { ascending: false });
 
   if (filters.search?.trim()) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -106,6 +106,7 @@ export function TaskDetailView({
   const [error, setError] = useState(false);
   const [tab, setTab] = useState<Tab>("info");
   const [editing, setEditing] = useState(false);
+  const [preparingEdit, setPreparingEdit] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [quickUpdating, setQuickUpdating] = useState(false);
 
@@ -139,6 +140,59 @@ export function TaskDetailView({
       });
     }
   }, [taskId, notify]);
+
+  useEffect(() => {
+    let active = true;
+    void taskService.getTaskReports(taskId)
+      .then((reportData) => {
+        if (active) setReports(reportData);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [taskId]);
+
+  const refreshSubtasks = useCallback(async () => {
+    try {
+      const [subtaskList, taskData] = await Promise.all([
+        subtaskService.getSubtasksByWorkTask(taskId),
+        taskService.getTaskById(taskId),
+      ]);
+      setSubtasks(subtaskList);
+      if (taskData) setTask(taskData);
+    } catch (refreshError) {
+      notify({
+        type: "error",
+        title: "Không thể tải lại Task",
+        description: getErrorMessage(refreshError, "Vui lòng thử lại."),
+      });
+    }
+  }, [notify, taskId]);
+
+  async function openEditor() {
+    if (preparingEdit) return;
+    setPreparingEdit(true);
+    try {
+      const [projectData, taskList, memberData] = await Promise.all([
+        projectService.getProjects(),
+        taskService.getTasks(),
+        projectService.getDirectory(),
+      ]);
+      setProjects(projectData);
+      setAllTasks(taskList);
+      setMembers(memberData);
+      setEditing(true);
+    } catch (editError) {
+      notify({
+        type: "error",
+        title: "Không thể mở form chỉnh sửa",
+        description: getErrorMessage(editError, "Vui lòng thử lại."),
+      });
+    } finally {
+      setPreparingEdit(false);
+    }
+  }
 
   const handleAttachmentSave = useCallback(async (value: {
     files: TaskFileAttachment[];
@@ -372,11 +426,12 @@ export function TaskDetailView({
             )}
             {!viewOnly && (
               <Button
-                onClick={() => setEditing(true)}
+                onClick={() => void openEditor()}
+                disabled={preparingEdit}
                 className="rounded-full bg-brand-600 hover:bg-brand-700"
               >
                 <Pencil className="h-4 w-4" />
-                <span className="hidden @xl/detail:inline">Chỉnh sửa</span>
+                <span className="hidden @xl/detail:inline">{preparingEdit ? "Đang mở..." : "Chỉnh sửa"}</span>
               </Button>
             )}
             {!readOnly && (
@@ -634,7 +689,7 @@ export function TaskDetailView({
             workTask={task}
             projects={project ? [project] : []}
             members={members}
-            onSubtasksChanged={load}
+            onSubtasksChanged={() => void refreshSubtasks()}
             readOnly={viewOnly}
           />
         ) : (

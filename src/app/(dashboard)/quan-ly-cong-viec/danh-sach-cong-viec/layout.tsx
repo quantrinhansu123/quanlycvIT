@@ -7,8 +7,7 @@ import { loadTaskListInitialData } from "./loadTaskListInitialData";
 export default async function TaskListLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createServerSupabaseClient();
   const access = await requireRequestAccount(supabase);
-  const { initialTasks, initialProjects, initialMembers, initialDependencyTasks } =
-    await loadTaskListInitialData(supabase, access);
+  const { initialTasks } = await loadTaskListInitialData(supabase, access);
 
   return (
     <ListDetailRouteShell
@@ -18,9 +17,6 @@ export default async function TaskListLayout({ children }: { children: React.Rea
           accountId={access.id}
           accountRole={access.role}
           initialTasks={initialTasks}
-          initialProjects={initialProjects}
-          initialMembers={initialMembers}
-          initialDependencyTasks={initialDependencyTasks}
         />
       }
     >

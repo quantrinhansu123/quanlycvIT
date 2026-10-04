@@ -1,12 +1,9 @@
 import { createServerSupabaseClient } from "@/lib/supabase/api";
 import { assertWorkTaskReadable, requireRequestAccount } from "@/lib/supabase/authorization";
 import {
+  getProject,
   getWorkTask,
-  listDirectory,
-  listProjects,
   listSubtasks,
-  listTaskReports,
-  listWorkTasks,
 } from "@/lib/supabase/data";
 import { TaskDetailView } from "./TaskDetailView";
 
@@ -21,24 +18,25 @@ export default async function TaskDetailPage({ params }: TaskDetailPageProps) {
   await assertWorkTaskReadable(supabase, access, id);
   const memberAssigneeIds = access.role === "member" ? [access.id] : undefined;
 
-  const [task, projects, reports, allTasks, subtasks, members] = await Promise.all([
-    getWorkTask(supabase, id),
-    listProjects(supabase, undefined, access.role === "member" ? access.id : undefined),
-    listTaskReports(supabase, id),
-    listWorkTasks(supabase, { assigneeIds: memberAssigneeIds }),
+  const task = await getWorkTask(supabase, id);
+  const [project, dependency, subtasks] = await Promise.all([
+    task ? getProject(supabase, task.projectId) : Promise.resolve(null),
+    task?.dependsOnTaskId ? getWorkTask(supabase, task.dependsOnTaskId) : Promise.resolve(null),
     listSubtasks(supabase, { workTaskId: id, assigneeIds: memberAssigneeIds }),
-    listDirectory(supabase).then((items) => access.role === "member"
-      ? items.filter((item) => item.id === access.employeeCode)
-      : items),
   ]);
+  const members = [
+    ...(project?.managers ?? []),
+    ...(project?.members ?? []),
+    ...(task?.assignees ?? []),
+  ].filter((member, index, list) => list.findIndex((item) => item.id === member.id) === index);
 
   return (
     <TaskDetailView
       taskId={id}
       initialTask={task}
-      initialProjects={projects}
-      initialReports={reports}
-      initialAllTasks={allTasks}
+      initialProjects={project ? [project] : []}
+      initialReports={[]}
+      initialAllTasks={dependency ? [dependency] : []}
       initialSubtasks={subtasks}
       initialMembers={members}
       readOnly={access.role === "member"}

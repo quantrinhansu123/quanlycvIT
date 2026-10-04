@@ -156,6 +156,20 @@ export function WorkTaskSubtasksPanel({
     cache.invalidate(CACHE_RESOURCE.tasksList);
   }
 
+  async function openSubtaskEditor(subtask: Subtask) {
+    try {
+      const full = await subtaskService.getSubtaskById(subtask.id);
+      if (!full) throw new Error("Không tìm thấy task.");
+      setFormModal({ mode: "edit", subtask: full });
+    } catch (editError) {
+      notify({
+        type: "error",
+        title: "Không thể mở task",
+        description: getErrorMessage(editError, "Vui lòng thử lại."),
+      });
+    }
+  }
+
   function toggleSelect(id: string) {
     if (viewOnly || subtasks.some((subtask) => subtask.id === id && subtask.status === "done")) return;
     setSelectedIds((current) =>
@@ -425,7 +439,7 @@ export function WorkTaskSubtasksPanel({
             onToggleSelectAll={toggleSelectAll}
             onReport={setReportDrawer}
             onViewReports={(subtask) => setQuickView({ subtask, tab: "reports" })}
-            onEdit={(subtask) => setFormModal({ mode: "edit", subtask })}
+            onEdit={(subtask) => void openSubtaskEditor(subtask)}
             onDelete={handleDelete}
             hideWorkTaskColumn
             canApprove={isAdmin}
@@ -450,7 +464,7 @@ export function WorkTaskSubtasksPanel({
                 assignee={membersById.get(subtask.assigneeId)}
                 onReport={setReportDrawer}
                 onViewReports={(item) => setQuickView({ subtask: item, tab: "reports" })}
-                onEdit={(item) => setFormModal({ mode: "edit", subtask: item })}
+                onEdit={(item) => void openSubtaskEditor(item)}
                 onDelete={handleDelete}
                 canApprove={isAdmin}
                 onApprove={handleApprove}
