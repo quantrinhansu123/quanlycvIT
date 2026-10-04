@@ -14,6 +14,7 @@ import {
   Clock3,
   ExternalLink,
   FileClock,
+  FileDown,
   Flag,
   History,
   ImagePlus,
@@ -40,7 +41,10 @@ import { subtaskService } from "@/services/subtask-service";
 import type { ProjectDirectoryItem, ProjectMember } from "@/types/project";
 import type { TaskFileAttachment, TaskLinkAttachment, WorkTaskDirectoryItem } from "@/types/task";
 import { SUBTASK_STATUS_OPTIONS, TASK_PRIORITY_OPTIONS } from "@/types/task";
-import type { Subtask, SubtaskReport, SubtaskTestHistoryEntry, SubtaskTimeRecord } from "@/types/subtask";
+import { INITIAL_HANDOVER_SOURCE_ID } from "@/lib/handover";
+import { promptProgressPercent } from "@/lib/prompt-progress";
+import { exportHandoverPdf } from "@/lib/handover-pdf";
+import type { Subtask, SubtaskHandoverStatus, SubtaskPromptItem, SubtaskReport, SubtaskTestHistoryEntry, SubtaskTimeRecord } from "@/types/subtask";
 import { isSubtaskOverdue } from "@/types/subtask";
 import type { TaskActivityEvent } from "@/types/activity";
 import { AvatarStack } from "@/components/ui/Avatar";
@@ -178,7 +182,13 @@ export function SubtaskDetailView({
   const [promptImport, setPromptImport] = useState<SubtaskPromptImportRequest | null>(null);
   const [handoverText, setHandoverText] = useState(initialSubtask?.handover?.text ?? "");
   const [handoverImageUrl, setHandoverImageUrl] = useState(initialSubtask?.handover?.imageUrl ?? "");
+  const [handoverDraft, setHandoverDraft] = useState<string | null>(null);
   const [savingHandover, setSavingHandover] = useState(false);
+  const [creatingHandoverFile, setCreatingHandoverFile] = useState(false);
+  const [livePromptItems, setLivePromptItems] = useState<SubtaskPromptItem[] | null>(null);
+  const handlePromptItemsChange = useCallback((items: SubtaskPromptItem[]) => {
+    setLivePromptItems(items);
+  }, []);
   const [uploadingHandoverImage, setUploadingHandoverImage] = useState(false);
   const handoverImageInputRef = useRef<HTMLInputElement>(null);
 
@@ -244,6 +254,7 @@ export function SubtaskDetailView({
       const handover = await subtaskService.updateHandover(subtask.id, {
         text: handoverText,
         imageUrl: handoverImageUrl.trim(),
+        statuses: subtask.handover?.statuses ?? {},
       });
       setHandoverText(handover.text);
       setHandoverImageUrl(handover.imageUrl);
@@ -257,6 +268,128 @@ export function SubtaskDetailView({
       });
     } finally {
       setSavingHandover(false);
+    }
+  }
+
+  async function handleHandoverStatus(sourceId: string, status: SubtaskHandoverStatus) {
+    if (!subtask || savingHandover) return;
+    setSavingHandover(true);
+    try {
+      const handover = await subtaskService.updateHandover(subtask.id, {
+        text: handoverText,
+        imageUrl: handoverImageUrl.trim(),
+        statuses: { ...(subtask.handover?.statuses ?? {}), [sourceId]: status },
+      });
+      setHandoverText(handover.text);
+      setHandoverImageUrl(handover.imageUrl);
+      setSubtask((current) => current ? { ...current, handover } : current);
+    } catch (saveError) {
+      notify({
+        type: "error",
+        title: "Không thể cập nhật trạng thái bàn giao",
+        description: getErrorMessage(saveError, "Vui lòng thử lại."),
+      });
+    } finally {
+      setSavingHandover(false);
+    }
+  }
+
+  async function handleAddHandoverRow() {
+    if (!subtask || handoverDraft === null || savingIteration) return;
+    const description = handoverDraft.trim();
+    if (!description) {
+      notify({ type: "error", title: "Hãy nhập nội dung lần bổ sung." });
+      return;
+    }
+
+    setSavingIteration(true);
+    try {
+      const updated = await subtaskService.updateSubtask(subtask.id, {
+        title: subtask.title,
+        description: subtask.description,
+        workTaskId: subtask.workTaskId,
+        assigneeIds: subtask.assignees.map((member) => member.id),
+        testerId: subtask.tester?.id,
+        priority: subtask.priority,
+        startDate: subtask.startDate,
+        dueDate: subtask.dueDate,
+        progress: subtask.progress,
+        tags: subtask.tags,
+        files: subtask.files,
+        links: subtask.links,
+        images: subtask.images,
+        updates: [
+          ...subtask.updates,
+          {
+            id: crypto.randomUUID(),
+            createdAt: new Date().toISOString(),
+            description,
+            files: [],
+            links: [],
+            images: [],
+          },
+        ],
+        issues: subtask.issues,
+      });
+      if (!updated) throw new Error("Task không tồn tại hoặc đã bị xóa.");
+      setSubtask(updated);
+      setHandoverDraft(null);
+      notify({ type: "success", title: "Đã thêm lần vào Chi tiết Task" });
+    } catch (saveError) {
+      notify({
+        type: "error",
+        title: "Không thể thêm lần bàn giao",
+        description: getErrorMessage(saveError, "Vui lòng thử lại."),
+      });
+    } finally {
+      setSavingIteration(false);
+    }
+  }
+
+  async function handleCreateHandoverFile() {
+    if (!subtask || creatingHandoverFile) return;
+    setCreatingHandoverFile(true);
+    try {
+      const handedOver = (sourceId: string) => subtask.handover?.statuses?.[sourceId] === "handedOver";
+      const statusLabel = (sourceId: string) => handedOver(sourceId) ? "Đã bàn giao" : "Chưa bàn giao";
+      await exportHandoverPdf({
+        taskTitle: subtask.title,
+        workTaskTitle: workTasks.find((item) => item.id === subtask.workTaskId)?.title,
+        assignees: subtask.assignees.map((member) => member.name).filter(Boolean).join(", "),
+        tester: subtask.tester?.name,
+        dueDate: subtask.dueDate ? formatDateVN(subtask.dueDate) : undefined,
+        note: handoverText,
+        handoverImageUrl,
+        rows: [
+          {
+            label: "Lần 1",
+            content: subtask.description ?? "",
+            statusLabel: statusLabel(INITIAL_HANDOVER_SOURCE_ID),
+            handedOver: handedOver(INITIAL_HANDOVER_SOURCE_ID),
+            imageUrls: subtask.images,
+          },
+          ...subtask.updates.map((entry, index) => ({
+            label: `Lần ${index + 2}`,
+            content: entry.description ?? "",
+            statusLabel: statusLabel(entry.id),
+            handedOver: handedOver(entry.id),
+            imageUrls: entry.images,
+          })),
+        ],
+      });
+      notify({
+        type: "success",
+        title: "Đã tạo file bàn giao",
+        description: "Mở file PDF khổ A4 dọc để xem nội dung, ảnh và trạng thái trước khi nghiệm thu.",
+      });
+    } catch (createError) {
+      notify({
+        type: "error",
+        title: "Không thể tạo file bàn giao",
+        description: getErrorMessage(createError, "Vui lòng thử lại."),
+      });
+    } finally {
+      setCreatingHandoverFile(false);
     }
   }
 
@@ -674,6 +807,7 @@ export function SubtaskDetailView({
     : SUBTASK_STATUS_OPTIONS;
   const lastTimeRecord = timeRecords.at(-1);
   const recordedDuration = getRecordedDuration(timeRecords);
+  const actualProgress = promptProgressPercent(livePromptItems ?? subtask.promptItems);
 
   return (
     <div className="min-h-full min-w-0 max-w-full overflow-x-clip bg-white pb-2 [contain:inline-size]">
@@ -808,12 +942,12 @@ export function SubtaskDetailView({
                 iconClassName="bg-violet-50 text-violet-600"
               >
                 <strong className="text-lg font-bold text-gray-950">
-                  {subtask.progress}%
+                  {actualProgress}%
                 </strong>
                 <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-gray-100">
                   <div
                     className="h-full rounded-full bg-violet-600"
-                    style={{ width: `${subtask.progress}%` }}
+                    style={{ width: `${actualProgress}%` }}
                   />
                 </div>
               </OverviewCard>
@@ -884,6 +1018,7 @@ export function SubtaskDetailView({
               initialItems={subtask.promptItems}
               initialDataLoaded
               importRequest={promptImport}
+              onItemsChange={handlePromptItemsChange}
               onImported={(requestId) => {
                 setPromptImport((current) => current?.requestId === requestId ? null : current);
               }}
@@ -906,32 +1041,117 @@ export function SubtaskDetailView({
               <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h2 className="text-base font-bold text-gray-900">Bàn giao</h2>
-                  <p className="mt-1 text-xs text-gray-500">Ghi nội dung bàn giao và đường dẫn ảnh liên quan.</p>
+                  <p className="mt-1 text-xs text-gray-500">Nội dung lấy từ Chi tiết Task. Chọn trạng thái để bàn giao từng lần.</p>
                 </div>
-                {canEditHandover && (
+                <div className="flex flex-wrap gap-2">
                   <Button
                     type="button"
-                    onClick={() => void handleSaveHandover()}
-                    disabled={savingHandover || uploadingHandoverImage}
+                    variant="secondary"
                     size="sm"
+                    disabled={creatingHandoverFile}
+                    onClick={() => void handleCreateHandoverFile()}
                   >
-                    <Save className="h-3.5 w-3.5" />
-                    {savingHandover ? "Đang lưu..." : "Lưu bàn giao"}
+                    {creatingHandoverFile
+                      ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                      : <FileDown className="h-3.5 w-3.5" />}
+                    {creatingHandoverFile ? "Đang tạo file..." : "Tạo file"}
                   </Button>
-                )}
+                  {canEditHandover && (
+                    <>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        disabled={savingIteration || handoverDraft !== null}
+                        onClick={() => setHandoverDraft("")}
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Thêm mới
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={() => void handleSaveHandover()}
+                        disabled={savingHandover || uploadingHandoverImage}
+                        size="sm"
+                      >
+                        <Save className="h-3.5 w-3.5" />
+                        {savingHandover ? "Đang lưu..." : "Lưu bàn giao"}
+                      </Button>
+                    </>
+                  )}
+                </div>
               </div>
 
-              <div className="grid gap-4 @2xl/detail:grid-cols-2">
+              <div className="overflow-x-auto rounded-xl border border-gray-200">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="bg-gray-50 text-xs font-semibold text-gray-500">
+                    <tr>
+                      <th className="w-20 px-3 py-2">Lần</th>
+                      <th className="px-3 py-2">Nội dung</th>
+                      <th className="w-44 px-3 py-2">Trạng thái</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[{ id: INITIAL_HANDOVER_SOURCE_ID, label: "Lần 1", description: subtask.description }, ...subtask.updates.map((entry, index) => ({
+                      id: entry.id,
+                      label: `Lần ${index + 2}`,
+                      description: entry.description,
+                    }))].map((row) => (
+                      <tr key={row.id} className="border-t border-gray-100 align-top">
+                        <td className="px-3 py-2.5 font-semibold text-gray-700">{row.label}</td>
+                        <td className="max-w-md px-3 py-2.5 text-gray-700">
+                          <p className="line-clamp-3 whitespace-pre-wrap break-words">
+                            {row.description?.trim() || "Chưa có mô tả."}
+                          </p>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <select
+                            value={subtask.handover?.statuses?.[row.id] ?? "pending"}
+                            disabled={!canEditHandover || savingHandover}
+                            onChange={(event) => void handleHandoverStatus(row.id, event.target.value as SubtaskHandoverStatus)}
+                            className="h-9 w-full rounded-lg border border-gray-200 bg-white px-2 text-sm text-gray-800 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 disabled:bg-gray-50 disabled:text-gray-500"
+                          >
+                            <option value="pending">Chưa bàn giao</option>
+                            <option value="handedOver">Đã bàn giao</option>
+                          </select>
+                        </td>
+                      </tr>
+                    ))}
+                    {handoverDraft !== null && (
+                      <tr className="border-t border-violet-100 bg-violet-50/40 align-top">
+                        <td className="px-3 py-2.5 font-semibold text-violet-800">Lần {subtask.updates.length + 2}</td>
+                        <td className="px-3 py-2.5" colSpan={2}>
+                          <textarea
+                            autoFocus
+                            maxLength={5000}
+                            rows={3}
+                            value={handoverDraft}
+                            onChange={(event) => setHandoverDraft(event.target.value)}
+                            placeholder="Nhập nội dung lần bổ sung. Nội dung này cũng hiện trong Chi tiết Task."
+                            className="w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm leading-6 text-gray-700 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+                          />
+                          <div className="mt-2 flex justify-end gap-2">
+                            <Button type="button" variant="ghost" size="sm" disabled={savingIteration} onClick={() => setHandoverDraft(null)}>Hủy</Button>
+                            <Button type="button" size="sm" disabled={savingIteration} onClick={() => void handleAddHandoverRow()}>{savingIteration ? "Đang lưu..." : "Lưu lần"}</Button>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-4 grid gap-4 @2xl/detail:grid-cols-2">
                 <label className="block text-xs font-semibold text-gray-600">
-                  Nội dung bàn giao
+                  Ghi chú bàn giao
                   <textarea
                     value={handoverText}
                     onChange={(event) => setHandoverText(event.target.value)}
                     disabled={!canEditHandover || savingHandover}
-                    rows={5}
+                    rows={3}
                     maxLength={20_000}
-                    placeholder="Nhập nội dung bàn giao..."
-                    className="mt-1.5 min-h-28 w-full resize-y rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-normal leading-6 text-gray-800 outline-none placeholder:text-gray-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 disabled:bg-gray-50 disabled:text-gray-500"
+                    placeholder="Ghi chú thêm khi bàn giao..."
+                    className="mt-1.5 min-h-20 w-full resize-y rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-normal leading-6 text-gray-800 outline-none placeholder:text-gray-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 disabled:bg-gray-50 disabled:text-gray-500"
                   />
                 </label>
                 <div>

@@ -355,6 +355,11 @@ export function SubtaskTable({
                   >
                     {subtask.title}
                   </IntentPrefetchLink>
+                  {compact && (
+                    <div className="mt-1">
+                      <ProgressBar value={subtask.progress} className="min-w-0 flex-1" />
+                    </div>
+                  )}
                   {!compact && subtask.description && (
                     <p className="mt-0.5 truncate text-xs text-gray-400">{subtask.description}</p>
                   )}

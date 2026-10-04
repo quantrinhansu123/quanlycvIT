@@ -45,6 +45,16 @@ function text(value: string | number | null | undefined): string {
   return String(value);
 }
 
+export async function loadPdfMake() {
+  const [{ default: pdfMake }, { default: pdfFonts }] = await Promise.all([
+    import("pdfmake/build/pdfmake"),
+    import("pdfmake/build/vfs_fonts"),
+  ]);
+  const fontModule = pdfFonts as unknown as { pdfMake?: { vfs?: Record<string, string> }; vfs?: Record<string, string> };
+  pdfMake.vfs = fontModule.pdfMake?.vfs ?? fontModule.vfs ?? fontModule as unknown as Record<string, string>;
+  return pdfMake;
+}
+
 export async function exportTablePdf({
   title,
   filename,
@@ -53,13 +63,7 @@ export async function exportTablePdf({
   subtitle,
   orientation = columns.length > 6 ? "landscape" : "portrait",
 }: ExportTablePdfOptions): Promise<void> {
-  const [{ default: pdfMake }, { default: pdfFonts }] = await Promise.all([
-    import("pdfmake/build/pdfmake"),
-    import("pdfmake/build/vfs_fonts"),
-  ]);
-
-  const fontModule = pdfFonts as unknown as { pdfMake?: { vfs?: Record<string, string> }; vfs?: Record<string, string> };
-  pdfMake.vfs = fontModule.pdfMake?.vfs ?? fontModule.vfs ?? fontModule as unknown as Record<string, string>;
+  const pdfMake = await loadPdfMake();
 
   const generatedAt = new Intl.DateTimeFormat("vi-VN", {
     dateStyle: "short",

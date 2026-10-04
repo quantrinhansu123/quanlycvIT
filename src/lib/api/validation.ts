@@ -1,4 +1,5 @@
 import { ApiException } from "@/lib/api/response";
+import { normalizeHandoverStatuses } from "@/lib/handover";
 import type { ProjectColor, ProjectInput, ProjectStepConfig } from "@/types/project";
 import { DEFAULT_PROJECT_STEPS } from "@/types/project";
 import type { SubtaskHandover, SubtaskInput, SubtaskIssueEntry, SubtaskPromptItem, SubtaskUpdateEntry, TaskFileAttachment, TaskLinkAttachment } from "@/types/subtask";
@@ -583,5 +584,9 @@ export function parseSubtaskHandover(body: Record<string, unknown>): SubtaskHand
     throw new ApiException("Link ảnh phải là URL HTTP hoặc HTTPS hợp lệ.", 400);
   }
 
-  return { text: body.text, imageUrl };
+  return {
+    text: body.text,
+    imageUrl,
+    statuses: normalizeHandoverStatuses(body.statuses),
+  };
 }

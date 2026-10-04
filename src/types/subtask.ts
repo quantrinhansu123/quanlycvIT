@@ -52,9 +52,14 @@ export interface SubtaskIssueEntry {
   solution: string;
 }
 
+/** Trạng thái bàn giao của một lần trong Chi tiết Task. */
+export type SubtaskHandoverStatus = "pending" | "handedOver";
+
 export interface SubtaskHandover {
   text: string;
   imageUrl: string;
+  /** Khóa `initial` là Lần 1; các khóa còn lại là id của lần bổ sung. */
+  statuses: Record<string, SubtaskHandoverStatus>;
 }
 
 export interface Subtask {

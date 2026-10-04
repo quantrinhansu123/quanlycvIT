@@ -1,3 +1,5 @@
+import { decodeHandover, encodeHandoverContent } from "@/lib/handover";
+import { promptProgressPercent } from "@/lib/prompt-progress";
 import type { ApiSupabaseClient } from "@/lib/supabase/api";
 import { ApiException, isSchemaCacheError, throwDatabaseError } from "@/lib/api/response";
 import { resolveAuthUserId, type RequestAccountAccess } from "@/lib/supabase/authorization";
@@ -1813,17 +1815,16 @@ function hydrateSubtasks(rows: SubtaskRow[]): Subtask[] {
       priority: toPriority(row.uu_tien),
       startDate: row.ngay_bat_dau ?? "",
       dueDate: row.ngay_ket_thuc ?? "",
-      progress: row.tien_do_thuc_te,
+      progress: row.prompt_items !== undefined
+        ? promptProgressPercent(normalizeSubtaskPromptItems(row.prompt_items))
+        : row.tien_do_thuc_te,
       tags: row.nhan_tag ?? [],
       files: row.tep_dinh_kem ?? [],
       links: row.lien_ket_dinh_kem ?? [],
       images: row.hinh_anh ?? [],
       updates: row.cap_nhat_bo_sung ?? [],
       issues: normalizeSubtaskIssueEntries(row.van_de_giai_phap),
-      handover: {
-        text: row.ban_giao_noi_dung ?? "",
-        imageUrl: row.ban_giao_link_anh ?? "",
-      },
+      handover: decodeHandover(row.ban_giao_noi_dung, row.ban_giao_link_anh),
       promptItems: row.prompt_items !== undefined
         ? normalizeSubtaskPromptItems(row.prompt_items)
         : [],
@@ -2070,12 +2071,21 @@ export async function updateSubtaskPromptItems(
       ],
     };
   });
-  const { data, error } = await supabase
+  const progress = promptProgressPercent(timestampedItems);
+  let { data, error } = await supabase
     .from("task")
-    .update({ prompt_items: timestampedItems })
+    .update({ prompt_items: timestampedItems, tien_do_thuc_te: progress })
     .eq("id", id)
     .select("prompt_items")
     .maybeSingle();
+  if (error?.code === "23514") {
+    ({ data, error } = await supabase
+      .from("task")
+      .update({ prompt_items: timestampedItems })
+      .eq("id", id)
+      .select("prompt_items")
+      .maybeSingle());
+  }
   if (error?.code === "42703" || error?.code === "PGRST204") {
     throw new ApiException(
       "Cơ sở dữ liệu chưa được cập nhật cho tính năng Prompt.",
@@ -2154,7 +2164,7 @@ export async function updateSubtaskHandover(
   const { data, error } = await supabase
     .from("task")
     .update({
-      ban_giao_noi_dung: handover.text,
+      ban_giao_noi_dung: encodeHandoverContent(handover),
       ban_giao_link_anh: handover.imageUrl,
     })
     .eq("id", id)
@@ -2166,10 +2176,7 @@ export async function updateSubtaskHandover(
   }
   throwDatabaseError(error);
   if (!data) return null;
-  return {
-    text: data.ban_giao_noi_dung ?? "",
-    imageUrl: data.ban_giao_link_anh ?? "",
-  };
+  return decodeHandover(data.ban_giao_noi_dung, data.ban_giao_link_anh);
 }
 
 function normalizeSubtaskPromptItems(value: unknown): SubtaskPromptItem[] {

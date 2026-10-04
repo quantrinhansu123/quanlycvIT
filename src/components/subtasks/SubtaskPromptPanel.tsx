@@ -72,6 +72,7 @@ interface SubtaskPromptPanelProps {
   initialDataLoaded?: boolean;
   importRequest?: SubtaskPromptImportRequest | null;
   onImported?: (requestId: string) => void;
+  onItemsChange?: (items: SubtaskPromptItem[]) => void;
 }
 
 export interface SubtaskPromptImportRequest {
@@ -86,6 +87,7 @@ export function SubtaskPromptPanel({
   initialDataLoaded = false,
   importRequest,
   onImported,
+  onItemsChange,
 }: SubtaskPromptPanelProps) {
   const { notify } = useFeedback();
   const initial = initialItems.length > 0 ? initialItems : [emptyItem(`prompt-empty-${subtaskId}`)];
@@ -100,6 +102,10 @@ export function SubtaskPromptPanel({
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const saveGenerationRef = useRef(0);
   const hasEditedRef = useRef(false);
+
+  useEffect(() => {
+    onItemsChange?.(items);
+  }, [items, onItemsChange]);
 
   useEffect(() => {
     // SSR chi tiết đã kèm prompt_items — bỏ GET trùng khi đã có dữ liệu.
