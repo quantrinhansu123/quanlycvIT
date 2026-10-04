@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { ClipboardPaste, ExternalLink, FileText, ImagePlus, Paperclip, Plus, Trash2 } from "lucide-react";
 import type { TaskFileAttachment, TaskLinkAttachment } from "@/types/task";
+import { FileDownloadButton } from "@/components/tasks/FileDownloadButton";
 import { cn } from "@/lib/utils";
 import {
   ImagePreviewDialog,
@@ -248,6 +249,11 @@ export function TaskAttachmentFields({
                 >
                   {fileItem.name}
                 </a>
+                <FileDownloadButton
+                  url={fileItem.url}
+                  name={fileItem.name}
+                  className="h-7 w-7"
+                />
                 <button
                   type="button"
                   onClick={() => onRemoveSavedFile(fileItem.url)}

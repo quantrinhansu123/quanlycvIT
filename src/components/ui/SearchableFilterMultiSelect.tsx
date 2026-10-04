@@ -93,7 +93,7 @@ export function SearchableFilterMultiSelect({
       </button>
 
       {open && (
-        <div className="absolute z-30 mt-1.5 w-64 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl">
+        <div className="absolute z-40 mt-1.5 w-64 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl">
           <div className="relative border-b border-gray-100 p-2">
             <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input

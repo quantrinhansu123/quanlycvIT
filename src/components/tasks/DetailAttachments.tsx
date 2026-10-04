@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ExternalLink, FileText, Images, Link2 } from "lucide-react";
 import type { TaskFileAttachment, TaskLinkAttachment } from "@/types/task";
+import { FileDownloadButton } from "@/components/tasks/FileDownloadButton";
 import {
   ImagePreviewDialog,
   type PreviewImage,
@@ -75,16 +76,23 @@ export function DetailAttachments({
                 <ul className="space-y-1.5">
                   {files.map((file) => (
                     <li key={file.url}>
-                      <a
-                        href={file.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex min-w-0 items-center gap-2 rounded-lg border border-gray-100 bg-gray-50/80 px-2.5 py-2 text-xs text-gray-700 transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-600"
-                      >
-                        <FileText className="h-3.5 w-3.5 shrink-0 text-gray-400" />
-                        <span className="min-w-0 flex-1 truncate">{file.name}</span>
-                        <ExternalLink className="h-3 w-3 shrink-0 text-gray-400" />
-                      </a>
+                      <div className="flex min-w-0 items-center gap-1 rounded-lg border border-gray-100 bg-gray-50/80 px-2.5 py-1.5 text-xs text-gray-700">
+                        <a
+                          href={file.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex min-w-0 flex-1 items-center gap-2 py-0.5 transition hover:text-brand-600"
+                        >
+                          <FileText className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                          <span className="min-w-0 flex-1 truncate">{file.name}</span>
+                          <ExternalLink className="h-3 w-3 shrink-0 text-gray-400" />
+                        </a>
+                        <FileDownloadButton
+                          url={file.url}
+                          name={file.name}
+                          className="h-7 w-7"
+                        />
+                      </div>
                       {file.description && (
                         <p className="mt-1 truncate px-2.5 text-[11px] text-gray-400">
                           {file.description}

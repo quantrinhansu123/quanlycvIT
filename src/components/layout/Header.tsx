@@ -262,17 +262,24 @@ export function Header({ onToggleSidebar, onOpenMobileMenu }: HeaderProps) {
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [themePanelOpen]);
 
+  const notificationsInFlightRef = useRef(false);
+  const hasNotificationsRef = useRef(false);
   const loadNotifications = useCallback(async () => {
     if (!account?.id) {
+      hasNotificationsRef.current = false;
       setNotifications([]);
       return;
     }
-    setNotificationLoading(true);
+    if (notificationsInFlightRef.current) return;
+    notificationsInFlightRef.current = true;
+    if (!hasNotificationsRef.current) setNotificationLoading(true);
     try {
       setNotifications(await notificationService.getNotifications());
+      hasNotificationsRef.current = true;
     } catch {
       // Chuông không làm gián đoạn chức năng chính nếu mạng tạm thời lỗi.
     } finally {
+      notificationsInFlightRef.current = false;
       setNotificationLoading(false);
     }
   }, [account?.id]);
@@ -290,7 +297,7 @@ export function Header({ onToggleSidebar, onOpenMobileMenu }: HeaderProps) {
     const startPolling = () => {
       if (timer !== undefined || document.visibilityState !== "visible") return;
       void loadNotifications();
-      timer = window.setInterval(() => void loadNotifications(), 30_000);
+      timer = window.setInterval(() => void loadNotifications(), 60_000);
     };
     const scheduleStart = () => {
       if (document.visibilityState !== "visible") return;

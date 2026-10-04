@@ -40,6 +40,35 @@ export function assertManagerOrAdmin(access: RequestAccountAccess): void {
  * `createServerSupabaseClient` (Server Component, xác thực qua cookie), truyền
  * `undefined` cho `getClaims` để nó tự lấy access token từ phiên trong cookie.
  */
+const PROFILE_CACHE_TTL_MS = 30_000;
+
+interface ProfileCacheEntry {
+  profile: RequestAccountProfile;
+  fetchedAt: number;
+}
+
+const profileCacheHolder = globalThis as typeof globalThis & {
+  __requestAccountProfileCache?: Map<string, ProfileCacheEntry>;
+};
+const profileCache = (profileCacheHolder.__requestAccountProfileCache ??= new Map());
+
+function readCachedProfile(authUserId: string): RequestAccountProfile | null {
+  const entry = profileCache.get(authUserId);
+  if (!entry) return null;
+  if (Date.now() - entry.fetchedAt > PROFILE_CACHE_TTL_MS) {
+    profileCache.delete(authUserId);
+    return null;
+  }
+  return entry.profile;
+}
+
+function rememberProfile(authUserId: string, profile: RequestAccountProfile) {
+  profileCache.set(authUserId, { profile, fetchedAt: Date.now() });
+  if (profileCache.size <= 200) return;
+  const oldest = profileCache.keys().next().value;
+  if (oldest) profileCache.delete(oldest);
+}
+
 export async function resolveAuthUserId(supabase: ApiSupabaseClient): Promise<string | undefined> {
   const keys = await getCachedJwks();
   const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(
@@ -50,11 +79,12 @@ export async function resolveAuthUserId(supabase: ApiSupabaseClient): Promise<st
   return typeof claimsData?.claims.sub === "string" ? claimsData.claims.sub : undefined;
 }
 
-async function fetchAccountProfile(
-  supabase: ApiSupabaseClient
+async function loadActiveAccountProfile(
+  supabase: ApiSupabaseClient,
+  authUserId: string
 ): Promise<RequestAccountProfile | null> {
-  const authUserId = await resolveAuthUserId(supabase);
-  if (!authUserId) return null;
+  const cached = readCachedProfile(authUserId);
+  if (cached) return cached;
 
   const { data, error } = await supabase
     .from("tai_khoan")
@@ -64,7 +94,7 @@ async function fetchAccountProfile(
   throwDatabaseError(error);
   if (!data || data.status !== "active") return null;
 
-  return {
+  const profile: RequestAccountProfile = {
     id: String(data.id),
     name: String(data.ten_nv),
     username: String(data.username ?? ""),
@@ -74,6 +104,16 @@ async function fetchAccountProfile(
     avatarUrl: data.avatar_url ?? undefined,
     employeeCode: String(data.ma_nv),
   };
+  rememberProfile(authUserId, profile);
+  return profile;
+}
+
+async function fetchAccountProfile(
+  supabase: ApiSupabaseClient
+): Promise<RequestAccountProfile | null> {
+  const authUserId = await resolveAuthUserId(supabase);
+  if (!authUserId) return null;
+  return loadActiveAccountProfile(supabase, authUserId);
 }
 
 /**
@@ -111,20 +151,9 @@ export async function requireRequestAccount(
       throw new ApiException("Bạn cần đăng nhập để xem dữ liệu công việc.", 401);
     }
 
-    const { data, error } = await supabase
-      .from("tai_khoan")
-      .select("id,ma_nv,role,status")
-      .eq("auth_user_id", authUserId)
-      .maybeSingle();
-    throwDatabaseError(error);
-    if (!data) throw new ApiException("Không tìm thấy tài khoản nhân viên tương ứng.", 403);
-    if (data.status !== "active") throw new ApiException("Tài khoản này đang bị khóa.", 403);
-
-    return {
-      id: data.id as string,
-      employeeCode: data.ma_nv as string,
-      role: data.role as AccountRole,
-    };
+    const profile = await loadActiveAccountProfile(supabase, authUserId);
+    if (!profile) throw new ApiException("Không tìm thấy tài khoản nhân viên tương ứng.", 403);
+    return profileToAccess(profile);
   });
 }
 

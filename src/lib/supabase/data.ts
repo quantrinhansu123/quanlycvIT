@@ -170,6 +170,13 @@ interface SubtaskRow {
   tester: AccountRow | null;
   /** Chỉ có khi select chi tiết (`SUBTASK_DETAIL_SELECT`). */
   prompt_items?: unknown;
+  /** Chỉ có trên select danh sách: công việc cha và tên dự án. */
+  parent_work_task?: {
+    id: string;
+    ten_cv: string;
+    du_an_id: string;
+    parent_project: { id: string; ten_da: string } | null;
+  } | null;
 }
 
 interface TaskActivityRow {
@@ -265,6 +272,13 @@ const PROJECT_SELECT =
   `du_an_quan_ly(tai_khoan_id,la_chinh,tai_khoan(${ACCOUNT_SELECT})),` +
   `du_an_thanh_vien(tai_khoan_id,tai_khoan(${ACCOUNT_SELECT})),` +
   "cong_viec(id,trang_thai,ngay_hoan_thanh)";
+/** Danh sách dự án: giữ mô tả, thành viên và thống kê, bỏ file/ảnh/steps. */
+const PROJECT_LIST_SELECT =
+  "id,ma_da,ten_da,hop_mau,mo_ta,ngay_bd,ngay_kt,nguoi_ql_id," +
+  `legacy_manager:tai_khoan!nguoi_ql_id(${ACCOUNT_SELECT}),` +
+  `du_an_quan_ly(tai_khoan_id,la_chinh,tai_khoan(${ACCOUNT_SELECT})),` +
+  `du_an_thanh_vien(tai_khoan_id,tai_khoan(${ACCOUNT_SELECT})),` +
+  "cong_viec(id,trang_thai,ngay_hoan_thanh)";
 /** Form công việc cần người tham gia và ngày, không cần thống kê/đính kèm của mọi dự án. */
 const PROJECT_FORM_SELECT =
   "id,ma_da,ten_da,hop_mau,mo_ta,ngay_bd,ngay_kt,nguoi_ql_id,steps," +
@@ -281,6 +295,12 @@ const PROJECT_DIRECTORY_SELECT =
   `du_an_thanh_vien(tai_khoan_id,tai_khoan(${ACCOUNT_SELECT}))`;
 const WORK_TASK_SELECT =
   "id,ten_cv,mo_ta,created_at,updated_at,du_an_id,nguoi_phu_trach_id,trang_thai,uu_tien,ngay_bat_dau,ngay_hoan_thanh,tien_do_thuc_te,nhan_tag,cong_viec_tien_de_id,hinh_anh,tep_dinh_kem,lien_ket_dinh_kem," +
+  `legacy_assignee:tai_khoan!nguoi_phu_trach_id(${ACCOUNT_SELECT}),` +
+  `cong_viec_phu_trach(tai_khoan_id,la_chinh,tai_khoan(${ACCOUNT_SELECT})),` +
+  "task(tien_do_thuc_te,trang_thai)";
+/** Thẻ công việc trong dự án không cần file/ảnh/link. */
+const WORK_TASK_SUMMARY_SELECT =
+  "id,ten_cv,mo_ta,created_at,updated_at,du_an_id,nguoi_phu_trach_id,trang_thai,uu_tien,ngay_bat_dau,ngay_hoan_thanh,tien_do_thuc_te,nhan_tag,cong_viec_tien_de_id," +
   `legacy_assignee:tai_khoan!nguoi_phu_trach_id(${ACCOUNT_SELECT}),` +
   `cong_viec_phu_trach(tai_khoan_id,la_chinh,tai_khoan(${ACCOUNT_SELECT})),` +
   "task(tien_do_thuc_te,trang_thai)";
@@ -312,6 +332,7 @@ const SUBTASK_PAGE_DETAIL_SELECT_WITHOUT_ISSUES =
 /** Danh sách bảng: bỏ mô tả/đính kèm/cập nhật bổ sung để giảm payload. */
 const SUBTASK_LIST_SELECT =
   "id,ten_task,created_at,updated_at,ngay_bat_dau,ngay_ket_thuc,nguoi_phu_trach_id,nguoi_tao_id,nguoi_test_id,ghi_chu_test,trang_thai,uu_tien,tien_do_thuc_te,nhan_tag,cong_viec_id," +
+  "parent_work_task:cong_viec!task_cong_viec_id_fkey(id,ten_cv,du_an_id,parent_project:du_an!cong_viec_du_an_id_fkey(id,ten_da))," +
   `legacy_assignee:tai_khoan!nguoi_phu_trach_id(${ACCOUNT_SELECT}),` +
   `creator:tai_khoan!nguoi_tao_id(${ACCOUNT_SELECT}),` +
   `tester:tai_khoan!nguoi_test_id(${ACCOUNT_SELECT}),` +
@@ -891,25 +912,31 @@ export async function listProjectsPage(
     if (projectIdsFromManagers.length === 0) return { items: [], total: 0 };
   }
 
-  let query = supabase
-    .from("du_an")
-    .select(filters.lite ? PROJECT_DASHBOARD_SELECT : PROJECT_SELECT, { count: "exact" })
-    .order("created_at", { ascending: false });
-
-  const term = filters.search?.trim();
-  if (term) {
-    const safeTerm = term.replace(/[,().%_]/g, " ").trim();
-    if (safeTerm) {
-      query = query.or(`ten_da.ilike.%${safeTerm}%,ma_da.ilike.%${safeTerm}%`);
+  const select = filters.lite ? PROJECT_DASHBOARD_SELECT : PROJECT_LIST_SELECT;
+  const applyProjectFilters = (query: any) => {
+    let next = query;
+    const term = filters.search?.trim();
+    if (term) {
+      const safeTerm = term.replace(/[,().%_]/g, " ").trim();
+      if (safeTerm) next = next.or(`ten_da.ilike.%${safeTerm}%,ma_da.ilike.%${safeTerm}%`);
     }
-  }
-  if (projectIdsFromManagers) query = query.in("id", projectIdsFromManagers);
+    if (projectIdsFromManagers) next = next.in("id", projectIdsFromManagers);
+    return next;
+  };
 
   const { from, to } = pageRange(filters.page, filters.pageSize);
-  const { data, error, count } = await query.range(from, to);
-  throwDatabaseError(error);
-  const items = hydrateProjects((data ?? []) as unknown as ProjectRow[]);
-  return { items, total: count ?? 0 };
+  const [pageResult, countResult] = await Promise.all([
+    applyProjectFilters(
+      supabase.from("du_an").select(select).order("created_at", { ascending: false })
+    ).range(from, to),
+    applyProjectFilters(
+      supabase.from("du_an").select("id", { count: "exact", head: true })
+    ),
+  ]);
+  throwDatabaseError(pageResult.error);
+  throwDatabaseError(countResult.error);
+  const items = hydrateProjects((pageResult.data ?? []) as unknown as ProjectRow[]);
+  return { items, total: countResult.count ?? 0 };
 }
 
 export async function getProject(
@@ -1130,14 +1157,15 @@ async function workTaskIdsForAssignees(
 
 export async function listWorkTasks(
   supabase: ApiSupabaseClient,
-  filters: WorkTaskFilters = {}
+  filters: WorkTaskFilters = {},
+  options?: { summary?: boolean }
 ): Promise<WorkTask[]> {
   const taskIdsFromAssignees = await workTaskIdsForAssignees(supabase, filters.assigneeIds);
   if (taskIdsFromAssignees?.length === 0) return [];
 
   let query = supabase
     .from("cong_viec")
-    .select(WORK_TASK_SELECT)
+    .select(options?.summary ? WORK_TASK_SUMMARY_SELECT : WORK_TASK_SELECT)
     .order("created_at", { ascending: false });
 
   if (filters.search?.trim()) {
@@ -1239,37 +1267,37 @@ export async function listWorkTasksPage(
   const taskIdsFromAssignees = await workTaskIdsForAssignees(supabase, filters.assigneeIds);
   if (taskIdsFromAssignees?.length === 0) return { items: [], total: 0 };
 
-  let query = supabase
-    .from("cong_viec")
-    .select(filters.lite ? WORK_TASK_DASHBOARD_SELECT : WORK_TASK_SELECT, { count: "exact" })
-    .order("created_at", { ascending: false });
+  const assigneeAccountId = filters.assigneeId
+    ? await resolveAccountId(supabase, filters.assigneeId, "Người phụ trách")
+    : undefined;
+  const applyWorkTaskFilters = (query: any) => {
+    let next = query;
+    if (filters.search?.trim()) next = next.ilike("ten_cv", `%${filters.search.trim()}%`);
+    if (filters.projectId) next = next.eq("du_an_id", filters.projectId);
+    if (taskIdsFromAssignees) next = next.in("id", taskIdsFromAssignees);
+    if (assigneeAccountId) next = next.eq("nguoi_phu_trach_id", assigneeAccountId);
+    if (filters.priority) next = next.eq("uu_tien", filters.priority);
+    if (filters.status) next = next.eq("trang_thai", toDatabaseStatus(filters.status));
+    if (filters.overdueOnly) {
+      next = next.neq("trang_thai", "done").lt("ngay_hoan_thanh", getAppDateKey());
+    }
+    return next;
+  };
 
-  if (filters.search?.trim()) {
-    query = query.ilike("ten_cv", `%${filters.search.trim()}%`);
-  }
-  if (filters.projectId) query = query.eq("du_an_id", filters.projectId);
-  if (taskIdsFromAssignees) query = query.in("id", taskIdsFromAssignees);
-  if (filters.assigneeId) {
-    const accountId = await resolveAccountId(
-      supabase,
-      filters.assigneeId,
-      "Người phụ trách"
-    );
-    query = query.eq("nguoi_phu_trach_id", accountId);
-  }
-  if (filters.priority) query = query.eq("uu_tien", filters.priority);
-  if (filters.status) query = query.eq("trang_thai", toDatabaseStatus(filters.status));
-  if (filters.overdueOnly) {
-    query = query
-      .neq("trang_thai", "done")
-      .lt("ngay_hoan_thanh", getAppDateKey());
-  }
-
+  const select = filters.lite ? WORK_TASK_DASHBOARD_SELECT : WORK_TASK_SELECT;
   const { from, to } = pageRange(filters.page, filters.pageSize);
-  const { data, error, count } = await query.range(from, to);
-  throwDatabaseError(error);
-  const items = hydrateWorkTasks((data ?? []) as unknown as WorkTaskRow[]);
-  return { items, total: count ?? 0 };
+  const [pageResult, countResult] = await Promise.all([
+    applyWorkTaskFilters(
+      supabase.from("cong_viec").select(select).order("created_at", { ascending: false })
+    ).range(from, to),
+    applyWorkTaskFilters(
+      supabase.from("cong_viec").select("id", { count: "exact", head: true })
+    ),
+  ]);
+  throwDatabaseError(pageResult.error);
+  throwDatabaseError(countResult.error);
+  const items = hydrateWorkTasks((pageResult.data ?? []) as unknown as WorkTaskRow[]);
+  return { items, total: countResult.count ?? 0 };
 }
 
 /** Chỉ id + tên, dùng cho dropdown công việc tiền đề thay vì hydrate toàn bộ bản ghi. */
@@ -1732,7 +1760,7 @@ export async function listProjectTasks(
   projectId: string,
   assigneeIds?: string[]
 ): Promise<ProjectTask[]> {
-  const tasks = await listWorkTasks(supabase, { projectId, assigneeIds });
+  const tasks = await listWorkTasks(supabase, { projectId, assigneeIds }, { summary: true });
 
   return tasks.map((task) => ({
     id: task.id,
@@ -1893,41 +1921,40 @@ export async function listSubtasksPage(
     if (subtaskIdsFromAssignees.length === 0) return { items: [], total: 0 };
   }
 
-  let query = supabase
-    .from("task")
-    .select(SUBTASK_LIST_SELECT, { count: "exact" })
-    .order("created_at", { ascending: false });
-
-  if (filters.search?.trim()) {
-    query = query.ilike("ten_task", `%${filters.search.trim()}%`);
-  }
-  if (filters.workTaskId) query = query.eq("cong_viec_id", filters.workTaskId);
-  if (workTaskIds) query = query.in("cong_viec_id", workTaskIds);
-  if (subtaskIdsFromAssignees) query = query.in("id", subtaskIdsFromAssignees);
-  if (filters.assigneeId) {
-    const accountId = await resolveAccountId(
-      supabase,
-      filters.assigneeId,
-      "Người phụ trách"
-    );
-    query = query.eq("nguoi_phu_trach_id", accountId);
-  }
-  if (filters.testerId) query = query.eq("nguoi_test_id", filters.testerId);
-  if (filters.priorities?.length) query = query.in("uu_tien", filters.priorities);
-  else if (filters.priority) query = query.eq("uu_tien", filters.priority);
-  if (filters.statuses?.length) query = query.in("trang_thai", filters.statuses.map(toDatabaseStatus));
-  else if (filters.status) query = query.eq("trang_thai", toDatabaseStatus(filters.status));
-  if (filters.overdueOnly) {
-    query = query
-      .neq("trang_thai", "done")
-      .lt("ngay_ket_thuc", getAppDateKey());
-  }
+  const assigneeAccountId = filters.assigneeId
+    ? await resolveAccountId(supabase, filters.assigneeId, "Người phụ trách")
+    : undefined;
+  const applySubtaskFilters = (query: any) => {
+    let next = query;
+    if (filters.search?.trim()) next = next.ilike("ten_task", `%${filters.search.trim()}%`);
+    if (filters.workTaskId) next = next.eq("cong_viec_id", filters.workTaskId);
+    if (workTaskIds) next = next.in("cong_viec_id", workTaskIds);
+    if (subtaskIdsFromAssignees) next = next.in("id", subtaskIdsFromAssignees);
+    if (assigneeAccountId) next = next.eq("nguoi_phu_trach_id", assigneeAccountId);
+    if (filters.testerId) next = next.eq("nguoi_test_id", filters.testerId);
+    if (filters.priorities?.length) next = next.in("uu_tien", filters.priorities);
+    else if (filters.priority) next = next.eq("uu_tien", filters.priority);
+    if (filters.statuses?.length) next = next.in("trang_thai", filters.statuses.map(toDatabaseStatus));
+    else if (filters.status) next = next.eq("trang_thai", toDatabaseStatus(filters.status));
+    if (filters.overdueOnly) {
+      next = next.neq("trang_thai", "done").lt("ngay_ket_thuc", getAppDateKey());
+    }
+    return next;
+  };
 
   const { from, to } = pageRange(filters.page, filters.pageSize);
-  const { data, error, count } = await query.range(from, to);
-  throwDatabaseError(error);
-  const items = hydrateSubtasks((data ?? []) as unknown as SubtaskRow[]);
-  return { items, total: count ?? 0 };
+  const [pageResult, countResult] = await Promise.all([
+    applySubtaskFilters(
+      supabase.from("task").select(SUBTASK_LIST_SELECT).order("created_at", { ascending: false })
+    ).range(from, to),
+    applySubtaskFilters(
+      supabase.from("task").select("id", { count: "exact", head: true })
+    ),
+  ]);
+  throwDatabaseError(pageResult.error);
+  throwDatabaseError(countResult.error);
+  const items = hydrateSubtasks((pageResult.data ?? []) as unknown as SubtaskRow[]);
+  return { items, total: countResult.count ?? 0 };
 }
 
 export async function getSubtask(

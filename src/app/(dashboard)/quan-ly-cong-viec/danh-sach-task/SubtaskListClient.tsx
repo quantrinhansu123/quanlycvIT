@@ -588,8 +588,8 @@ return (
       </div>
 
       {/* Filter Bar - collapsible on mobile */}
-      <div className={cn("border-b border-gray-100 bg-white transition-all duration-200", filterDrawerOpen ? "block" : "hidden md:block")}>
-        <div className="flex items-center gap-2 overflow-x-auto px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className={cn("relative z-30 border-b border-gray-100 bg-white transition-all duration-200", filterDrawerOpen ? "block" : "hidden md:block")}>
+        <div className="flex flex-wrap items-center gap-2 overflow-visible px-3 py-2">
           <div className="flex items-center gap-2 shrink-0">
             <Filter className="h-4 w-4 text-gray-400 shrink-0" />
             <span className="text-xs font-medium text-gray-500 hidden sm:inline">Bộ lọc</span>
