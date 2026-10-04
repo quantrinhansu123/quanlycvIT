@@ -133,6 +133,10 @@ export const subtaskService = {
     return apiClient.put<Subtask>(`/subtasks/${id}`, input);
   },
 
+  async updateUpdates(id: string, updates: Subtask["updates"]): Promise<Subtask | null> {
+    return apiClient.put<Subtask>(`/subtasks/${id}/updates`, { updates });
+  },
+
   async updateHandover(id: string, handover: SubtaskHandover): Promise<SubtaskHandover> {
     return apiClient.put<SubtaskHandover>(`/subtasks/${id}/handover`, handover);
   },

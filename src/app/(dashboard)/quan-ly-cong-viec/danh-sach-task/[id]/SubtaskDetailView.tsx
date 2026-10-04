@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -8,13 +8,10 @@ import {
   AlertCircle,
   ArrowLeft,
   CalendarDays,
-  ClipboardPaste,
   CircleAlert,
   CircleCheck,
   Clock3,
-  ExternalLink,
   FileClock,
-  FileDown,
   Flag,
   History,
   ImagePlus,
@@ -28,7 +25,6 @@ import {
   Play,
   Plus,
   RotateCcw,
-  Save,
   Send,
   Square,
   TestTube2,
@@ -41,10 +37,8 @@ import { subtaskService } from "@/services/subtask-service";
 import type { ProjectDirectoryItem, ProjectMember } from "@/types/project";
 import type { TaskFileAttachment, TaskLinkAttachment, WorkTaskDirectoryItem } from "@/types/task";
 import { SUBTASK_STATUS_OPTIONS, TASK_PRIORITY_OPTIONS } from "@/types/task";
-import { INITIAL_HANDOVER_SOURCE_ID } from "@/lib/handover";
-import { promptProgressPercent } from "@/lib/prompt-progress";
-import { exportHandoverPdf } from "@/lib/handover-pdf";
-import type { Subtask, SubtaskHandoverStatus, SubtaskPromptItem, SubtaskReport, SubtaskTestHistoryEntry, SubtaskTimeRecord } from "@/types/subtask";
+import { detailTaskProgressPercent, emptyAcceptanceRow, INITIAL_HANDOVER_SOURCE_ID } from "@/lib/handover";
+import type { AcceptanceRow, Subtask, SubtaskReport, SubtaskTestHistoryEntry, SubtaskTimeRecord } from "@/types/subtask";
 import { isSubtaskOverdue } from "@/types/subtask";
 import type { TaskActivityEvent } from "@/types/activity";
 import { AvatarStack } from "@/components/ui/Avatar";
@@ -180,17 +174,8 @@ export function SubtaskDetailView({
   const [quickUpdating, setQuickUpdating] = useState(false);
   const [accepting, setAccepting] = useState(false);
   const [promptImport, setPromptImport] = useState<SubtaskPromptImportRequest | null>(null);
-  const [handoverText, setHandoverText] = useState(initialSubtask?.handover?.text ?? "");
-  const [handoverImageUrl, setHandoverImageUrl] = useState(initialSubtask?.handover?.imageUrl ?? "");
-  const [handoverDraft, setHandoverDraft] = useState<string | null>(null);
-  const [savingHandover, setSavingHandover] = useState(false);
-  const [creatingHandoverFile, setCreatingHandoverFile] = useState(false);
-  const [livePromptItems, setLivePromptItems] = useState<SubtaskPromptItem[] | null>(null);
-  const handlePromptItemsChange = useCallback((items: SubtaskPromptItem[]) => {
-    setLivePromptItems(items);
-  }, []);
-  const [uploadingHandoverImage, setUploadingHandoverImage] = useState(false);
-  const handoverImageInputRef = useRef<HTMLInputElement>(null);
+  const [savingAcceptance, setSavingAcceptance] = useState(false);
+  const [uploadingAcceptanceId, setUploadingAcceptanceId] = useState<string | null>(null);
 
   const recordTime = useCallback(async (type: SubtaskTimeRecord["type"]) => {
     if (savingTimeRecord) return;
@@ -226,8 +211,6 @@ export function SubtaskDetailView({
     try {
       const subtaskData = await subtaskService.getSubtaskById(subtaskId);
       setSubtask(subtaskData);
-      setHandoverText(subtaskData?.handover?.text ?? "");
-      setHandoverImageUrl(subtaskData?.handover?.imageUrl ?? "");
       setError(false);
       void refreshActivity();
       if (tab === "reports") {
@@ -247,199 +230,53 @@ export function SubtaskDetailView({
     }
   }, [subtaskId, notify, tab, refreshActivity]);
 
-  async function handleSaveHandover() {
-    if (!subtask || savingHandover) return;
-    setSavingHandover(true);
+  async function saveAcceptance(sourceId: string, patch: Partial<AcceptanceRow>) {
+    if (!subtask || savingAcceptance) return;
+    const current = subtask.handover?.rows?.[sourceId] ?? emptyAcceptanceRow();
+    const rows = {
+      ...(subtask.handover?.rows ?? {}),
+      [sourceId]: { ...current, ...patch },
+    };
+    const statuses = Object.fromEntries(
+      Object.entries(rows).map(([id, row]) => [id, row.status === "accepted" ? "handedOver" as const : "pending" as const]),
+    );
+    setSavingAcceptance(true);
     try {
       const handover = await subtaskService.updateHandover(subtask.id, {
-        text: handoverText,
-        imageUrl: handoverImageUrl.trim(),
-        statuses: subtask.handover?.statuses ?? {},
+        text: rows[INITIAL_HANDOVER_SOURCE_ID]?.note ?? "",
+        imageUrl: rows[INITIAL_HANDOVER_SOURCE_ID]?.imageUrl ?? "",
+        statuses,
+        rows,
       });
-      setHandoverText(handover.text);
-      setHandoverImageUrl(handover.imageUrl);
-      setSubtask((current) => current ? { ...current, handover } : current);
-      notify({ type: "success", title: "Đã lưu nội dung bàn giao" });
+      setSubtask((currentSubtask) => currentSubtask ? { ...currentSubtask, handover } : currentSubtask);
     } catch (saveError) {
       notify({
         type: "error",
-        title: "Không thể lưu nội dung bàn giao",
+        title: "Không thể lưu nghiệm thu",
         description: getErrorMessage(saveError, "Vui lòng thử lại."),
       });
     } finally {
-      setSavingHandover(false);
+      setSavingAcceptance(false);
     }
   }
 
-  async function handleHandoverStatus(sourceId: string, status: SubtaskHandoverStatus) {
-    if (!subtask || savingHandover) return;
-    setSavingHandover(true);
-    try {
-      const handover = await subtaskService.updateHandover(subtask.id, {
-        text: handoverText,
-        imageUrl: handoverImageUrl.trim(),
-        statuses: { ...(subtask.handover?.statuses ?? {}), [sourceId]: status },
-      });
-      setHandoverText(handover.text);
-      setHandoverImageUrl(handover.imageUrl);
-      setSubtask((current) => current ? { ...current, handover } : current);
-    } catch (saveError) {
-      notify({
-        type: "error",
-        title: "Không thể cập nhật trạng thái bàn giao",
-        description: getErrorMessage(saveError, "Vui lòng thử lại."),
-      });
-    } finally {
-      setSavingHandover(false);
-    }
-  }
-
-  async function handleAddHandoverRow() {
-    if (!subtask || handoverDraft === null || savingIteration) return;
-    const description = handoverDraft.trim();
-    if (!description) {
-      notify({ type: "error", title: "Hãy nhập nội dung lần bổ sung." });
+  async function uploadAcceptanceImage(sourceId: string, file: File | null) {
+    if (!file || !file.type.startsWith("image/")) {
+      notify({ type: "error", title: "Hãy chọn một ảnh JPG, PNG, WEBP hoặc AVIF." });
       return;
     }
-
-    setSavingIteration(true);
+    setUploadingAcceptanceId(sourceId);
     try {
-      const updated = await subtaskService.updateSubtask(subtask.id, {
-        title: subtask.title,
-        description: subtask.description,
-        workTaskId: subtask.workTaskId,
-        assigneeIds: subtask.assignees.map((member) => member.id),
-        testerId: subtask.tester?.id,
-        priority: subtask.priority,
-        startDate: subtask.startDate,
-        dueDate: subtask.dueDate,
-        progress: subtask.progress,
-        tags: subtask.tags,
-        files: subtask.files,
-        links: subtask.links,
-        images: subtask.images,
-        updates: [
-          ...subtask.updates,
-          {
-            id: crypto.randomUUID(),
-            createdAt: new Date().toISOString(),
-            description,
-            files: [],
-            links: [],
-            images: [],
-          },
-        ],
-        issues: subtask.issues,
-      });
-      if (!updated) throw new Error("Task không tồn tại hoặc đã bị xóa.");
-      setSubtask(updated);
-      setHandoverDraft(null);
-      notify({ type: "success", title: "Đã thêm lần vào Chi tiết Task" });
-    } catch (saveError) {
-      notify({
-        type: "error",
-        title: "Không thể thêm lần bàn giao",
-        description: getErrorMessage(saveError, "Vui lòng thử lại."),
-      });
-    } finally {
-      setSavingIteration(false);
-    }
-  }
-
-  async function handleCreateHandoverFile() {
-    if (!subtask || creatingHandoverFile) return;
-    setCreatingHandoverFile(true);
-    try {
-      const handedOver = (sourceId: string) => subtask.handover?.statuses?.[sourceId] === "handedOver";
-      const statusLabel = (sourceId: string) => handedOver(sourceId) ? "Đã bàn giao" : "Chưa bàn giao";
-      await exportHandoverPdf({
-        taskTitle: subtask.title,
-        workTaskTitle: workTasks.find((item) => item.id === subtask.workTaskId)?.title,
-        assignees: subtask.assignees.map((member) => member.name).filter(Boolean).join(", "),
-        tester: subtask.tester?.name,
-        dueDate: subtask.dueDate ? formatDateVN(subtask.dueDate) : undefined,
-        note: handoverText,
-        handoverImageUrl,
-        rows: [
-          {
-            label: "Lần 1",
-            content: subtask.description ?? "",
-            statusLabel: statusLabel(INITIAL_HANDOVER_SOURCE_ID),
-            handedOver: handedOver(INITIAL_HANDOVER_SOURCE_ID),
-            imageUrls: subtask.images,
-          },
-          ...subtask.updates.map((entry, index) => ({
-            label: `Lần ${index + 2}`,
-            content: entry.description ?? "",
-            statusLabel: statusLabel(entry.id),
-            handedOver: handedOver(entry.id),
-            imageUrls: entry.images,
-          })),
-        ],
-      });
-      notify({
-        type: "success",
-        title: "Đã tạo file bàn giao",
-        description: "Mở file PDF khổ A4 dọc để xem nội dung, ảnh và trạng thái trước khi nghiệm thu.",
-      });
-    } catch (createError) {
-      notify({
-        type: "error",
-        title: "Không thể tạo file bàn giao",
-        description: getErrorMessage(createError, "Vui lòng thử lại."),
-      });
-    } finally {
-      setCreatingHandoverFile(false);
-    }
-  }
-
-  async function uploadHandoverImage(files: FileList | File[] | null) {
-    if (!canEditHandover) return;
-    const image = Array.from(files ?? []).find((file) => file.type.startsWith("image/"));
-    if (!image) {
-      notify({ type: "error", title: "Không tìm thấy ảnh trong dữ liệu đã chọn hoặc đã dán." });
-      return;
-    }
-
-    setUploadingHandoverImage(true);
-    try {
-      const imageUrl = await subtaskService.uploadImage(image);
-      setHandoverImageUrl(imageUrl);
-      notify({ type: "success", title: "Đã tải ảnh lên Cloudinary", description: "Link ảnh đã được điền vào mục Bàn giao." });
+      const imageUrl = await subtaskService.uploadImage(file);
+      await saveAcceptance(sourceId, { imageUrl });
     } catch (uploadError) {
       notify({
         type: "error",
-        title: "Không thể tải ảnh lên Cloudinary",
+        title: "Không thể tải ảnh nghiệm thu",
         description: getErrorMessage(uploadError, "Ảnh phải là JPG, PNG, WEBP hoặc AVIF và tối đa 10 MB."),
       });
     } finally {
-      setUploadingHandoverImage(false);
-    }
-  }
-
-  async function pasteHandoverImage() {
-    if (!navigator.clipboard?.read) {
-      notify({ type: "error", title: "Trình duyệt không cho phép đọc clipboard", description: "Hãy dán ảnh bằng Ctrl+V trong mục Bàn giao." });
-      return;
-    }
-
-    try {
-      const clipboardItems = await navigator.clipboard.read();
-      const files: File[] = [];
-      for (const item of clipboardItems) {
-        for (const type of item.types.filter((clipboardType) => clipboardType.startsWith("image/"))) {
-          const blob = await item.getType(type);
-          const extension = type === "image/jpeg" ? "jpg" : type.split("/")[1] || "png";
-          files.push(new File([blob], `ban-giao-${Date.now()}-${files.length + 1}.${extension}`, { type }));
-        }
-      }
-      if (files.length === 0) {
-        notify({ type: "error", title: "Clipboard hiện không có ảnh." });
-        return;
-      }
-      await uploadHandoverImage(files);
-    } catch {
-      notify({ type: "error", title: "Không thể đọc ảnh trong clipboard", description: "Hãy dán ảnh bằng Ctrl+V trong mục Bàn giao." });
+      setUploadingAcceptanceId(null);
     }
   }
 
@@ -605,23 +442,7 @@ export function SubtaskDetailView({
               images: [],
             },
           ];
-      const updated = await subtaskService.updateSubtask(subtask.id, {
-        title: subtask.title,
-        description: subtask.description,
-        workTaskId: subtask.workTaskId,
-        assigneeIds: subtask.assignees.map((member) => member.id),
-        testerId: subtask.tester?.id,
-        priority: subtask.priority,
-        startDate: subtask.startDate,
-        dueDate: subtask.dueDate,
-        progress: subtask.progress,
-        tags: subtask.tags,
-        files: subtask.files,
-        links: subtask.links,
-        images: subtask.images,
-        updates,
-        issues: subtask.issues,
-      });
+      const updated = await subtaskService.updateUpdates(subtask.id, updates);
       if (!updated) throw new Error("Task không tồn tại hoặc đã bị xóa.");
       setSubtask(updated);
       setIterationEditor(null);
@@ -807,7 +628,10 @@ export function SubtaskDetailView({
     : SUBTASK_STATUS_OPTIONS;
   const lastTimeRecord = timeRecords.at(-1);
   const recordedDuration = getRecordedDuration(timeRecords);
-  const actualProgress = promptProgressPercent(livePromptItems ?? subtask.promptItems);
+  const actualProgress = detailTaskProgressPercent(
+    subtask.updates.map((entry) => entry.id),
+    subtask.handover?.rows,
+  );
 
   return (
     <div className="min-h-full min-w-0 max-w-full overflow-x-clip bg-white pb-2 [contain:inline-size]">
@@ -1018,210 +842,11 @@ export function SubtaskDetailView({
               initialItems={subtask.promptItems}
               initialDataLoaded
               importRequest={promptImport}
-              onItemsChange={handlePromptItemsChange}
               onImported={(requestId) => {
                 setPromptImport((current) => current?.requestId === requestId ? null : current);
               }}
             />
 
-            <section
-              className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm"
-              tabIndex={0}
-              aria-label="Bàn giao; có thể dán ảnh bằng Ctrl+V"
-              onPaste={(event) => {
-                const images = Array.from(event.clipboardData.items)
-                  .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
-                  .map((item) => item.getAsFile())
-                  .filter((file): file is File => file !== null);
-                if (images.length === 0 || !canEditHandover) return;
-                event.preventDefault();
-                void uploadHandoverImage(images);
-              }}
-            >
-              <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-base font-bold text-gray-900">Bàn giao</h2>
-                  <p className="mt-1 text-xs text-gray-500">Nội dung lấy từ Chi tiết Task. Chọn trạng thái để bàn giao từng lần.</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    disabled={creatingHandoverFile}
-                    onClick={() => void handleCreateHandoverFile()}
-                  >
-                    {creatingHandoverFile
-                      ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                      : <FileDown className="h-3.5 w-3.5" />}
-                    {creatingHandoverFile ? "Đang tạo file..." : "Tạo file"}
-                  </Button>
-                  {canEditHandover && (
-                    <>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        disabled={savingIteration || handoverDraft !== null}
-                        onClick={() => setHandoverDraft("")}
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                        Thêm mới
-                      </Button>
-                      <Button
-                        type="button"
-                        onClick={() => void handleSaveHandover()}
-                        disabled={savingHandover || uploadingHandoverImage}
-                        size="sm"
-                      >
-                        <Save className="h-3.5 w-3.5" />
-                        {savingHandover ? "Đang lưu..." : "Lưu bàn giao"}
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              <div className="overflow-x-auto rounded-xl border border-gray-200">
-                <table className="min-w-full text-left text-sm">
-                  <thead className="bg-gray-50 text-xs font-semibold text-gray-500">
-                    <tr>
-                      <th className="w-20 px-3 py-2">Lần</th>
-                      <th className="px-3 py-2">Nội dung</th>
-                      <th className="w-44 px-3 py-2">Trạng thái</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[{ id: INITIAL_HANDOVER_SOURCE_ID, label: "Lần 1", description: subtask.description }, ...subtask.updates.map((entry, index) => ({
-                      id: entry.id,
-                      label: `Lần ${index + 2}`,
-                      description: entry.description,
-                    }))].map((row) => (
-                      <tr key={row.id} className="border-t border-gray-100 align-top">
-                        <td className="px-3 py-2.5 font-semibold text-gray-700">{row.label}</td>
-                        <td className="max-w-md px-3 py-2.5 text-gray-700">
-                          <p className="line-clamp-3 whitespace-pre-wrap break-words">
-                            {row.description?.trim() || "Chưa có mô tả."}
-                          </p>
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <select
-                            value={subtask.handover?.statuses?.[row.id] ?? "pending"}
-                            disabled={!canEditHandover || savingHandover}
-                            onChange={(event) => void handleHandoverStatus(row.id, event.target.value as SubtaskHandoverStatus)}
-                            className="h-9 w-full rounded-lg border border-gray-200 bg-white px-2 text-sm text-gray-800 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 disabled:bg-gray-50 disabled:text-gray-500"
-                          >
-                            <option value="pending">Chưa bàn giao</option>
-                            <option value="handedOver">Đã bàn giao</option>
-                          </select>
-                        </td>
-                      </tr>
-                    ))}
-                    {handoverDraft !== null && (
-                      <tr className="border-t border-violet-100 bg-violet-50/40 align-top">
-                        <td className="px-3 py-2.5 font-semibold text-violet-800">Lần {subtask.updates.length + 2}</td>
-                        <td className="px-3 py-2.5" colSpan={2}>
-                          <textarea
-                            autoFocus
-                            maxLength={5000}
-                            rows={3}
-                            value={handoverDraft}
-                            onChange={(event) => setHandoverDraft(event.target.value)}
-                            placeholder="Nhập nội dung lần bổ sung. Nội dung này cũng hiện trong Chi tiết Task."
-                            className="w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm leading-6 text-gray-700 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
-                          />
-                          <div className="mt-2 flex justify-end gap-2">
-                            <Button type="button" variant="ghost" size="sm" disabled={savingIteration} onClick={() => setHandoverDraft(null)}>Hủy</Button>
-                            <Button type="button" size="sm" disabled={savingIteration} onClick={() => void handleAddHandoverRow()}>{savingIteration ? "Đang lưu..." : "Lưu lần"}</Button>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="mt-4 grid gap-4 @2xl/detail:grid-cols-2">
-                <label className="block text-xs font-semibold text-gray-600">
-                  Ghi chú bàn giao
-                  <textarea
-                    value={handoverText}
-                    onChange={(event) => setHandoverText(event.target.value)}
-                    disabled={!canEditHandover || savingHandover}
-                    rows={3}
-                    maxLength={20_000}
-                    placeholder="Ghi chú thêm khi bàn giao..."
-                    className="mt-1.5 min-h-20 w-full resize-y rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-normal leading-6 text-gray-800 outline-none placeholder:text-gray-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 disabled:bg-gray-50 disabled:text-gray-500"
-                  />
-                </label>
-                <div>
-                  <label htmlFor="handover-image-url" className="block text-xs font-semibold text-gray-600">
-                    Link ảnh
-                  </label>
-                  <input
-                    ref={handoverImageInputRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,image/avif"
-                    disabled={!canEditHandover || savingHandover || uploadingHandoverImage}
-                    className="hidden"
-                    onChange={(event) => {
-                      void uploadHandoverImage(event.target.files);
-                      event.target.value = "";
-                    }}
-                  />
-                  <input
-                    id="handover-image-url"
-                    type="url"
-                    value={handoverImageUrl}
-                    onChange={(event) => setHandoverImageUrl(event.target.value)}
-                    disabled={!canEditHandover || savingHandover || uploadingHandoverImage}
-                    maxLength={2048}
-                    placeholder="https://..."
-                    className="mt-1.5 h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm font-normal text-gray-800 outline-none placeholder:text-gray-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 disabled:bg-gray-50 disabled:text-gray-500"
-                  />
-                  {canEditHandover && (
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        disabled={savingHandover || uploadingHandoverImage}
-                        onClick={() => handoverImageInputRef.current?.click()}
-                      >
-                        {uploadingHandoverImage
-                          ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                          : <ImagePlus className="h-3.5 w-3.5" />}
-                        {uploadingHandoverImage ? "Đang tải ảnh..." : "Chọn ảnh tải lên"}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        disabled={savingHandover || uploadingHandoverImage}
-                        onClick={() => void pasteHandoverImage()}
-                      >
-                        <ClipboardPaste className="h-3.5 w-3.5" />
-                        Dán ảnh <span className="text-[10px] text-gray-400">Ctrl+V</span>
-                      </Button>
-                      <span className="text-[11px] text-gray-400">Ảnh được tải lên Cloudinary, link sẽ tự điền vào ô trên.</span>
-                    </div>
-                  )}
-                  {handoverImageUrl.trim() && isSafeImageUrl(handoverImageUrl.trim()) && (
-                    <a
-                      href={handoverImageUrl.trim()}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:text-brand-700"
-                    >
-                      Mở ảnh bàn giao <ExternalLink className="h-3.5 w-3.5" />
-                    </a>
-                  )}
-                </div>
-              </div>
-              {!canEditHandover && (
-                <p className="mt-3 text-xs text-gray-400">Chỉ quản lý hoặc người được giao task mới có thể cập nhật mục này.</p>
-              )}
-            </section>
 
             {subtask.issues.length > 0 && (
               <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
@@ -1322,6 +947,13 @@ export function SubtaskDetailView({
                         onSave={handleAttachmentSave}
                       />
                     )}
+                    <AcceptanceFields
+                      row={subtask.handover?.rows?.[INITIAL_HANDOVER_SOURCE_ID] ?? emptyAcceptanceRow()}
+                      disabled={!canEditHandover || savingAcceptance}
+                      uploading={uploadingAcceptanceId === INITIAL_HANDOVER_SOURCE_ID}
+                      onSave={(patch) => void saveAcceptance(INITIAL_HANDOVER_SOURCE_ID, patch)}
+                      onUpload={(file) => void uploadAcceptanceImage(INITIAL_HANDOVER_SOURCE_ID, file)}
+                    />
                   </div>
                   {subtask.updates.length > 0 && (
                     <div className="space-y-2.5">
@@ -1397,6 +1029,13 @@ export function SubtaskDetailView({
                               onSave={(value) => handleUpdateAttachmentSave(entry.id, value)}
                             />
                           )}
+                          <AcceptanceFields
+                            row={subtask.handover?.rows?.[entry.id] ?? emptyAcceptanceRow()}
+                            disabled={!canEditHandover || savingAcceptance}
+                            uploading={uploadingAcceptanceId === entry.id}
+                            onSave={(patch) => void saveAcceptance(entry.id, patch)}
+                            onUpload={(file) => void uploadAcceptanceImage(entry.id, file)}
+                          />
                         </div>
                       ))}
                     </div>
@@ -1767,6 +1406,80 @@ export function SubtaskDetailView({
         />
       )}
 
+    </div>
+  );
+}
+
+function AcceptanceFields({
+  row,
+  disabled,
+  uploading,
+  onSave,
+  onUpload,
+}: {
+  row: AcceptanceRow;
+  disabled: boolean;
+  uploading: boolean;
+  onSave: (patch: Partial<AcceptanceRow>) => void;
+  onUpload: (file: File) => void;
+}) {
+  const [note, setNote] = useState(row.note);
+  useEffect(() => {
+    setNote(row.note);
+  }, [row.note]);
+
+  return (
+    <div className="mt-3 grid grid-cols-1 gap-3 border-t border-gray-200 pt-3 sm:grid-cols-3">
+      <div>
+        <p className="mb-1.5 text-xs font-semibold text-gray-500">Ảnh nghiệm thu</p>
+        {isSafeImageUrl(row.imageUrl) && (
+          <a href={row.imageUrl} target="_blank" rel="noreferrer" className="mb-2 block">
+            <img src={row.imageUrl} alt="Ảnh nghiệm thu" className="h-24 w-full rounded-lg border border-gray-200 object-cover" />
+          </a>
+        )}
+        <label className={`inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 text-xs font-semibold text-gray-700 ${disabled || uploading ? "pointer-events-none opacity-50" : "hover:bg-gray-50"}`}>
+          {uploading ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <ImagePlus className="h-3.5 w-3.5" />}
+          {uploading ? "Đang tải..." : "Tải ảnh"}
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/avif"
+            className="sr-only"
+            disabled={disabled || uploading}
+            onChange={(event) => {
+              const file = event.target.files?.[0] ?? null;
+              if (file) onUpload(file);
+              event.target.value = "";
+            }}
+          />
+        </label>
+      </div>
+      <label className="block text-xs font-semibold text-gray-500">
+        Trạng thái
+        <select
+          value={row.status}
+          disabled={disabled}
+          onChange={(event) => onSave({ status: event.target.value as AcceptanceRow["status"] })}
+          className="mt-1.5 h-9 w-full rounded-lg border border-gray-200 bg-white px-2 text-sm font-medium text-gray-800 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 disabled:bg-gray-50"
+        >
+          <option value="pending">Chưa hoàn thành</option>
+          <option value="accepted">Hoàn thành</option>
+        </select>
+      </label>
+      <label className="block text-xs font-semibold text-gray-500">
+        Note
+        <textarea
+          value={note}
+          disabled={disabled}
+          maxLength={5000}
+          rows={3}
+          placeholder="Ghi chú nghiệm thu..."
+          onChange={(event) => setNote(event.target.value)}
+          onBlur={() => {
+            if (note !== row.note) onSave({ note });
+          }}
+          className="mt-1.5 w-full resize-y rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-sm font-normal leading-5 text-gray-800 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 disabled:bg-gray-50"
+        />
+      </label>
     </div>
   );
 }

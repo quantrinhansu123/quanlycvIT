@@ -1,5 +1,4 @@
-import { decodeHandover, encodeHandoverContent } from "@/lib/handover";
-import { promptProgressPercent } from "@/lib/prompt-progress";
+import { decodeHandover, detailTaskProgressPercent, encodeHandoverContent } from "@/lib/handover";
 import type { ApiSupabaseClient } from "@/lib/supabase/api";
 import { ApiException, isSchemaCacheError, throwDatabaseError } from "@/lib/api/response";
 import { resolveAuthUserId, type RequestAccountAccess } from "@/lib/supabase/authorization";
@@ -1815,8 +1814,11 @@ function hydrateSubtasks(rows: SubtaskRow[]): Subtask[] {
       priority: toPriority(row.uu_tien),
       startDate: row.ngay_bat_dau ?? "",
       dueDate: row.ngay_ket_thuc ?? "",
-      progress: row.prompt_items !== undefined
-        ? promptProgressPercent(normalizeSubtaskPromptItems(row.prompt_items))
+      progress: row.cap_nhat_bo_sung !== undefined || row.ban_giao_noi_dung !== undefined
+        ? detailTaskProgressPercent(
+          (row.cap_nhat_bo_sung ?? []).flatMap((entry) => typeof entry?.id === "string" ? [entry.id] : []),
+          decodeHandover(row.ban_giao_noi_dung, row.ban_giao_link_anh).rows,
+        )
         : row.tien_do_thuc_te,
       tags: row.nhan_tag ?? [],
       files: row.tep_dinh_kem ?? [],
@@ -2071,21 +2073,12 @@ export async function updateSubtaskPromptItems(
       ],
     };
   });
-  const progress = promptProgressPercent(timestampedItems);
-  let { data, error } = await supabase
+  const { data, error } = await supabase
     .from("task")
-    .update({ prompt_items: timestampedItems, tien_do_thuc_te: progress })
+    .update({ prompt_items: timestampedItems })
     .eq("id", id)
     .select("prompt_items")
     .maybeSingle();
-  if (error?.code === "23514") {
-    ({ data, error } = await supabase
-      .from("task")
-      .update({ prompt_items: timestampedItems })
-      .eq("id", id)
-      .select("prompt_items")
-      .maybeSingle());
-  }
   if (error?.code === "42703" || error?.code === "PGRST204") {
     throw new ApiException(
       "Cơ sở dữ liệu chưa được cập nhật cho tính năng Prompt.",
@@ -2161,15 +2154,39 @@ export async function updateSubtaskHandover(
   id: string,
   handover: SubtaskHandover
 ): Promise<SubtaskHandover | null> {
-  const { data, error } = await supabase
+  const current = await supabase
+    .from("task")
+    .select("cap_nhat_bo_sung")
+    .eq("id", id)
+    .maybeSingle();
+  throwDatabaseError(current.error);
+  const updateIds = Array.isArray(current.data?.cap_nhat_bo_sung)
+    ? current.data.cap_nhat_bo_sung.flatMap((entry) => (
+      entry && typeof entry === "object" && typeof entry.id === "string" ? [entry.id] : []
+    ))
+    : [];
+  const progress = detailTaskProgressPercent(updateIds, handover.rows);
+  let { data, error } = await supabase
     .from("task")
     .update({
       ban_giao_noi_dung: encodeHandoverContent(handover),
       ban_giao_link_anh: handover.imageUrl,
+      tien_do_thuc_te: progress,
     })
     .eq("id", id)
     .select("ban_giao_noi_dung,ban_giao_link_anh")
     .maybeSingle();
+  if (error?.code === "23514") {
+    ({ data, error } = await supabase
+      .from("task")
+      .update({
+        ban_giao_noi_dung: encodeHandoverContent(handover),
+        ban_giao_link_anh: handover.imageUrl,
+      })
+      .eq("id", id)
+      .select("ban_giao_noi_dung,ban_giao_link_anh")
+      .maybeSingle());
+  }
 
   if (error?.code === "42703" || error?.code === "PGRST204") {
     throw new ApiException("Cơ sở dữ liệu chưa được cập nhật cho mục Bàn giao.", 503);
@@ -2366,6 +2383,38 @@ export async function createSubtask(
     withSubtaskAssignees(subtaskRow, assigneeIds, accountsById),
   ]);
   return subtask;
+}
+
+/** Ghi danh sách lần bổ sung và tính lại tiến độ theo trạng thái nghiệm thu. */
+export async function updateSubtaskUpdates(
+  supabase: ApiSupabaseClient,
+  id: string,
+  updates: SubtaskUpdateEntry[]
+): Promise<Subtask | null> {
+  const current = await supabase
+    .from("task")
+    .select("ban_giao_noi_dung,ban_giao_link_anh")
+    .eq("id", id)
+    .maybeSingle();
+  const rows = current.error ? {} : decodeHandover(current.data?.ban_giao_noi_dung, current.data?.ban_giao_link_anh).rows;
+  const progress = detailTaskProgressPercent(updates.map((entry) => entry.id), rows);
+  let { data, error } = await supabase
+    .from("task")
+    .update({ cap_nhat_bo_sung: updates, tien_do_thuc_te: progress })
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
+  if (error?.code === "23514") {
+    ({ data, error } = await supabase
+      .from("task")
+      .update({ cap_nhat_bo_sung: updates })
+      .eq("id", id)
+      .select("id")
+      .maybeSingle());
+  }
+  throwDatabaseError(error);
+  if (!data) return null;
+  return getSubtask(supabase, id);
 }
 
 export async function updateSubtask(
