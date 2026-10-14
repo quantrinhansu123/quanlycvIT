@@ -24,6 +24,8 @@ export interface SubtaskUpdateEntry {
 /** Một yêu cầu dùng để ghép nội dung với URL ảnh thành Prompt có thể sao chép. */
 export interface SubtaskPromptItem {
   id: string;
+  /** Task m? d?ng Prompt ph?c v?; ???c l?u c?ng Prompt. */
+  taskTitle?: string;
   content: string;
   createdAt?: string;
   statusHistory?: SubtaskPromptStatusChange[];
@@ -56,15 +58,19 @@ export interface SubtaskIssueEntry {
 export type SubtaskHandoverStatus = "pending" | "handedOver";
 
 /** Trạng thái nghiệm thu của một lần trong Chi tiết Task. */
-export type AcceptanceStatus = "pending" | "accepted";
+export type AcceptanceStatus = "pending" | "testing" | "tested" | "acceptance" | "rework" | "cancelled" | "accepted";
 
 export interface AcceptanceRow {
+  /** Nhân sự được phân công riêng cho chi tiết Task này. */
+  assigneeIds?: string[];
   imageUrl: string;
   status: AcceptanceStatus;
   note: string;
 }
 
 export interface SubtaskHandover {
+  initialDeleted?: boolean;
+  titles?: Record<string, string>;
   text: string;
   imageUrl: string;
   /** Khóa `initial` là Lần 1; các khóa còn lại là id của lần bổ sung. */

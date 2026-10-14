@@ -61,6 +61,7 @@ const TOAST_ICONS = {
 export function FeedbackProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
+  const confirmResolver = useRef<PendingConfirm["resolve"] | null>(null);
   const toastId = useRef(0);
 
   const dismissToast = useCallback((id: number) => {
@@ -80,18 +81,17 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
 
   const confirm = useCallback((options: ConfirmOptions) => {
     return new Promise<boolean>((resolve) => {
-      setPendingConfirm((current) => {
-        current?.resolve(false);
-        return { ...options, resolve };
-      });
+      confirmResolver.current?.(false);
+      confirmResolver.current = resolve;
+      setPendingConfirm({ ...options, resolve });
     });
   }, []);
 
   const closeConfirm = useCallback((confirmed: boolean) => {
-    setPendingConfirm((current) => {
-      current?.resolve(confirmed);
-      return null;
-    });
+    const resolve = confirmResolver.current;
+    confirmResolver.current = null;
+    setPendingConfirm(null);
+    resolve?.(confirmed);
   }, []);
 
   useEffect(() => {

@@ -1,5 +1,5 @@
 import { ApiException } from "@/lib/api/response";
-import { normalizeAcceptanceRows, normalizeHandoverStatuses } from "@/lib/handover";
+import { normalizeAcceptanceRows, normalizeDetailTitles, normalizeHandoverStatuses } from "@/lib/handover";
 import type { ProjectColor, ProjectInput, ProjectStepConfig } from "@/types/project";
 import { DEFAULT_PROJECT_STEPS } from "@/types/project";
 import type { SubtaskHandover, SubtaskInput, SubtaskIssueEntry, SubtaskPromptItem, SubtaskUpdateEntry, TaskFileAttachment, TaskLinkAttachment } from "@/types/subtask";
@@ -232,11 +232,19 @@ export function parseSubtaskPromptItems(body: Record<string, unknown>): SubtaskP
       throw new ApiException("Mỗi nội dung Prompt chỉ được tối đa 5.000 ký tự.", 400);
     }
 
+    if (entry.taskTitle !== undefined && typeof entry.taskTitle !== "string") {
+      throw new ApiException("Task c?a Prompt ph?i l? chu?i.", 400);
+    }
+    const taskTitle = typeof entry.taskTitle === "string" ? entry.taskTitle.trim() : undefined;
+    if (taskTitle && taskTitle.length > 500) {
+      throw new ApiException("Task c?a Prompt ch? ???c t?i ?a 500 k? t?.", 400);
+    }
+
     const imageUrls = parsePromptImageUrls(entry);
     const status = entry.status === "processed" || entry.status === "completed"
       ? entry.status
       : "unprocessed";
-    return { id: entry.id.trim(), content, imageUrls, status };
+    return { id: entry.id.trim(), content, imageUrls, status, ...(taskTitle !== undefined ? { taskTitle } : {}) };
   });
 }
 
@@ -593,5 +601,7 @@ export function parseSubtaskHandover(body: Record<string, unknown>): SubtaskHand
     imageUrl,
     statuses: normalizeHandoverStatuses(body.statuses),
     rows: normalizeAcceptanceRows(body.rows),
+    ...(body.titles !== undefined ? { titles: normalizeDetailTitles(body.titles) } : {}),
+    ...(typeof body.initialDeleted === "boolean" ? { initialDeleted: body.initialDeleted } : {}),
   };
 }

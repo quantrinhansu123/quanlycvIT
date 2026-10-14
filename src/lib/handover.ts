@@ -9,8 +9,10 @@ export const INITIAL_HANDOVER_SOURCE_ID = "initial";
 export function detailTaskProgressPercent(
   updateIds: string[],
   rows: Record<string, { status?: string | null }> | undefined,
+  includeInitial = true,
 ): number {
-  const ids = [INITIAL_HANDOVER_SOURCE_ID, ...updateIds.filter((id) => id.length > 0)];
+  const ids = [...(includeInitial ? [INITIAL_HANDOVER_SOURCE_ID] : []), ...updateIds.filter((id) => id.length > 0)];
+  if (ids.length === 0) return 0;
   const score = ids.reduce((sum, id) => sum + (rows?.[id]?.status === "accepted" ? 100 : 0), 0);
   return Math.round(score / ids.length);
 }
@@ -25,6 +27,7 @@ export function emptyHandover(imageUrl = ""): SubtaskHandover {
 
 function acceptanceStatus(value: unknown): AcceptanceStatus {
   if (value === "accepted" || value === "handedOver") return "accepted";
+  if (value === "testing" || value === "tested" || value === "acceptance" || value === "rework" || value === "cancelled") return value;
   return "pending";
 }
 
@@ -37,7 +40,12 @@ export function normalizeAcceptanceRows(value: unknown): Record<string, Acceptan
     const entry = raw as Record<string, unknown>;
     const imageUrl = typeof entry.imageUrl === "string" ? entry.imageUrl.trim() : "";
     const note = typeof entry.note === "string" ? entry.note.slice(0, 5_000) : "";
-    rows[key] = { imageUrl, status: acceptanceStatus(entry.status), note };
+    const assigneeIds = Array.isArray(entry.assigneeIds)
+      ? [...new Set(entry.assigneeIds.filter((id): id is string => typeof id === "string" && id.trim().length > 0 && id.length <= 100))].slice(0, 100)
+      : undefined;
+    rows[key] = { imageUrl, status: acceptanceStatus(entry.status), note,
+      ...(assigneeIds !== undefined ? { assigneeIds } : {}),
+    };
   }
   return rows;
 }
@@ -72,24 +80,33 @@ function rowsFromLegacy(
   return rows;
 }
 
-export function encodeHandoverContent(handover: Pick<SubtaskHandover, "text" | "statuses" | "rows">): string {
+export function normalizeDetailTitles(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).filter(([id, title]) =>
+    id.length > 0 && id.length <= 80 && typeof title === "string"
+  ).slice(0, MAX_ROWS).map(([id, title]) => [id, (title as string).trim().slice(0, 500)]));
+}
+
+export function encodeHandoverContent(handover: Pick<SubtaskHandover, "text" | "statuses" | "rows" | "titles" | "initialDeleted">): string {
   return JSON.stringify({
     v: HANDOVER_VERSION,
     text: handover.text,
     statuses: normalizeHandoverStatuses(handover.statuses),
     rows: normalizeAcceptanceRows(handover.rows),
+    titles: normalizeDetailTitles(handover.titles),
+    initialDeleted: handover.initialDeleted === true,
   });
 }
 
-export function decodeHandoverContent(raw: string | null | undefined): Pick<SubtaskHandover, "text" | "statuses" | "rows"> {
+export function decodeHandoverContent(raw: string | null | undefined): Pick<SubtaskHandover, "text" | "statuses" | "rows" | "titles" | "initialDeleted"> {
   const value = raw ?? "";
   if (!value.startsWith("{")) return { text: value, statuses: {}, rows: rowsFromLegacy({}, value, "") };
   try {
-    const parsed = JSON.parse(value) as { v?: unknown; text?: unknown; statuses?: unknown; rows?: unknown };
+    const parsed = JSON.parse(value) as { v?: unknown; text?: unknown; statuses?: unknown; rows?: unknown; titles?: unknown; initialDeleted?: unknown };
     const text = typeof parsed.text === "string" ? parsed.text : "";
     const statuses = normalizeHandoverStatuses(parsed.statuses);
     if (parsed.v === HANDOVER_VERSION) {
-      return { text, statuses, rows: normalizeAcceptanceRows(parsed.rows) };
+      return { text, statuses, rows: normalizeAcceptanceRows(parsed.rows), titles: normalizeDetailTitles(parsed.titles), initialDeleted: parsed.initialDeleted === true };
     }
     if (parsed.v === 1) {
       return { text, statuses, rows: rowsFromLegacy(statuses, text, "") };

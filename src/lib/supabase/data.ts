@@ -330,15 +330,15 @@ const SUBTASK_SELECT =
 /** Chi tiết Task cần thêm prompt_items / van_de_giai_phap; danh sách bỏ qua để giảm payload. */
 const SUBTASK_DETAIL_SELECT = `${SUBTASK_SELECT},prompt_items,van_de_giai_phap,ban_giao_noi_dung,ban_giao_link_anh`;
 /** Fallback khi deployment chưa có cột van_de_giai_phap. */
-const SUBTASK_DETAIL_SELECT_WITHOUT_ISSUES = `${SUBTASK_SELECT},prompt_items`;
+const SUBTASK_DETAIL_SELECT_WITHOUT_ISSUES = `${SUBTASK_SELECT},prompt_items,ban_giao_noi_dung,ban_giao_link_anh`;
 /** Task detail page data, including its parent task in the same request. */
 const SUBTASK_PAGE_DETAIL_SELECT =
   `${SUBTASK_DETAIL_SELECT},parent_work_task:cong_viec!task_cong_viec_id_fkey(${WORK_TASK_DIRECTORY_SELECT})`;
 const SUBTASK_PAGE_DETAIL_SELECT_WITHOUT_ISSUES =
   `${SUBTASK_DETAIL_SELECT_WITHOUT_ISSUES},parent_work_task:cong_viec!task_cong_viec_id_fkey(${WORK_TASK_DIRECTORY_SELECT})`;
-/** Danh sách bảng: bỏ mô tả/đính kèm/cập nhật bổ sung để giảm payload. */
+/** Danh sách cần chi tiết và nghiệm thu để tính tiến độ; bỏ ảnh/file/Prompt. */
 const SUBTASK_LIST_SELECT =
-  "id,ten_task,created_at,updated_at,ngay_bat_dau,ngay_ket_thuc,nguoi_phu_trach_id,nguoi_tao_id,nguoi_test_id,ghi_chu_test,trang_thai,uu_tien,tien_do_thuc_te,nhan_tag,cong_viec_id," +
+  "id,ten_task,created_at,updated_at,ngay_bat_dau,ngay_ket_thuc,nguoi_phu_trach_id,nguoi_tao_id,nguoi_test_id,ghi_chu_test,trang_thai,uu_tien,tien_do_thuc_te,nhan_tag,cong_viec_id,cap_nhat_bo_sung,ban_giao_noi_dung,ban_giao_link_anh," +
   "parent_work_task:cong_viec!task_cong_viec_id_fkey(id,ten_cv,du_an_id,parent_project:du_an!cong_viec_du_an_id_fkey(id,ten_da))," +
   `legacy_assignee:tai_khoan!nguoi_phu_trach_id(${ACCOUNT_SELECT}),` +
   `creator:tai_khoan!nguoi_tao_id(${ACCOUNT_SELECT}),` +
@@ -1829,6 +1829,7 @@ function hydrateSubtasks(rows: SubtaskRow[]): Subtask[] {
         ? detailTaskProgressPercent(
           (row.cap_nhat_bo_sung ?? []).flatMap((entry) => typeof entry?.id === "string" ? [entry.id] : []),
           decodeHandover(row.ban_giao_noi_dung, row.ban_giao_link_anh).rows,
+          !decodeHandover(row.ban_giao_noi_dung, row.ban_giao_link_anh).initialDeleted,
         )
         : row.tien_do_thuc_te,
       tags: row.nhan_tag ?? [],
@@ -2053,7 +2054,7 @@ export async function updateSubtaskPromptItems(
 ): Promise<SubtaskPromptItem[] | null> {
   const existing = await supabase
     .from("task")
-    .select("prompt_items")
+    .select("prompt_items,ten_task")
     .eq("id", id)
     .maybeSingle();
   if (existing.error?.code === "42703" || existing.error?.code === "PGRST204") {
@@ -2073,6 +2074,7 @@ export async function updateSubtaskPromptItems(
     const statusChanged = Boolean(previous && previous.status !== item.status);
     return {
       ...item,
+      taskTitle: item.taskTitle ?? previous?.taskTitle ?? existing.data!.ten_task,
       ...(previous
         ? (previous.createdAt ? { createdAt: previous.createdAt } : {})
         : { createdAt: item.createdAt ?? new Date().toISOString() }),
@@ -2167,16 +2169,22 @@ export async function updateSubtaskHandover(
 ): Promise<SubtaskHandover | null> {
   const current = await supabase
     .from("task")
-    .select("cap_nhat_bo_sung")
+    .select("cap_nhat_bo_sung,ban_giao_noi_dung,ban_giao_link_anh")
     .eq("id", id)
     .maybeSingle();
   throwDatabaseError(current.error);
+  if (handover.titles === undefined) {
+    handover = { ...handover, titles: decodeHandover(current.data?.ban_giao_noi_dung, current.data?.ban_giao_link_anh).titles };
+  }
+  if (handover.initialDeleted === undefined) {
+    handover = { ...handover, initialDeleted: decodeHandover(current.data?.ban_giao_noi_dung, current.data?.ban_giao_link_anh).initialDeleted };
+  }
   const updateIds = Array.isArray(current.data?.cap_nhat_bo_sung)
     ? current.data.cap_nhat_bo_sung.flatMap((entry) => (
       entry && typeof entry === "object" && typeof entry.id === "string" ? [entry.id] : []
     ))
     : [];
-  const progress = detailTaskProgressPercent(updateIds, handover.rows);
+  const progress = detailTaskProgressPercent(updateIds, handover.rows, !handover.initialDeleted);
   let { data, error } = await supabase
     .from("task")
     .update({
@@ -2224,6 +2232,7 @@ function normalizeSubtaskPromptItems(value: unknown): SubtaskPromptItem[] {
     return [{
       id: entry.id,
       content: entry.content,
+      ...(typeof entry.taskTitle === "string" ? { taskTitle: entry.taskTitle } : {}),
       ...(typeof entry.createdAt === "string" ? { createdAt: entry.createdAt } : {}),
       statusHistory: Array.isArray(entry.statusHistory)
         ? entry.statusHistory.flatMap((change) => {
@@ -2400,25 +2409,40 @@ export async function createSubtask(
 export async function updateSubtaskUpdates(
   supabase: ApiSupabaseClient,
   id: string,
-  updates: SubtaskUpdateEntry[]
+  updates: SubtaskUpdateEntry[],
+  details: { description?: string; handover?: SubtaskHandover } = {}
 ): Promise<Subtask | null> {
   const current = await supabase
     .from("task")
-    .select("ban_giao_noi_dung,ban_giao_link_anh")
+    .select("ban_giao_noi_dung,ban_giao_link_anh,trang_thai")
     .eq("id", id)
     .maybeSingle();
-  const rows = current.error ? {} : decodeHandover(current.data?.ban_giao_noi_dung, current.data?.ban_giao_link_anh).rows;
-  const progress = detailTaskProgressPercent(updates.map((entry) => entry.id), rows);
+  throwDatabaseError(current.error);
+  if (!current.data) return null;
+  if (toApiStatus(String(current.data.trang_thai)) === "done") {
+    throw new ApiException("Task đã hoàn thành nên không thể chỉnh sửa.", 409);
+  }
+  const rows = details.handover?.rows ?? decodeHandover(current.data.ban_giao_noi_dung, current.data.ban_giao_link_anh).rows;
+  const progress = detailTaskProgressPercent(updates.map((entry) => entry.id), rows,
+    !(details.handover?.initialDeleted ?? decodeHandover(current.data.ban_giao_noi_dung, current.data.ban_giao_link_anh).initialDeleted));
+  const payload = {
+    cap_nhat_bo_sung: updates,
+    ...(details.description !== undefined ? { mo_ta: details.description } : {}),
+    ...(details.handover ? {
+      ban_giao_noi_dung: encodeHandoverContent(details.handover),
+      ban_giao_link_anh: details.handover.imageUrl,
+    } : {}),
+  };
   let { data, error } = await supabase
     .from("task")
-    .update({ cap_nhat_bo_sung: updates, tien_do_thuc_te: progress })
+    .update({ ...payload, tien_do_thuc_te: progress })
     .eq("id", id)
     .select("id")
     .maybeSingle();
   if (error?.code === "23514") {
     ({ data, error } = await supabase
       .from("task")
-      .update({ cap_nhat_bo_sung: updates })
+      .update(payload)
       .eq("id", id)
       .select("id")
       .maybeSingle());
@@ -2592,18 +2616,11 @@ export async function deleteSubtask(
 ): Promise<boolean> {
   const current = await getSubtask(supabase, id);
   if (!current) return false;
-  if (current.status === "done") {
-    throw new ApiException(
-      "Task đã hoàn thành nên chỉ có thể xem, không thể xóa.",
-      409
-    );
-  }
 
   const { data, error } = await supabase
     .from("task")
     .delete()
     .eq("id", id)
-    .neq("trang_thai", "done")
     .select("id")
     .maybeSingle();
   throwDatabaseError(error);

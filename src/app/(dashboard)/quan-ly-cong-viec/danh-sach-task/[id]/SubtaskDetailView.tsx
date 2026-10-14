@@ -24,10 +24,11 @@ import {
   Pause,
   Play,
   Plus,
-  RotateCcw,
+  Printer,
   Send,
   Square,
   TestTube2,
+  Trash2,
   UsersRound,
   type LucideIcon,
 } from "lucide-react";
@@ -40,9 +41,7 @@ import { SUBTASK_STATUS_OPTIONS, TASK_PRIORITY_OPTIONS } from "@/types/task";
 import { detailTaskProgressPercent, emptyAcceptanceRow, INITIAL_HANDOVER_SOURCE_ID } from "@/lib/handover";
 import type { AcceptanceRow, Subtask, SubtaskReport, SubtaskTestHistoryEntry, SubtaskTimeRecord } from "@/types/subtask";
 import { isSubtaskOverdue } from "@/types/subtask";
-import type { TaskActivityEvent } from "@/types/activity";
 import { AvatarStack } from "@/components/ui/Avatar";
-import { TaskActivityTimeline } from "@/components/timeline/TaskActivityTimeline";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -114,6 +113,7 @@ function formatTimeRecordDate(value: string): string {
 
 type IterationDraft = {
   id: string | null;
+  title: string;
   description: string;
   files: TaskFileAttachment[];
   links: TaskLinkAttachment[];
@@ -121,9 +121,15 @@ type IterationDraft = {
   acceptance: AcceptanceRow;
 };
 
+function taskDetailName(description?: string): string {
+  return description?.split(/\r?\n/).map((line) => line.trim()).find(Boolean)
+    ?.replace(/^#{1,6}\s+/, "").slice(0, 120) || "Chi tiết chưa có tên";
+}
+
 function emptyIterationDraft(): IterationDraft {
   return {
     id: null,
+    title: "",
     description: "",
     files: [],
     links: [],
@@ -147,12 +153,9 @@ interface SubtaskDetailViewProps {
   initialWorkTasks: WorkTaskDirectoryItem[];
   initialReports: SubtaskReport[];
   initialMembers: ProjectMember[];
-  initialActivity: TaskActivityEvent[];
-  initialActivityTotal: number;
   initialTestHistory: SubtaskTestHistoryEntry[];
 }
 
-const ACTIVITY_PAGE_SIZE = 20;
 const SUBTASK_ACCEPTED_EVENT = "app:subtask-accepted";
 
 export function SubtaskDetailView({
@@ -161,12 +164,10 @@ export function SubtaskDetailView({
   initialWorkTasks,
   initialReports,
   initialMembers,
-  initialActivity,
-  initialActivityTotal,
   initialTestHistory,
 }: SubtaskDetailViewProps) {
   const router = useRouter();
-  const { notify } = useFeedback();
+  const { notify, confirm } = useFeedback();
   const { account } = useCurrentAccount();
   const cache = useSessionDataCache();
   const splitView = useSplitView();
@@ -175,14 +176,12 @@ export function SubtaskDetailView({
   const [reports, setReports] = useState<SubtaskReport[]>(initialReports);
   const [members, setMembers] = useState<ProjectMember[]>(initialMembers);
   const [projects, setProjects] = useState<ProjectDirectoryItem[]>([]);
-  const [activity, setActivity] = useState<TaskActivityEvent[]>(initialActivity);
-  const [activityTotal, setActivityTotal] = useState(initialActivityTotal);
   const [testHistory, setTestHistory] = useState<SubtaskTestHistoryEntry[]>(initialTestHistory);
   const [timeRecords, setTimeRecords] = useState<SubtaskTimeRecord[]>([]);
   const [savingTimeRecord, setSavingTimeRecord] = useState(false);
-  const [activityLoadingMore, setActivityLoadingMore] = useState(false);
   const [iterationEditor, setIterationEditor] = useState<IterationDraft | null>(null);
   const [savingIteration, setSavingIteration] = useState(false);
+  const [deletingDetailId, setDeletingDetailId] = useState<string | null>(null);
   const [secondaryLoading, setSecondaryLoading] = useState(false);
   const [directoryReady, setDirectoryReady] = useState(initialMembers.length > 0);
   const [error, setError] = useState(false);
@@ -195,7 +194,16 @@ export function SubtaskDetailView({
   const [accepting, setAccepting] = useState(false);
   const [promptImport, setPromptImport] = useState<SubtaskPromptImportRequest | null>(null);
   const [savingAcceptance, setSavingAcceptance] = useState(false);
+  const [exportingDetailPdf, setExportingDetailPdf] = useState(false);
   const [uploadingAcceptanceId, setUploadingAcceptanceId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!subtask) return;
+    const progress = detailTaskProgressPercent(subtask.updates.map((entry) => entry.id), subtask.handover?.rows, !subtask.handover?.initialDeleted);
+    window.dispatchEvent(new CustomEvent("app:subtask-details-updated", {
+      detail: { ...subtask, progress },
+    }));
+  }, [subtask]);
 
   const recordTime = useCallback(async (type: SubtaskTimeRecord["type"]) => {
     if (savingTimeRecord) return;
@@ -213,26 +221,11 @@ export function SubtaskDetailView({
     }
   }, [notify, savingTimeRecord, subtaskId]);
 
-  /**
-   * Nhật ký hoạt động được ghi bằng trigger DB ngay khi mutation ghi xong nên chỉ cần
-   * đọc lại trang đầu — không cần full reload 4 nguồn dữ liệu như `load()`.
-   */
-  const refreshActivity = useCallback(async () => {
-    try {
-      const activityPage = await subtaskService.getSubtaskActivity(subtaskId, 1, ACTIVITY_PAGE_SIZE);
-      setActivity(activityPage.items);
-      setActivityTotal(activityPage.total);
-    } catch {
-      // Bỏ qua lỗi làm mới timeline — không chặn luồng thao tác chính.
-    }
-  }, [subtaskId]);
-
   const load = useCallback(async () => {
     try {
       const subtaskData = await subtaskService.getSubtaskById(subtaskId);
       setSubtask(subtaskData);
       setError(false);
-      void refreshActivity();
       if (tab === "reports") {
         const reportData = await subtaskService.getSubtaskReports(subtaskId);
         setReports(reportData);
@@ -248,10 +241,10 @@ export function SubtaskDetailView({
         ),
       });
     }
-  }, [subtaskId, notify, tab, refreshActivity]);
+  }, [subtaskId, notify, tab]);
 
   async function saveAcceptance(sourceId: string, patch: Partial<AcceptanceRow>) {
-    if (!subtask || savingAcceptance) return;
+    if (!subtask || savingAcceptance || deletingDetailId) return;
     const current = subtask.handover?.rows?.[sourceId] ?? emptyAcceptanceRow();
     const rows = {
       ...(subtask.handover?.rows ?? {}),
@@ -260,21 +253,41 @@ export function SubtaskDetailView({
     const statuses = Object.fromEntries(
       Object.entries(rows).map(([id, row]) => [id, row.status === "accepted" ? "handedOver" as const : "pending" as const]),
     );
+    const previousHandover = subtask.handover;
+    const nextHandover = {
+      initialDeleted: subtask.handover?.initialDeleted,
+      titles: subtask.handover?.titles,
+      text: rows[INITIAL_HANDOVER_SOURCE_ID]?.note ?? "",
+      imageUrl: rows[INITIAL_HANDOVER_SOURCE_ID]?.imageUrl ?? "",
+      statuses,
+      rows,
+    };
+    const taskId = subtask.id;
     setSavingAcceptance(true);
+    setSubtask((currentSubtask) => currentSubtask?.id === taskId ? {
+      ...currentSubtask,
+      handover: nextHandover,
+      progress: detailTaskProgressPercent(currentSubtask.updates.map((entry) => entry.id), rows, !nextHandover.initialDeleted),
+    } : currentSubtask);
     try {
-      const handover = await subtaskService.updateHandover(subtask.id, {
-        text: rows[INITIAL_HANDOVER_SOURCE_ID]?.note ?? "",
-        imageUrl: rows[INITIAL_HANDOVER_SOURCE_ID]?.imageUrl ?? "",
-        statuses,
-        rows,
-      });
-      setSubtask((currentSubtask) => currentSubtask ? { ...currentSubtask, handover } : currentSubtask);
+      const handover = await subtaskService.updateHandover(taskId, nextHandover);
+      setSubtask((currentSubtask) => currentSubtask?.id === taskId ? {
+        ...currentSubtask,
+        handover,
+        progress: detailTaskProgressPercent(currentSubtask.updates.map((entry) => entry.id), handover.rows, !handover.initialDeleted),
+      } : currentSubtask);
     } catch (saveError) {
+      setSubtask((currentSubtask) => currentSubtask?.id === taskId ? {
+        ...currentSubtask,
+        handover: previousHandover,
+        progress: detailTaskProgressPercent(currentSubtask.updates.map((entry) => entry.id), previousHandover?.rows, !previousHandover?.initialDeleted),
+      } : currentSubtask);
       notify({
         type: "error",
         title: "Không thể lưu nghiệm thu",
         description: getErrorMessage(saveError, "Vui lòng thử lại."),
       });
+      throw saveError;
     } finally {
       setSavingAcceptance(false);
     }
@@ -336,19 +349,16 @@ export function SubtaskDetailView({
     setDirectoryReady(true);
   }, [directoryReady, projects.length]);
 
-  // Timeline: trì hoãn sau paint để không tranh băng thông với hydrate UI.
+  // Load test history and time records after the initial paint.
   useEffect(() => {
     let active = true;
     const timer = window.setTimeout(() => {
       void Promise.all([
-        subtaskService.getSubtaskActivity(subtaskId, 1, ACTIVITY_PAGE_SIZE),
         subtaskService.getSubtaskTestHistory(subtaskId),
         subtaskService.getTimeRecords(subtaskId),
       ])
-        .then(([activityPage, historyData, timeRecordData]) => {
+        .then(([historyData, timeRecordData]) => {
           if (!active) return;
-          setActivity(activityPage.items);
-          setActivityTotal(activityPage.total);
           setTestHistory(historyData);
           setTimeRecords(timeRecordData);
         })
@@ -406,7 +416,6 @@ export function SubtaskDetailView({
       });
       if (!updated) throw new Error("Task không tồn tại hoặc đã bị xóa.");
       setSubtask(updated);
-      void refreshActivity();
     } catch (updateError) {
       notify({
         type: "error",
@@ -415,7 +424,7 @@ export function SubtaskDetailView({
       });
       throw updateError;
     }
-  }, [notify, refreshActivity, subtask]);
+  }, [notify, subtask]);
 
   const handleUpdateAttachmentSave = useCallback(async (
     updateId: string,
@@ -448,7 +457,6 @@ export function SubtaskDetailView({
       });
       if (!updated) throw new Error("Task không tồn tại hoặc đã bị xóa.");
       setSubtask(updated);
-      void refreshActivity();
     } catch (updateError) {
       notify({
         type: "error",
@@ -457,18 +465,37 @@ export function SubtaskDetailView({
       });
       throw updateError;
     }
-  }, [notify, refreshActivity, subtask]);
+  }, [notify, subtask]);
 
   const handleSaveIteration = useCallback(async () => {
-    if (!subtask || !iterationEditor || savingIteration) return;
+    if (!subtask || !iterationEditor || savingIteration || deletingDetailId) return;
     const description = iterationEditor.description.trim();
-    if (!description) {
-      notify({ type: "error", title: "Hãy nhập mô tả cho lần bổ sung." });
+    const title = iterationEditor.title.trim();
+    if (!title) {
+      notify({ type: "error", title: "Hãy nhập tiêu đề chi tiết Task." });
       return;
     }
 
     setSavingIteration(true);
     try {
+      if (iterationEditor.id === INITIAL_HANDOVER_SOURCE_ID) {
+        const updated = await subtaskService.updateUpdates(subtask.id, subtask.updates, {
+          description,
+          handover: {
+            initialDeleted: subtask.handover?.initialDeleted,
+            text: subtask.handover?.text ?? "",
+            imageUrl: subtask.handover?.imageUrl ?? "",
+            statuses: subtask.handover?.statuses ?? {},
+            rows: subtask.handover?.rows ?? {},
+            titles: { ...subtask.handover?.titles, [INITIAL_HANDOVER_SOURCE_ID]: title },
+          },
+        });
+        if (!updated) throw new Error("Task không tồn tại hoặc đã bị xóa.");
+        setSubtask(updated);
+        setIterationEditor(null);
+        notify({ type: "success", title: "Đã cập nhật chi tiết Task" });
+        return;
+      }
       const createdId = iterationEditor.id ?? crypto.randomUUID();
       const updates = iterationEditor.id
         ? subtask.updates.map((entry) => entry.id === iterationEditor.id
@@ -485,66 +512,100 @@ export function SubtaskDetailView({
               images: iterationEditor.images,
             },
           ];
-      const updated = await subtaskService.updateUpdates(subtask.id, updates);
-      if (!updated) throw new Error("Task không tồn tại hoặc đã bị xóa.");
+      let handover = {
+        initialDeleted: subtask.handover?.initialDeleted,
+        text: subtask.handover?.text ?? "",
+        imageUrl: subtask.handover?.imageUrl ?? "",
+        statuses: subtask.handover?.statuses ?? {},
+        rows: subtask.handover?.rows ?? {},
+        titles: { ...subtask.handover?.titles, [createdId]: title },
+      };
       if (!iterationEditor.id) {
         const rows = {
-          ...(updated.handover?.rows ?? {}),
+          ...(subtask.handover?.rows ?? {}),
           [createdId]: iterationEditor.acceptance,
         };
         const statuses = Object.fromEntries(
           Object.entries(rows).map(([id, row]) => [id, row.status === "accepted" ? "handedOver" as const : "pending" as const]),
         );
-        try {
-          const handover = await subtaskService.updateHandover(subtask.id, {
+        handover = {
+            initialDeleted: handover.initialDeleted,
+            titles: handover.titles,
             text: rows[INITIAL_HANDOVER_SOURCE_ID]?.note ?? "",
             imageUrl: rows[INITIAL_HANDOVER_SOURCE_ID]?.imageUrl ?? "",
             statuses,
             rows,
-          });
-          setSubtask({ ...updated, handover: handover ?? updated.handover });
-        } catch (handoverError) {
-          setSubtask(updated);
-          setIterationEditor(null);
-          notify({
-            type: "error",
-            title: "Đã thêm lần, chưa lưu được trạng thái",
-            description: getErrorMessage(handoverError, "Có thể chỉnh trạng thái ngay trên lần vừa thêm."),
-          });
-          return;
-        }
-      } else {
-        setSubtask(updated);
+        };
       }
+      const updated = await subtaskService.updateUpdates(subtask.id, updates, handover ? { handover } : {});
+      if (!updated) throw new Error("Task không tồn tại hoặc đã bị xóa.");
+      setSubtask(updated);
       setIterationEditor(null);
-      notify({ type: "success", title: iterationEditor.id ? "Đã cập nhật lần bổ sung" : "Đã thêm lần bổ sung" });
+      notify({ type: "success", title: iterationEditor.id ? "Đã cập nhật chi tiết Task" : "Đã thêm chi tiết Task" });
     } catch (saveError) {
-      notify({ type: "error", title: "Không thể lưu lần bổ sung", description: getErrorMessage(saveError, "Vui lòng thử lại.") });
+      notify({ type: "error", title: "Không thể lưu chi tiết Task", description: getErrorMessage(saveError, "Vui lòng thử lại.") });
     } finally {
       setSavingIteration(false);
     }
   }, [iterationEditor, notify, savingIteration, subtask]);
 
-  async function handleLoadMoreActivity() {
-    if (activityLoadingMore || activity.length >= activityTotal) return;
-    setActivityLoadingMore(true);
+  async function handleDeleteDetail(sourceId: string, title: string) {
+    if (!subtask || subtask.status === "done" || deletingDetailId || savingIteration || savingAcceptance) return;
+    const approved = await confirm({
+      title: "Xóa chi tiết Task?",
+      description: `Chi tiết “${title}” sẽ bị xóa khỏi Task.`,
+      confirmLabel: "Xóa chi tiết",
+      tone: "danger",
+    });
+    if (!approved) return;
+    const taskId = subtask.id;
+    const previousUpdates = subtask.updates;
+    const previousHandover = subtask.handover;
+    setDeletingDetailId(sourceId);
     try {
-      const nextPage = Math.floor(activity.length / ACTIVITY_PAGE_SIZE) + 1;
-      const activityPage = await subtaskService.getSubtaskActivity(
-        subtaskId,
-        nextPage,
-        ACTIVITY_PAGE_SIZE
-      );
-      setActivity((current) => [...current, ...activityPage.items]);
-      setActivityTotal(activityPage.total);
-    } catch (loadMoreError) {
-      notify({
-        type: "error",
-        title: "Không thể tải thêm hoạt động",
-        description: getErrorMessage(loadMoreError, "Vui lòng thử lại."),
-      });
+      const handover = {
+        text: subtask.handover?.text ?? "",
+        imageUrl: subtask.handover?.imageUrl ?? "",
+        statuses: { ...subtask.handover?.statuses },
+        rows: { ...subtask.handover?.rows },
+        titles: { ...subtask.handover?.titles },
+        initialDeleted: sourceId === INITIAL_HANDOVER_SOURCE_ID || subtask.handover?.initialDeleted === true,
+      };
+      delete handover.rows[sourceId];
+      delete handover.statuses[sourceId];
+      delete handover.titles[sourceId];
+      if (sourceId === INITIAL_HANDOVER_SOURCE_ID) {
+        handover.text = "";
+        handover.imageUrl = "";
+      }
+      const updates = subtask.updates.filter((entry) => entry.id !== sourceId);
+      setSubtask((current) => current?.id === taskId ? {
+        ...current,
+        updates,
+        handover,
+        progress: detailTaskProgressPercent(updates.map((entry) => entry.id), handover.rows, !handover.initialDeleted),
+      } : current);
+      const updated = await subtaskService.updateUpdates(taskId, updates, { handover });
+      if (!updated) throw new Error("Task không tồn tại hoặc đã bị xóa.");
+      setSubtask((current) => current?.id === taskId ? {
+        ...current,
+        updates: updated.updates,
+        handover: updated.handover,
+        progress: updated.progress,
+      } : current);
+      setIterationEditor(null);
+      cache.invalidate(CACHE_RESOURCE.tasksList);
+      notify({ type: "success", title: "Đã xóa chi tiết Task" });
+    } catch (error) {
+      setSubtask((current) => current?.id === taskId ? {
+        ...current,
+        updates: previousUpdates,
+        handover: previousHandover,
+        progress: detailTaskProgressPercent(previousUpdates.map((entry) => entry.id), previousHandover?.rows, !previousHandover?.initialDeleted),
+      } : current);
+      notify({ type: "error", title: "Không thể xóa chi tiết Task", description: getErrorMessage(error, "Vui lòng thử lại.") });
     } finally {
-      setActivityLoadingMore(false);
+      setDeletingDetailId(null);
     }
   }
 
@@ -581,7 +642,6 @@ export function SubtaskDetailView({
       // con + list công việc (tiến độ công việc cha tính từ trung bình các task con).
       cache.invalidate(CACHE_RESOURCE.subtasksList);
       cache.invalidate(CACHE_RESOURCE.tasksList);
-      void refreshActivity();
     } catch (updateError) {
       notify({
         type: "error",
@@ -607,7 +667,6 @@ export function SubtaskDetailView({
       // bản ghi hiện tại thay vì xóa cache khiến danh sách chớp thành rỗng.
       window.dispatchEvent(new CustomEvent<Subtask>(SUBTASK_ACCEPTED_EVENT, { detail: accepted }));
       cache.invalidate(CACHE_RESOURCE.tasksList);
-      void refreshActivity();
       notify({
         type: "success",
         title: "Đã xác nhận nhận Task",
@@ -636,7 +695,6 @@ export function SubtaskDetailView({
       window.dispatchEvent(new CustomEvent("app:notifications-changed"));
       cache.invalidate(CACHE_RESOURCE.subtasksList);
       cache.invalidate(CACHE_RESOURCE.tasksList);
-      void refreshActivity();
       notify({
         type: "success",
         title: passed ? "Task đã Pass kiểm thử" : "Đã trả Task về người thực hiện",
@@ -702,6 +760,7 @@ export function SubtaskDetailView({
   const actualProgress = detailTaskProgressPercent(
     subtask.updates.map((entry) => entry.id),
     subtask.handover?.rows,
+    !subtask.handover?.initialDeleted,
   );
 
   return (
@@ -910,6 +969,13 @@ export function SubtaskDetailView({
             <SubtaskPromptPanel
               key={`${subtask.id}-${subtask.updatedAt ?? ""}`}
               subtaskId={subtask.id}
+              taskDetailOptions={[
+                ...(!subtask.handover?.initialDeleted ? [{ value: INITIAL_HANDOVER_SOURCE_ID, label: subtask.handover?.titles?.[INITIAL_HANDOVER_SOURCE_ID] ?? taskDetailName(subtask.description) }] : []),
+                ...subtask.updates.map((entry) => ({
+                  value: entry.id,
+                  label: subtask.handover?.titles?.[entry.id] ?? taskDetailName(entry.description),
+                })),
+              ]}
               initialItems={subtask.promptItems}
               initialDataLoaded
               importRequest={promptImport}
@@ -955,32 +1021,88 @@ export function SubtaskDetailView({
                 icon={Info}
                 iconClassName="text-violet-600"
                 title="Chi tiết Task"
-                subtitle="Mô tả Task và thời hạn thực hiện chi tiết"
-                headerAction={!statusLocked && (
+                subtitle={deletingDetailId ? "Đang lưu thay đổi xóa chi tiết..." : savingAcceptance ? "Đang lưu trạng thái chi tiết..." : "Mô tả Task và thời hạn thực hiện chi tiết"}
+                headerAction={<div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="secondary" size="sm"
+                    disabled={exportingDetailPdf || savingAcceptance || savingIteration || Boolean(deletingDetailId)}
+                    title="Mở hộp thoại in từ các chi tiết đã lưu"
+                    onClick={async () => {
+                      const printWindow = window.open("", "_blank");
+                      if (!printWindow) {
+                        notify({ type: "error", title: "Không mở được cửa sổ in", description: "Hãy cho phép cửa sổ bật lên trên trình duyệt rồi thử lại." });
+                        return;
+                      }
+                      printWindow.opener = null;
+                      printWindow.document.title = "Đang chuẩn bị báo cáo...";
+                      printWindow.document.body.textContent = "Đang chuẩn bị báo cáo để in...";
+                      setExportingDetailPdf(true);
+                      try {
+                        const { exportTaskDetailPdf } = await import("@/lib/task-detail-pdf");
+                        await exportTaskDetailPdf(subtask, workTask?.title, printWindow);
+                      } catch (error) {
+                        printWindow.close();
+                        notify({ type: "error", title: "Không thể xuất báo cáo", description: getErrorMessage(error, "Vui lòng thử lại.") });
+                      } finally {
+                        setExportingDetailPdf(false);
+                      }
+                    }}>
+                    {exportingDetailPdf ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+                    {exportingDetailPdf ? "Đang xuất..." : "In báo cáo"}
+                  </Button>
+                  {!statusLocked && (
                   <Button
                     type="button"
                     variant="secondary"
                     size="sm"
                     onClick={() => setIterationEditor(emptyIterationDraft())}
-                    disabled={savingIteration || Boolean(iterationEditor)}
+                    disabled={savingIteration || Boolean(iterationEditor) || Boolean(deletingDetailId)}
                   >
                     <Plus className="h-4 w-4" />
-                    Thêm lần
+                    Thêm chi tiết
                   </Button>
-                )}
+                  )}
+                </div>}
               >
                 <div className="space-y-2.5">
-                  <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-3 sm:p-4">
-                    <div className="mb-2 flex items-center justify-between gap-3">
-                      <span className="text-sm font-semibold text-gray-700">Lần 1</span>
-                      <div className="flex items-center gap-2.5">
+                  {!subtask.handover?.initialDeleted && <div className="rounded-xl border border-gray-200 bg-white p-3 sm:p-4">
+                    <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                      <span className="text-sm font-semibold text-gray-700">{subtask.handover?.titles?.[INITIAL_HANDOVER_SOURCE_ID] ?? taskDetailName(subtask.description)}</span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {!statusLocked && (
+                          <button
+                            type="button"
+                            onClick={() => setIterationEditor({
+                              id: INITIAL_HANDOVER_SOURCE_ID,
+                              title: subtask.handover?.titles?.[INITIAL_HANDOVER_SOURCE_ID] ?? taskDetailName(subtask.description),
+                              description: subtask.description ?? "",
+                              files: subtask.files,
+                              links: subtask.links,
+                              images: subtask.images,
+                              acceptance: subtask.handover?.rows?.[INITIAL_HANDOVER_SOURCE_ID] ?? emptyAcceptanceRow(),
+                            })}
+                            disabled={savingIteration || Boolean(iterationEditor) || Boolean(deletingDetailId)}
+                            className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs font-medium text-gray-500 hover:bg-violet-50 hover:text-violet-700 disabled:opacity-50"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            Sửa
+                          </button>
+                        )}
                         {subtask.createdAt && (
                           <span className="text-xs text-gray-400">{formatDateVN(subtask.createdAt)}</span>
+                        )}
+                        {!statusLocked && canEditHandover && (
+                          <button type="button"
+                            onClick={() => void handleDeleteDetail(INITIAL_HANDOVER_SOURCE_ID, subtask.handover?.titles?.[INITIAL_HANDOVER_SOURCE_ID] ?? taskDetailName(subtask.description))}
+                            disabled={Boolean(deletingDetailId) || savingIteration || savingAcceptance || Boolean(iterationEditor)}
+                            className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-50">
+                            <Trash2 className="h-3.5 w-3.5" /> Xóa
+                          </button>
                         )}
                         <button
                           type="button"
                           onClick={() => setPromptImport({
                             requestId: crypto.randomUUID(),
+                            taskTitle: INITIAL_HANDOVER_SOURCE_ID,
                             content: subtask.description ?? "",
                             imageUrls: subtask.images,
                           })}
@@ -992,19 +1114,39 @@ export function SubtaskDetailView({
                         </button>
                       </div>
                     </div>
+                    {iterationEditor?.id === INITIAL_HANDOVER_SOURCE_ID ? (
+                      <div>
+                        <IterationTitleInput value={iterationEditor.title} onChange={(title) => setIterationEditor((current) => current ? { ...current, title } : current)} />
+                        <p className="mb-1 text-xs font-semibold text-gray-500">Nội dung</p>
+                        <textarea
+                          autoFocus
+                          aria-label="Mô tả chi tiết Task"
+                          maxLength={5000}
+                          rows={3}
+                          value={iterationEditor.description}
+                          onChange={(event) => setIterationEditor((current) => current ? { ...current, description: event.target.value } : current)}
+                          placeholder="Nhập nội dung chi tiết Task..."
+                          className="w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm leading-6 text-gray-700 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+                        />
+                        <div className="mt-2 flex justify-end gap-2">
+                          <Button type="button" variant="ghost" size="sm" disabled={savingIteration} onClick={() => setIterationEditor(null)}>Hủy</Button>
+                          <Button type="button" size="sm" disabled={savingIteration} onClick={() => void handleSaveIteration()}>{savingIteration ? "Đang lưu..." : "Lưu"}</Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="max-w-full overflow-x-auto text-sm leading-6 text-gray-700">
+                        <DetailDescription description={subtask.description} emptyText="Chưa có mô tả cho Task này." />
+                      </div>
+                    )}
                     <AcceptanceFields
+                      key={`${subtask.id}:initial`}
+                      members={subtask.assignees}
                       row={subtask.handover?.rows?.[INITIAL_HANDOVER_SOURCE_ID] ?? emptyAcceptanceRow()}
-                      disabled={!canEditHandover || savingAcceptance}
+                      disabled={!canEditHandover || savingAcceptance || Boolean(deletingDetailId)}
                       uploading={uploadingAcceptanceId === INITIAL_HANDOVER_SOURCE_ID}
-                      onSave={(patch) => void saveAcceptance(INITIAL_HANDOVER_SOURCE_ID, patch)}
+                      onSave={(patch) => saveAcceptance(INITIAL_HANDOVER_SOURCE_ID, patch)}
                       onUpload={(file) => void uploadAcceptanceImage(INITIAL_HANDOVER_SOURCE_ID, file)}
                     />
-                    <div className="max-w-full overflow-x-auto text-sm leading-6 text-gray-700">
-                      <DetailDescription
-                        description={subtask.description}
-                        emptyText="Chưa có mô tả cho Task này."
-                      />
-                    </div>
                     {statusLocked ? (
                       <DetailAttachments
                         entityLabel="Task"
@@ -1016,6 +1158,7 @@ export function SubtaskDetailView({
                       <InlineTaskAttachmentEditor
                         key={subtask.id}
                         entityLabel="Task"
+                        compact
                         files={subtask.files}
                         links={subtask.links}
                         images={subtask.images}
@@ -1024,27 +1167,39 @@ export function SubtaskDetailView({
                         onSave={handleAttachmentSave}
                       />
                     )}
-                  </div>
+                  </div>}
+                  {subtask.handover?.initialDeleted && subtask.updates.length === 0 && !iterationEditor && (
+                    <p className="rounded-xl border border-dashed border-gray-200 p-4 text-sm text-gray-500">Chưa có chi tiết Task. Bấm Thêm chi tiết để tạo mới.</p>
+                  )}
                   {subtask.updates.length > 0 && (
                     <div className="space-y-2.5">
-                      {subtask.updates.map((entry, index) => (
-                        <div key={entry.id} className="rounded-xl border border-gray-200 bg-gray-50/60 p-3 sm:p-4">
-                          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                            <span className="text-sm font-semibold text-gray-700">Lần {index + 2}</span>
-                            <div className="flex items-center gap-1.5">
+                      {subtask.updates.map((entry) => (
+                        <div key={entry.id} className="rounded-xl border border-gray-200 bg-white p-3 sm:p-4">
+                          <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                            <span className="text-sm font-semibold text-gray-700">{subtask.handover?.titles?.[entry.id] ?? taskDetailName(entry.description)}</span>
+                            <div className="flex flex-wrap items-center gap-2">
                               <span className="text-xs text-gray-400">{formatDateVN(entry.createdAt)}</span>
+                              {!statusLocked && canEditHandover && (
+                                <button type="button"
+                                  onClick={() => void handleDeleteDetail(entry.id, subtask.handover?.titles?.[entry.id] ?? taskDetailName(entry.description))}
+                                  disabled={Boolean(deletingDetailId) || savingIteration || savingAcceptance || Boolean(iterationEditor)}
+                                  className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-50">
+                                  <Trash2 className="h-3.5 w-3.5" /> Xóa
+                                </button>
+                              )}
                               {!statusLocked && (
                                 <button
                                   type="button"
                                   onClick={() => setIterationEditor({
                                     id: entry.id,
+                                    title: subtask.handover?.titles?.[entry.id] ?? taskDetailName(entry.description),
                                     description: entry.description ?? "",
                                     files: entry.files,
                                     links: entry.links,
                                     images: entry.images,
                                     acceptance: subtask.handover?.rows?.[entry.id] ?? emptyAcceptanceRow(),
                                   })}
-                                  disabled={savingIteration || Boolean(iterationEditor)}
+                                  disabled={savingIteration || Boolean(iterationEditor) || Boolean(deletingDetailId)}
                                   className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs font-medium text-gray-500 hover:bg-violet-50 hover:text-violet-700 disabled:opacity-50"
                                 >
                                   <Pencil className="h-3.5 w-3.5" />
@@ -1055,6 +1210,7 @@ export function SubtaskDetailView({
                                 type="button"
                                 onClick={() => setPromptImport({
                                   requestId: crypto.randomUUID(),
+                                  taskTitle: entry.id,
                                   content: entry.description ?? "",
                                   imageUrls: entry.images,
                                 })}
@@ -1066,22 +1222,17 @@ export function SubtaskDetailView({
                               </button>
                             </div>
                           </div>
-                          <AcceptanceFields
-                            row={subtask.handover?.rows?.[entry.id] ?? emptyAcceptanceRow()}
-                            disabled={!canEditHandover || savingAcceptance}
-                            uploading={uploadingAcceptanceId === entry.id}
-                            onSave={(patch) => void saveAcceptance(entry.id, patch)}
-                            onUpload={(file) => void uploadAcceptanceImage(entry.id, file)}
-                          />
                           {iterationEditor?.id === entry.id ? (
                             <div>
+                              <IterationTitleInput value={iterationEditor.title} onChange={(title) => setIterationEditor((current) => current ? { ...current, title } : current)} />
+                              <p className="mb-1 text-xs font-semibold text-gray-500">Nội dung</p>
                               <textarea
                                 autoFocus
                                 maxLength={5000}
                                 rows={3}
                                 value={iterationEditor.description}
                                 onChange={(event) => setIterationEditor((current) => current ? { ...current, description: event.target.value } : current)}
-                                placeholder="Nhập nội dung lần bổ sung..."
+                                placeholder="Nhập nội dung chi tiết..."
                                 className="w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm leading-6 text-gray-700 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
                               />
                               <div className="mt-2 flex justify-end gap-2">
@@ -1091,9 +1242,18 @@ export function SubtaskDetailView({
                             </div>
                           ) : (
                             <div className="max-w-full overflow-x-auto text-sm leading-6 text-gray-700">
-                              <DetailDescription description={entry.description} emptyText="Lần này chưa có mô tả." />
+                              <DetailDescription description={entry.description} emptyText="Chi tiết này chưa có mô tả." />
                             </div>
                           )}
+                          <AcceptanceFields
+                            key={`${subtask.id}:${entry.id}`}
+                            members={subtask.assignees}
+                            row={subtask.handover?.rows?.[entry.id] ?? emptyAcceptanceRow()}
+                            disabled={!canEditHandover || savingAcceptance || Boolean(deletingDetailId)}
+                            uploading={uploadingAcceptanceId === entry.id}
+                            onSave={(patch) => saveAcceptance(entry.id, patch)}
+                            onUpload={(file) => void uploadAcceptanceImage(entry.id, file)}
+                          />
                           {statusLocked ? (
                             <DetailAttachments
                               entityLabel="Task"
@@ -1105,6 +1265,7 @@ export function SubtaskDetailView({
                             <InlineTaskAttachmentEditor
                               key={entry.id}
                               entityLabel="Task"
+                              compact
                               files={entry.files}
                               links={entry.links}
                               images={entry.images}
@@ -1119,8 +1280,11 @@ export function SubtaskDetailView({
                   )}
                   {iterationEditor?.id === null && (
                     <div className="rounded-xl border border-dashed border-violet-300 bg-violet-50/40 p-3 sm:p-4">
-                      <div className="mb-2 text-sm font-semibold text-violet-800">Lần {subtask.updates.length + 2}</div>
+                      <div className="mb-2 text-sm font-semibold text-violet-800">{iterationEditor.title.trim() || "Chi tiết mới"}</div>
+                      <IterationTitleInput value={iterationEditor.title} onChange={(title) => setIterationEditor((current) => current ? { ...current, title } : current)} />
                       <AcceptanceFields
+                        key={`${subtask.id}:draft`}
+                        members={subtask.assignees}
                         row={iterationEditor.acceptance}
                         disabled={savingIteration || !canEditHandover}
                         uploading={uploadingAcceptanceId === "draft"}
@@ -1135,7 +1299,8 @@ export function SubtaskDetailView({
                         rows={3}
                         value={iterationEditor.description}
                         onChange={(event) => setIterationEditor((current) => current ? { ...current, description: event.target.value } : current)}
-                        placeholder="Nhập nội dung lần bổ sung..."
+                        aria-label="Nội dung chi tiết mới"
+                        placeholder="Nhập nội dung chi tiết..."
                         className="w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm leading-6 text-gray-700 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
                       />
                       <InlineTaskAttachmentEditor
@@ -1153,7 +1318,7 @@ export function SubtaskDetailView({
                       />
                       <div className="mt-2 flex justify-end gap-2">
                         <Button type="button" variant="ghost" size="sm" disabled={savingIteration} onClick={() => setIterationEditor(null)}>Hủy</Button>
-                        <Button type="button" size="sm" disabled={savingIteration || uploadingAcceptanceId === "draft"} onClick={() => void handleSaveIteration()}>{savingIteration ? "Đang lưu..." : "Lưu lần"}</Button>
+                        <Button type="button" size="sm" disabled={savingIteration || uploadingAcceptanceId === "draft"} onClick={() => void handleSaveIteration()}>{savingIteration ? "Đang lưu..." : "Lưu chi tiết"}</Button>
                       </div>
                     </div>
                   )}
@@ -1174,28 +1339,7 @@ export function SubtaskDetailView({
 
             </section>
 
-            <section className="grid grid-cols-1 gap-5 @3xl/detail:grid-cols-3">
-              <Panel
-                className="@3xl/detail:col-span-2"
-                accentClassName="bg-emerald-500"
-                icon={RotateCcw}
-                iconClassName="text-emerald-500"
-                title="Timeline hoạt động Task"
-                subtitle="Nhật ký lịch trình xử lý & báo cáo"
-              >
-                <TaskActivityTimeline
-                  taskId={subtaskId}
-                  currentAccountId={account?.id}
-                  canEditAnyNote={account?.role === "admin"}
-                  events={activity}
-                  members={members}
-                  hasMore={activity.length < activityTotal}
-                  loadingMore={activityLoadingMore}
-                  onLoadMore={handleLoadMoreActivity}
-                  onActivityChanged={refreshActivity}
-                />
-              </Panel>
-
+            <section className="grid grid-cols-1 gap-5">
               <Panel
                 accentClassName="bg-violet-600"
                 icon={UsersRound}
@@ -1511,27 +1655,85 @@ export function SubtaskDetailView({
   );
 }
 
+function IterationTitleInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="mb-3 block text-xs font-semibold text-gray-500">
+      Tiêu đề
+      <input
+        type="text"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        maxLength={500}
+        placeholder="Nhập tiêu đề chi tiết..."
+        className="mt-1 h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-800 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+      />
+    </label>
+  );
+}
+
 function AcceptanceFields({
+  members,
   row,
   disabled,
   uploading,
   onSave,
   onUpload,
 }: {
+  members: ProjectMember[];
   row: AcceptanceRow;
   disabled: boolean;
   uploading: boolean;
-  onSave: (patch: Partial<AcceptanceRow>) => void;
+  onSave: (patch: Partial<AcceptanceRow>) => void | Promise<void>;
   onUpload: (file: File) => void;
 }) {
-  const [note, setNote] = useState(row.note);
+  const [draft, setDraft] = useState(row);
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
   useEffect(() => {
-    setNote(row.note);
-  }, [row.note]);
+    if (!dirty) setDraft(row);
+  }, [row, dirty]);
+
+  function updateDraft(patch: Partial<AcceptanceRow>) {
+    setDirty(true);
+    setDraft((current) => ({ ...current, ...patch }));
+  }
+
+  async function saveDraft() {
+    if (disabled || saving || !dirty) return;
+    setSaving(true);
+    try {
+      // Only send editable fields so an uploaded image is preserved.
+      await onSave({ note: draft.note, status: draft.status, assigneeIds: draft.assigneeIds ?? [] });
+      setDirty(false);
+    } catch {
+      // Keep the draft available for retry; the parent displays the error.
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
-    <div className="mb-3 flex items-end gap-3 overflow-x-auto border-b border-gray-200 pb-3">
-      <div className="shrink-0">
+    <div className="mt-3 grid grid-cols-1 items-end gap-3 rounded-lg bg-gray-50 p-3 @md/detail:grid-cols-[160px_140px_minmax(0,1fr)]">
+      <fieldset disabled={disabled || saving} className="order-4 min-w-0 @md/detail:col-span-3">
+        <legend className="mb-1.5 text-xs font-semibold text-gray-500">Nhân sự (chọn nhiều)</legend>
+        <div className="flex max-h-40 flex-wrap gap-2 overflow-y-auto rounded-lg border border-gray-200 bg-white p-2">
+          {members.map((member) => (
+            <label key={member.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-gray-700 hover:bg-violet-50 has-[:disabled]:cursor-default">
+              <input
+                type="checkbox"
+                checked={draft.assigneeIds?.includes(member.id) ?? false}
+                onChange={(event) => updateDraft({ assigneeIds: event.target.checked
+                  ? [...(draft.assigneeIds ?? []), member.id]
+                  : (draft.assigneeIds ?? []).filter((id) => id !== member.id) })}
+                className="h-4 w-4 rounded border-gray-300 accent-violet-600"
+              />
+              {member.name}
+            </label>
+          ))}
+          {members.length === 0 && <p className="text-xs text-gray-400">Task chưa có người phụ trách.</p>}
+        </div>
+      </fieldset>
+      <div className="order-2 min-w-0">
         <p className="mb-1.5 text-xs font-semibold text-gray-500">Ảnh nghiệm thu</p>
         <div className="flex h-9 items-center gap-2">
           {isSafeImageUrl(row.imageUrl) && (
@@ -1556,33 +1758,41 @@ function AcceptanceFields({
           </label>
         </div>
       </div>
-      <label className="w-40 shrink-0 text-xs font-semibold text-gray-500">
+      <label className="order-1 min-w-0 text-xs font-semibold text-gray-500">
         Trạng thái
         <select
-          value={row.status}
-          disabled={disabled}
-          onChange={(event) => onSave({ status: event.target.value as AcceptanceRow["status"] })}
+          value={draft.status}
+          disabled={disabled || saving}
+          onChange={(event) => updateDraft({ status: event.target.value as AcceptanceRow["status"] })}
           className="mt-1.5 h-9 w-full rounded-lg border border-gray-200 bg-white px-2 text-sm font-medium text-gray-800 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 disabled:bg-gray-50"
         >
           <option value="pending">Chưa hoàn thành</option>
+          <option value="testing">Đang test</option>
+          <option value="tested">Đã test</option>
+          <option value="acceptance">Nghiệm thu</option>
+          <option value="rework">Làm lại</option>
+          <option value="cancelled">Hủy bỏ</option>
           <option value="accepted">Hoàn thành</option>
         </select>
       </label>
-      <label className="min-w-48 flex-1 text-xs font-semibold text-gray-500">
-        Note
+      <label className="order-3 min-w-0 text-xs font-semibold text-gray-500">
+        Ghi chú
         <input
           type="text"
-          value={note}
-          disabled={disabled}
+          value={draft.note}
+          disabled={disabled || saving}
           maxLength={5000}
           placeholder="Ghi chú nghiệm thu..."
-          onChange={(event) => setNote(event.target.value)}
-          onBlur={() => {
-            if (note !== row.note) onSave({ note });
-          }}
+          onChange={(event) => updateDraft({ note: event.target.value })}
           className="mt-1.5 h-9 w-full rounded-lg border border-gray-200 bg-white px-2.5 text-sm font-normal text-gray-800 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 disabled:bg-gray-50"
         />
       </label>
+      <div className="order-5 flex items-center justify-end gap-3 @md/detail:col-span-3">
+        {dirty && <span className="text-xs text-amber-700">Có thay đổi chưa lưu</span>}
+        <Button type="button" size="sm" disabled={disabled || saving || !dirty} onClick={() => void saveDraft()}>
+          {saving ? "Đang lưu..." : "Lưu thay đổi"}
+        </Button>
+      </div>
     </div>
   );
 }

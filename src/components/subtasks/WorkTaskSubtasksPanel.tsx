@@ -192,7 +192,7 @@ export function WorkTaskSubtasksPanel({
   }
 
   async function handleDelete(subtask: Subtask) {
-    if (viewOnly || deletingId) return;
+    if (deletingId || (viewOnly && subtask.status !== "done")) return;
     const confirmed = await confirm({
       title: "Xóa task?",
       description: `Task “${subtask.title}” sẽ bị xóa vĩnh viễn. Hành động này không thể hoàn tác.`,

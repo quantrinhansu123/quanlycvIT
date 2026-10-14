@@ -24,6 +24,7 @@ interface SplitViewShellProps {
   children: ReactNode;
   detailOpen?: boolean;
   detailKey?: string;
+  compactListWidthClassName?: string;
 }
 
 /**
@@ -31,7 +32,7 @@ interface SplitViewShellProps {
  * Dưới breakpoint xl không đủ chỗ (sidebar + list + detail) nên chỉ hiển thị chi tiết.
  * Khi mở chi tiết, cột danh sách thu hẹp để ưu tiên nội dung bên phải.
  */
-export function SplitViewShell({ listSlot, children, detailOpen = true, detailKey }: SplitViewShellProps) {
+export function SplitViewShell({ listSlot, children, detailOpen = true, detailKey, compactListWidthClassName = "xl:w-[35%]" }: SplitViewShellProps) {
   const [maximized, setMaximized] = useState(false);
   const [detailState, setDetailState] = useState({ key: detailKey, collapsed: false });
   const detailCollapsed = detailState.key === detailKey && detailState.collapsed;
@@ -64,7 +65,7 @@ export function SplitViewShell({ listSlot, children, detailOpen = true, detailKe
               ? "hidden"
               : detailCollapsed
                 ? "hidden xl:flex xl:flex-1"
-                : "hidden xl:flex xl:w-[35%]"
+                : cn("hidden xl:flex", compactListWidthClassName)
           )}
         >
           {listSlot}

@@ -276,7 +276,11 @@ export function SubtaskListClient({
     }
 
     window.addEventListener(SUBTASK_ACCEPTED_EVENT, handleSubtaskAccepted);
-    return () => window.removeEventListener(SUBTASK_ACCEPTED_EVENT, handleSubtaskAccepted);
+    window.addEventListener("app:subtask-details-updated", handleSubtaskAccepted);
+    return () => {
+      window.removeEventListener(SUBTASK_ACCEPTED_EVENT, handleSubtaskAccepted);
+      window.removeEventListener("app:subtask-details-updated", handleSubtaskAccepted);
+    };
   }, [cache, listKey, setSubtaskPage, statuses]);
 
   // Đổi dự án thì bỏ những lựa chọn "Công việc" không thuộc dự án mới.
@@ -340,6 +344,11 @@ export function SubtaskListClient({
       setSelectedIds((current) => current.filter((id) => id !== subtask.id));
       setQuickView((current) => current?.subtask.id === subtask.id ? null : current);
       setReportDrawer((current) => current?.id === subtask.id ? null : current);
+      cache.invalidate(CACHE_RESOURCE.tasksList);
+      cache.invalidate(CACHE_RESOURCE.directoryTasks);
+      if (pathname === `/quan-ly-cong-viec/danh-sach-task/${subtask.id}`) {
+        router.replace("/quan-ly-cong-viec/danh-sach-task");
+      }
       notify({ type: "success", title: "Đã xóa task", description: `Task “${subtask.title}” đã được xóa.` });
     } catch (deleteError) {
       notify({
@@ -589,13 +598,13 @@ return (
 
       {/* Filter Bar - collapsible on mobile */}
       <div className={cn("relative z-30 border-b border-gray-100 bg-white transition-all duration-200", filterDrawerOpen ? "block" : "hidden md:block")}>
-        <div className="flex flex-wrap items-center gap-2 overflow-visible px-3 py-2">
-          <div className="flex items-center gap-2 shrink-0">
+        <div className={cn("items-center overflow-visible px-3", compactList ? "grid grid-cols-6 gap-1.5 py-1.5 [&>div>button]:h-7 [&>div>button]:px-1.5 [&>div>button]:text-[11px]" : "flex flex-wrap gap-2 py-2")}>
+          <div className={cn("min-w-0 items-center gap-2", compactList ? "hidden" : "flex")}>
             <Filter className="h-4 w-4 text-gray-400 shrink-0" />
             <span className="text-xs font-medium text-gray-500 hidden sm:inline">Bộ lọc</span>
           </div>
           <SearchableFilterSelect
-            className="w-[110px] shrink-0 2xl:w-[130px]"
+            className={compactList ? "col-span-3 min-w-0 w-full" : "w-[110px] shrink-0 2xl:w-[130px]"}
             label="Dự án"
             searchPlaceholder="Tìm dự án..."
             value={projectId}
@@ -603,7 +612,7 @@ return (
             options={projects.map((p) => ({ value: p.id, label: p.name }))}
           />
           <SearchableFilterMultiSelect
-            className="w-[120px] shrink-0 2xl:w-[140px]"
+            className={compactList ? "col-span-3 min-w-0 w-full" : "w-[120px] shrink-0 2xl:w-[140px]"}
             label="Công việc"
             searchPlaceholder="Tìm công việc..."
             value={workTaskIds}
@@ -612,23 +621,23 @@ return (
           />
           {!isMember && (
             <MemberFilterMultiSelect
-              className="w-[130px] shrink-0 2xl:w-[150px]"
-              label="Người thực hiện"
+              className={compactList ? "col-span-2 min-w-0 w-full [&>button]:px-2" : "w-[130px] shrink-0 2xl:w-[150px]"}
+              label={compactList ? "Người" : "Người thực hiện"}
               value={assigneeIds}
               onChange={setAssigneeIds}
               options={members}
             />
           )}
           <SearchableFilterMultiSelect
-            className="w-[112px] shrink-0 2xl:w-[124px]"
-            label="Mức độ ưu tiên"
+            className={compactList ? cn("min-w-0 w-full [&>button]:px-2", isMember ? "col-span-3" : "col-span-2") : "w-[112px] shrink-0 2xl:w-[124px]"}
+            label={compactList ? "Ưu tiên" : "Mức độ ưu tiên"}
             searchPlaceholder="Tìm mức ưu tiên..."
             value={priorities}
             onChange={(values) => setPriorities(values as TaskPriority[])}
             options={TASK_PRIORITY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
           />
           <SearchableFilterMultiSelect
-            className="w-[92px] shrink-0 2xl:w-[104px]"
+            className={compactList ? cn("min-w-0 w-full [&>button]:px-2", isMember ? "col-span-3" : "col-span-2") : "w-[92px] shrink-0 2xl:w-[104px]"}
             label="Trạng thái"
             searchPlaceholder="Tìm trạng thái..."
             value={statuses}
@@ -636,23 +645,23 @@ return (
             options={SUBTASK_STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
           />
           {/* Active filter chips */}
-          {(projectId || workTaskIds.length || assigneeIds.length || priorities.length || statuses.length) && (
-            <div className="flex shrink-0 items-center gap-1.5 ml-auto border-l border-gray-200 pl-2">
+          {Boolean(projectId || workTaskIds.length || assigneeIds.length || priorities.length || statuses.length) && (
+            <div className={cn("flex min-w-0 items-center gap-1.5 [&>span]:min-w-0 [&>span]:whitespace-nowrap [&>span>button]:shrink-0", compactList ? "col-span-6 w-full flex-nowrap [&>span]:max-w-[calc(100%-2rem)] [&>span]:text-[10px]" : "ml-auto flex-wrap border-l border-gray-200 pl-2 [&>span]:max-w-full")}>
               {projectId && projects.find(p => p.id === projectId) && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 text-brand-700 px-2 py-0.5 text-xs font-medium">
-                  {projects.find(p => p.id === projectId)!.name}
+                  <span className="min-w-0 truncate" title={projects.find(p => p.id === projectId)!.name}>{projects.find(p => p.id === projectId)!.name}</span>
                   <button type="button" onClick={() => handleProjectChange("")} className="hover:bg-brand-100 rounded-full p-0.5" aria-label="Xóa lọc dự án"><X className="h-3 w-3" /></button>
                 </span>
               )}
               {workTaskIds.map(id => workTasks.find(t => t.id === id)).filter(Boolean).map(t => (
                 <span key={t!.id} className="inline-flex items-center gap-1 rounded-full bg-sky-50 text-sky-700 px-2 py-0.5 text-xs font-medium">
-                  {t!.title}
+                  <span className="min-w-0 truncate" title={t!.title}>{t!.title}</span>
                   <button type="button" onClick={() => setWorkTaskIds(curr => curr.filter(x => x !== t!.id))} className="hover:bg-sky-100 rounded-full p-0.5" aria-label={`Xóa lọc ${t!.title}`}><X className="h-3 w-3" /></button>
                 </span>
               ))}
               {assigneeIds.map(id => members.find(m => m.id === id)).filter(Boolean).map(m => (
                 <span key={m!.id} className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 text-xs font-medium">
-                  {m!.name}
+                  <span className="min-w-0 truncate" title={m!.name}>{m!.name}</span>
                   <button type="button" onClick={() => setAssigneeIds(curr => curr.filter(x => x !== m!.id))} className="hover:bg-emerald-100 rounded-full p-0.5" aria-label={`Xóa lọc ${m!.name}`}><X className="h-3 w-3" /></button>
                 </span>
               ))}
@@ -670,11 +679,13 @@ return (
               ))}
               <button
                 type="button"
+                title="Xóa tất cả bộ lọc"
+                aria-label="Xóa tất cả bộ lọc"
                 onClick={() => { handleProjectChange(""); setWorkTaskIds([]); setAssigneeIds([]); setPriorities([]); setStatuses([]); }}
-                className="flex h-9 items-center gap-1 rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 px-2 text-xs font-medium transition-colors"
+                className="ml-auto flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 px-2 text-xs font-medium transition-colors"
               >
                 <X className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Xóa tất cả</span>
+                <span className={compactList ? "hidden" : "hidden sm:inline"}>Xóa tất cả</span>
               </button>
             </div>
           )}
@@ -748,6 +759,8 @@ return (
             onPassTest={(subtask) => void handleTest(subtask, true)}
             onFailTest={(subtask) => void handleTest(subtask, false)}
             compact={compactList}
+            onCreate={() => setFormModal({ mode: "create" })}
+            deletingId={deletingId}
             activeId={activeSubtaskId}
           />
         ) : viewMode === "table" ? (

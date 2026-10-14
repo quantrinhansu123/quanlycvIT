@@ -68,6 +68,7 @@ function fitPromptTextarea(element: HTMLTextAreaElement | null) {
 
 interface SubtaskPromptPanelProps {
   subtaskId: string;
+  taskDetailOptions: { value: string; label: string }[];
   initialItems: SubtaskPromptItem[];
   initialDataLoaded?: boolean;
   importRequest?: SubtaskPromptImportRequest | null;
@@ -77,12 +78,14 @@ interface SubtaskPromptPanelProps {
 
 export interface SubtaskPromptImportRequest {
   requestId: string;
+  taskTitle: string;
   content: string;
   imageUrls: string[];
 }
 
 export function SubtaskPromptPanel({
   subtaskId,
+  taskDetailOptions,
   initialItems,
   initialDataLoaded = false,
   importRequest,
@@ -165,7 +168,9 @@ export function SubtaskPromptPanel({
   function persist(next: SubtaskPromptItem[]) {
     const generation = ++saveGenerationRef.current;
     setSaveStatus("saving");
-    const payload = next.filter((item) => item.content.trim() || itemImageUrls(item).length > 0);
+    const payload = next
+      .filter((item) => item.content.trim() || itemImageUrls(item).length > 0 || (item.taskTitle?.trim() ?? ""))
+      .map((item) => ({ ...item, taskTitle: item.taskTitle ?? "" }));
     saveQueueRef.current = saveQueueRef.current
       .catch(() => undefined)
       .then(async () => {
@@ -174,6 +179,7 @@ export function SubtaskPromptPanel({
           const savedById = new Map(savedItems.map((item) => [item.id, item]));
           replaceItems(itemsRef.current.map((item) => ({
             ...item,
+            taskTitle: savedById.get(item.id)?.taskTitle ?? item.taskTitle,
             ...(savedById.get(item.id)?.createdAt
               ? { createdAt: savedById.get(item.id)!.createdAt }
               : {}),
@@ -302,7 +308,7 @@ export function SubtaskPromptPanel({
     const imageUrls = [...new Set(importRequest.imageUrls.filter(Boolean))].slice(0, MAX_IMAGES_PER_ITEM);
     const current = itemsRef.current;
     const emptyIndex = current.findIndex(
-      (item) => !item.content.trim() && itemImageUrls(item).length === 0
+      (item) => !item.content.trim() && itemImageUrls(item).length === 0 && !item.taskTitle?.trim()
     );
 
     if (emptyIndex < 0 && current.length >= MAX_PROMPT_ITEMS) {
@@ -318,6 +324,7 @@ export function SubtaskPromptPanel({
     hasEditedRef.current = true;
     const importedItem: SubtaskPromptItem = {
       id: crypto.randomUUID(),
+      taskTitle: importRequest.taskTitle,
       content,
       imageUrls,
       status: "unprocessed",
@@ -385,7 +392,7 @@ export function SubtaskPromptPanel({
         </div>
 
         <div className="mt-5 w-0 min-w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-gray-200 [contain:inline-size]">
-          <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+          <table className="w-full min-w-[900px] border-collapse text-left text-sm">
             <thead className="bg-gray-50">
               <tr className="border-b border-gray-200 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
                 <th className="w-10 px-3 py-3">
@@ -402,6 +409,7 @@ export function SubtaskPromptPanel({
                   />
                 </th>
                 <th className="w-12 whitespace-nowrap px-2 py-3">#</th>
+                <th className="w-[180px] min-w-[180px] px-2 py-3">Chi tiết Task</th>
                 <th className="min-w-[220px] px-2 py-3">Nội dung yêu cầu</th>
                 <th className="min-w-[260px] whitespace-nowrap px-2 py-3">Ảnh tham chiếu</th>
                 <th className="w-[140px] whitespace-nowrap px-2 py-3">Trạng thái</th>
@@ -432,6 +440,22 @@ export function SubtaskPromptPanel({
                       />
                     </td>
                     <td className="px-2 py-3 text-xs font-semibold text-gray-500">{index + 1}</td>
+                    <td className="px-2 py-3 text-sm font-medium text-gray-800">
+                      <select
+                        value={item.taskTitle ?? ""}
+                        onChange={(event) => updateItem(item.id, { taskTitle: event.target.value }, true)}
+                        aria-label={`Chi tiết Task của yêu cầu ${index + 1}`}
+                        className="h-9 w-full rounded-lg border border-gray-200 bg-white px-2 text-sm text-gray-800 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                      >
+                        <option value="">Chọn chi tiết Task</option>
+                        {item.taskTitle && !taskDetailOptions.some((option) => option.value === item.taskTitle) && (
+                          <option value={item.taskTitle}>{item.taskTitle} (đã lưu)</option>
+                        )}
+                        {taskDetailOptions.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </td>
                     <td className="px-2 py-3">
                       <textarea
                         ref={fitPromptTextarea}

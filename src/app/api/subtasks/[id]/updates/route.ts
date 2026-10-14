@@ -1,5 +1,5 @@
 import { ApiException, apiSuccess, handleApiError, readJsonObject } from "@/lib/api/response";
-import { parseSubtaskUpdates } from "@/lib/api/validation";
+import { parseSubtaskHandover, parseSubtaskUpdates } from "@/lib/api/validation";
 import { createApiSupabaseClient } from "@/lib/supabase/api";
 import { assertSubtaskReadable, requireRequestAccount } from "@/lib/supabase/authorization";
 import { updateSubtaskUpdates } from "@/lib/supabase/data";
@@ -28,8 +28,18 @@ export async function PUT(request: Request, { params }: RouteParams) {
       }
     }
 
-    const updates = parseSubtaskUpdates(await readJsonObject(request));
-    const subtask = await updateSubtaskUpdates(supabase, id, updates);
+    const body = await readJsonObject(request);
+    const updates = parseSubtaskUpdates(body);
+    if (body.description !== undefined && (typeof body.description !== "string" || body.description.length > 5000)) {
+      throw new ApiException("Mô tả chi tiết không hợp lệ (tối đa 5000 ký tự).", 400);
+    }
+    if (body.handover !== undefined && (!body.handover || typeof body.handover !== "object" || Array.isArray(body.handover))) {
+      throw new ApiException("Trạng thái chi tiết không hợp lệ.", 400);
+    }
+    const subtask = await updateSubtaskUpdates(supabase, id, updates, {
+      ...(typeof body.description === "string" ? { description: body.description.trim() } : {}),
+      ...(body.handover !== undefined ? { handover: parseSubtaskHandover(body.handover as Record<string, unknown>) } : {}),
+    });
     if (!subtask) throw new ApiException("Không tìm thấy Task.", 404);
     return apiSuccess(subtask, 200, "Đã lưu lần bổ sung.");
   } catch (error) {

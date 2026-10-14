@@ -2,7 +2,7 @@
 
 import { Fragment, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarDays, CheckCircle2, Eye, FilePenLine, FolderOpen, History, ListTodo, Pencil, Trash2, XCircle } from "lucide-react";
+import { CalendarDays, CheckCircle2, Eye, FilePenLine, FolderOpen, History, ListTodo, Pencil, Plus, Trash2, XCircle } from "lucide-react";
 import type { Subtask } from "@/types/subtask";
 import { isSubtaskOverdue } from "@/types/subtask";
 import type { WorkTaskDirectoryItem } from "@/types/task";
@@ -32,6 +32,8 @@ interface SubtaskTableProps {
   onViewReports: (subtask: Subtask) => void;
   onEdit: (subtask: Subtask) => void;
   onDelete: (subtask: Subtask) => void;
+  onCreate?: () => void;
+  deletingId?: string | null;
   hideWorkTaskColumn?: boolean;
   /** Truyền vào để hiện thêm cột "Dự án" ngay sau cột "Thuộc công việc". */
   projectsById?: Map<string, ProjectDirectoryItem>;
@@ -110,6 +112,8 @@ export function SubtaskTable({
   onViewReports,
   onEdit,
   onDelete,
+  onCreate,
+  deletingId,
   hideWorkTaskColumn = false,
   projectsById,
   canApprove = false,
@@ -193,7 +197,21 @@ export function SubtaskTable({
                 aria-label="Chọn tất cả"
               />
             </th>
-            <th className={cn("whitespace-nowrap px-2", compact ? "py-2" : "py-3")}>Tên task</th>
+            <th className={cn("whitespace-nowrap px-2", compact ? "py-2" : "py-3")}>
+              <div className="flex items-center justify-between gap-2">
+                <span>Tên task</span>
+                {compact && !readOnly && onCreate && (
+                  <button
+                    type="button"
+                    onClick={onCreate}
+                    className="inline-flex h-7 items-center gap-1 rounded-lg bg-brand-600 px-2 text-xs font-semibold normal-case tracking-normal text-white hover:bg-brand-700"
+                    aria-label="Thêm Task"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Thêm
+                  </button>
+                )}
+              </div>
+            </th>
             {!compact && (
               <>
                 {!hideWorkTaskColumn && <th className="whitespace-nowrap px-2 py-3">Thuộc công việc</th>}
@@ -236,7 +254,12 @@ export function SubtaskTable({
                     icon: History,
                     label: "Lịch sử báo cáo",
                     onClick: () => onViewReports(subtask),
-                  }]
+                  }, ...(subtask.status === "done" ? [{
+                    icon: Trash2,
+                    label: "Xóa task",
+                    tone: "danger" as const,
+                    onClick: () => onDelete(subtask),
+                  }] : [])]
                 : needsAcceptance && onAccept
                 ? [{
                     icon: CheckCircle2,
@@ -348,13 +371,33 @@ export function SubtaskTable({
                   />
                 </td>
                 <td className={cn("min-w-0 px-2", compact ? "py-1.5 align-middle" : "py-3 align-top")}>
+                  <div className="flex min-w-0 items-start gap-2">
                   <IntentPrefetchLink
                     href={`/quan-ly-cong-viec/danh-sach-task/${subtask.id}`}
-                    className={cn(WORK_ITEM_TITLE_CLASS, "line-clamp-2")}
+                    className={cn(WORK_ITEM_TITLE_CLASS, "line-clamp-2", compact && "min-w-0 flex-1")}
                     onClick={() => splitView?.openDetail()}
                   >
                     {subtask.title}
                   </IntentPrefetchLink>
+                  {compact && (
+                    <div className="flex shrink-0 items-center gap-1">
+                      {actionItems.filter((action) => action.icon === Pencil || action.icon === Trash2).map((action) => (
+                        <button
+                          key={action.label}
+                          type="button"
+                          onClick={action.onClick}
+                          disabled={deletingId === subtask.id}
+                          aria-label={`${action.label}: ${subtask.title}`}
+                          title={action.label}
+                          className={cn("inline-flex h-7 w-7 items-center justify-center rounded-lg transition disabled:opacity-40",
+                            action.icon === Trash2 ? "text-rose-500 hover:bg-rose-50" : "text-brand-600 hover:bg-brand-50")}
+                        >
+                          <action.icon className="h-3.5 w-3.5" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  </div>
                   {compact && (
                     <div className="mt-1">
                       <ProgressBar value={subtask.progress} className="min-w-0 flex-1" />

@@ -26,8 +26,6 @@ export default async function SubtaskDetailPage({ params }: SubtaskDetailPagePro
       initialWorkTasks={parentWorkTask ? [parentWorkTask] : []}
       initialReports={[]}
       initialMembers={[]}
-      initialActivity={[]}
-      initialActivityTotal={0}
       initialTestHistory={[]}
     />
   );

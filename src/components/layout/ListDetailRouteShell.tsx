@@ -8,18 +8,20 @@ interface ListDetailRouteShellProps {
   basePath: string;
   listSlot: ReactNode;
   children: ReactNode;
+  compactListWidthClassName?: string;
 }
 
 export function ListDetailRouteShell({
   basePath,
   listSlot,
   children,
+  compactListWidthClassName,
 }: ListDetailRouteShellProps) {
   const pathname = usePathname();
   const detailOpen = pathname.startsWith(`${basePath}/`);
 
   return (
-    <SplitViewShell listSlot={listSlot} detailOpen={detailOpen} detailKey={pathname}>
+    <SplitViewShell listSlot={listSlot} detailOpen={detailOpen} detailKey={pathname} compactListWidthClassName={compactListWidthClassName}>
       {children}
     </SplitViewShell>
   );

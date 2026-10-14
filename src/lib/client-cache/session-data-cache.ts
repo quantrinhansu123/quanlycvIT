@@ -43,6 +43,7 @@ export class SessionDataCache {
   private readonly invalidationDependencies: Readonly<Record<string, readonly string[]>>;
   private activePrefetchCount = 0;
   private prefetchQueue: Array<() => void> = [];
+  private queuedPrefetchKeys = new Set<string>();
 
   constructor(options: {
     maxEntries?: number;
@@ -111,7 +112,7 @@ export class SessionDataCache {
     this.versions.set(key, version);
     const promise = fetcher(controller.signal)
       .then((data) => {
-        this.pending.delete(key);
+        if (this.pending.get(key)?.controller === controller) this.pending.delete(key);
         // Lớp bảo vệ thứ hai ngoài AbortController: fetcher/transport có thể vẫn
         // resolve sau abort. Chỉ request mới nhất trong cùng epoch được ghi cache.
         if (this.epoch === epoch && this.versions.get(key) === version) {
@@ -120,7 +121,7 @@ export class SessionDataCache {
         return data;
       })
       .catch((error: unknown) => {
-        this.pending.delete(key);
+        if (this.pending.get(key)?.controller === controller) this.pending.delete(key);
         throw error;
       });
     this.pending.set(key, { promise, controller });
@@ -129,11 +130,14 @@ export class SessionDataCache {
 
   /** Nạp trước dữ liệu khi có ý định điều hướng (hover/focus) — âm thầm bỏ qua nếu lỗi. */
   prefetch<T>(key: string, fetcher: Fetcher<T>, ttl: CacheTtl): void {
-    if (this.pending.has(key)) return;
+    if (this.pending.has(key) || this.queuedPrefetchKeys.has(key)) return;
     const entry = this.get<T>(key);
     if (entry && !this.isStale(key)) return;
 
     const run = () => {
+      this.queuedPrefetchKeys.delete(key);
+      // A foreground request or mutation may have populated this key while queued.
+      if (this.pending.has(key) || (this.get<T>(key) && !this.isStale(key))) return;
       this.activePrefetchCount++;
       this.fetch(key, fetcher, ttl)
         .catch(() => {
@@ -148,15 +152,16 @@ export class SessionDataCache {
     if (this.activePrefetchCount < MAX_CONCURRENT_PREFETCH) {
       run();
     } else if (this.prefetchQueue.length < MAX_QUEUED_PREFETCH) {
+      this.queuedPrefetchKeys.add(key);
       this.prefetchQueue.push(run);
     }
     // Hàng đợi đầy: bỏ qua yêu cầu prefetch này, không phải lỗi — người dùng lướt nhanh qua nhiều dòng.
   }
 
   private drainPrefetchQueue(): void {
-    if (this.activePrefetchCount >= MAX_CONCURRENT_PREFETCH) return;
-    const next = this.prefetchQueue.shift();
-    if (next) next();
+    while (this.activePrefetchCount < MAX_CONCURRENT_PREFETCH && this.prefetchQueue.length > 0) {
+      this.prefetchQueue.shift()!();
+    }
   }
 
   /**
@@ -209,6 +214,7 @@ export class SessionDataCache {
     this.entries.clear();
     this.versions.clear();
     this.prefetchQueue = [];
+    this.queuedPrefetchKeys.clear();
     for (const key of Array.from(this.listeners.keys())) this.notify(key);
   }
 

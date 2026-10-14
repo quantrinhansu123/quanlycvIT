@@ -24,6 +24,7 @@ interface AttachmentValue {
 
 interface InlineTaskAttachmentEditorProps extends AttachmentValue {
   entityLabel: string;
+  compact?: boolean;
   onUploadFile: (file: File) => Promise<TaskFileAttachment>;
   onUploadImage: (file: File) => Promise<string>;
   onSave: (value: AttachmentValue) => Promise<void>;
@@ -60,6 +61,7 @@ function normalizeLinks(links: TaskLinkAttachment[]): TaskLinkAttachment[] {
 
 export function InlineTaskAttachmentEditor({
   entityLabel,
+  compact = false,
   files,
   links,
   images,
@@ -235,14 +237,14 @@ export function InlineTaskAttachmentEditor({
   }
 
   return (
-    <div className="mt-4 border-t border-gray-100 pt-3">
-      <div className="mb-2 flex min-h-5 items-center justify-end text-[11px] font-medium">
+    <div className={compact ? "mt-3 border-t border-gray-100 pt-3" : "mt-4 border-t border-gray-100 pt-3"}>
+      {(!compact || saving || saved) && <div className="mb-2 flex min-h-5 items-center justify-end text-[11px] font-medium">
         {saving ? (
           <span className="flex items-center gap-1.5 text-brand-600"><LoaderCircle className="h-3.5 w-3.5 animate-spin" />Đang tự động lưu...</span>
         ) : saved ? (
           <span className="flex items-center gap-1.5 text-emerald-600"><CheckCircle2 className="h-3.5 w-3.5" />Đã tự động lưu</span>
         ) : null}
-      </div>
+      </div>}
       <TaskAttachmentFields
         label={`Tài liệu ${entityLabel}`}
         entityLabel={entityLabel}

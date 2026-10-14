@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, CheckCircle2, LoaderCircle } from "lucide-react";
+import { CalendarDays, CheckCircle2, LoaderCircle, Trash2 } from "lucide-react";
 import type { Subtask } from "@/types/subtask";
 import { isSubtaskOverdue } from "@/types/subtask";
 import type { WorkTaskDirectoryItem } from "@/types/task";
@@ -68,7 +68,17 @@ export function SubtaskCard({
         ) : (
           <span />
         )}
-        {viewOnly ? null : needsAcceptance && onAccept ? (
+        {viewOnly ? subtask.status === "done" ? (
+          <button
+            type="button"
+            onClick={() => onDelete(subtask)}
+            aria-label="Xóa task"
+            title="Xóa task"
+            className="rounded-lg p-2 text-rose-600 hover:bg-rose-50"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        ) : null : needsAcceptance && onAccept ? (
           <button
             type="button"
             onClick={() => onAccept(subtask)}

@@ -32,6 +32,7 @@ export default function SubtaskListLayout({ children }: { children: React.ReactN
   return (
     <ListDetailRouteShell
       basePath="/quan-ly-cong-viec/danh-sach-task"
+      compactListWidthClassName="xl:w-[17.5%] xl:min-w-[280px]"
       listSlot={
         <Suspense fallback={<SubtaskListFallback />}>
           <SubtaskListPanel />
