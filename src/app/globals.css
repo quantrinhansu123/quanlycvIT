@@ -17,7 +17,7 @@
 :root {
   --background: #f8fafc;
   --foreground: #111827;
-  --font-app: "Be Vietnam Pro", "Segoe UI", Arial, sans-serif;
+  --font-app: var(--font-roboto), "Roboto", sans-serif;
 }
 
 html[data-theme="dark"] {
@@ -29,6 +29,8 @@ html[data-theme="dark"] {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-app);
+  --font-serif: var(--font-app);
+  --font-mono: var(--font-app);
 }
 
 html {

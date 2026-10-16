@@ -1,7 +1,8 @@
 "use client";
 
+import { Fragment } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarDays, Eye, Pencil, Trash2 } from "lucide-react";
+import { CalendarDays, Eye, FolderOpen, Pencil, Trash2 } from "lucide-react";
 import type { WorkTask } from "@/types/task";
 import { isTaskOverdue } from "@/types/task";
 import type { ProjectDirectoryItem, ProjectMember } from "@/types/project";
@@ -28,8 +29,22 @@ interface TaskTableProps {
   onEdit: (task: WorkTask) => void;
   onDelete: (task: WorkTask) => void;
   hideProjectColumn?: boolean;
+  grouped?: boolean;
   readOnly?: boolean;
   deletingId?: string | null;
+}
+
+export function buildTaskGroups(tasks: WorkTask[], projectsById: Map<string, ProjectDirectoryItem>) {
+  const groups = new Map<string, { key: string; name: string; items: WorkTask[] }>();
+  for (const task of tasks) {
+    let group = groups.get(task.projectId);
+    if (!group) {
+      group = { key: task.projectId, name: projectsById.get(task.projectId)?.name ?? "Không thuộc dự án", items: [] };
+      groups.set(task.projectId, group);
+    }
+    group.items.push(task);
+  }
+  return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name, "vi"));
 }
 
 export function TaskTable({
@@ -42,6 +57,7 @@ export function TaskTable({
   onEdit,
   onDelete,
   hideProjectColumn = false,
+  grouped = false,
   readOnly = false,
   deletingId = null,
 }: TaskTableProps) {
@@ -51,6 +67,9 @@ export function TaskTable({
     selectableTasks.length > 0 &&
     selectableTasks.every((task) => selectedIds.includes(task.id));
   const columnWidths = taskColumnWidths(hideProjectColumn, readOnly);
+  const groups = grouped ? buildTaskGroups(tasks, projectsById) : [];
+  const orderedTasks = grouped ? groups.flatMap((group) => group.items) : tasks;
+  const groupStarts = new Map(groups.map((group) => [group.items[0].id, group]));
 
   return (
     <div className="min-w-0">
@@ -87,14 +106,27 @@ export function TaskTable({
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
-          {tasks.map((task) => {
+          {orderedTasks.map((task) => {
+            const group = groupStarts.get(task.id);
             const project = projectsById.get(task.projectId);
             const assignee = membersById.get(task.assigneeId);
             const overdue = isTaskOverdue(task);
             const locked = task.status === "done";
 
             return (
-              <tr key={task.id} className="data-table-row group">
+              <Fragment key={task.id}>
+              {group && (
+                <tr className="bg-violet-50/80">
+                  <td colSpan={columnWidths.length} className="px-3 py-2.5">
+                    <div className="flex items-center gap-2 text-xs font-semibold text-violet-800">
+                      <FolderOpen className="h-4 w-4 shrink-0" />
+                      <span>{group.name}</span>
+                      <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px]">{group.items.length} công việc</span>
+                    </div>
+                  </td>
+                </tr>
+              )}
+              <tr className="data-table-row group">
                 {!readOnly && <td className="px-2 py-3 align-top">
                   <input
                     type="checkbox"
@@ -200,6 +232,7 @@ export function TaskTable({
                   </td>
                 )}
               </tr>
+              </Fragment>
             );
           })}
         </tbody>

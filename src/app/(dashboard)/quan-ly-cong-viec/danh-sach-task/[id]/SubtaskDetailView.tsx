@@ -53,6 +53,8 @@ import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 import { InlineTaskAttachmentEditor } from "@/components/tasks/InlineTaskAttachmentEditor";
 import { DetailAttachments } from "@/components/tasks/DetailAttachments";
+import { TaskAttachmentPopup } from "@/components/tasks/TaskAttachmentPopup";
+import { AcceptanceMinutesPopup } from "@/components/subtasks/AcceptanceMinutesPopup";
 import { useCurrentAccount } from "@/hooks/useCurrentAccount";
 import { useSessionDataCache } from "@/components/providers/SessionDataCacheProvider";
 import { CACHE_RESOURCE } from "@/lib/client-cache/resources";
@@ -180,6 +182,7 @@ export function SubtaskDetailView({
   const [timeRecords, setTimeRecords] = useState<SubtaskTimeRecord[]>([]);
   const [savingTimeRecord, setSavingTimeRecord] = useState(false);
   const [iterationEditor, setIterationEditor] = useState<IterationDraft | null>(null);
+  const [selectedDetailIds, setSelectedDetailIds] = useState<string[]>([]);
   const [savingIteration, setSavingIteration] = useState(false);
   const [deletingDetailId, setDeletingDetailId] = useState<string | null>(null);
   const [secondaryLoading, setSecondaryLoading] = useState(false);
@@ -751,6 +754,8 @@ export function SubtaskDetailView({
   );
   const canTest = subtask.status === "testing" && (isTester || account?.role === "admin");
   const statusLocked = subtask.status === "done";
+  const detailIds = [...(!subtask.handover?.initialDeleted ? [INITIAL_HANDOVER_SOURCE_ID] : []), ...subtask.updates.map((entry) => entry.id)];
+  const selectedVisibleDetailIds = detailIds.filter((id) => selectedDetailIds.includes(id));
   const canUpdateStatus = account?.role === "admin" || (account?.role === "member" && !isTester);
   const statusOptions = account?.role === "member" && !statusLocked
     ? SUBTASK_STATUS_OPTIONS.filter((option) => option.value !== "done")
@@ -1023,6 +1028,7 @@ export function SubtaskDetailView({
                 title="Chi tiết Task"
                 subtitle={deletingDetailId ? "Đang lưu thay đổi xóa chi tiết..." : savingAcceptance ? "Đang lưu trạng thái chi tiết..." : "Mô tả Task và thời hạn thực hiện chi tiết"}
                 headerAction={<div className="flex flex-wrap gap-2">
+                  <AcceptanceMinutesPopup task={subtask} selectedIds={selectedVisibleDetailIds} workTaskTitle={workTask?.title} disabled={savingAcceptance || savingIteration || Boolean(deletingDetailId)} />
                   <Button type="button" variant="secondary" size="sm"
                     disabled={exportingDetailPdf || savingAcceptance || savingIteration || Boolean(deletingDetailId)}
                     title="Mở hộp thoại in từ các chi tiết đã lưu"
@@ -1064,121 +1070,48 @@ export function SubtaskDetailView({
                 </div>}
               >
                 <div className="space-y-2.5">
-                  {!subtask.handover?.initialDeleted && <div className="rounded-xl border border-gray-200 bg-white p-3 sm:p-4">
-                    <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-                      <span className="text-sm font-semibold text-gray-700">{subtask.handover?.titles?.[INITIAL_HANDOVER_SOURCE_ID] ?? taskDetailName(subtask.description)}</span>
-                      <div className="flex flex-wrap items-center gap-2">
-                        {!statusLocked && (
-                          <button
-                            type="button"
-                            onClick={() => setIterationEditor({
-                              id: INITIAL_HANDOVER_SOURCE_ID,
-                              title: subtask.handover?.titles?.[INITIAL_HANDOVER_SOURCE_ID] ?? taskDetailName(subtask.description),
-                              description: subtask.description ?? "",
-                              files: subtask.files,
-                              links: subtask.links,
-                              images: subtask.images,
-                              acceptance: subtask.handover?.rows?.[INITIAL_HANDOVER_SOURCE_ID] ?? emptyAcceptanceRow(),
-                            })}
-                            disabled={savingIteration || Boolean(iterationEditor) || Boolean(deletingDetailId)}
-                            className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs font-medium text-gray-500 hover:bg-violet-50 hover:text-violet-700 disabled:opacity-50"
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                            Sửa
-                          </button>
-                        )}
-                        {subtask.createdAt && (
-                          <span className="text-xs text-gray-400">{formatDateVN(subtask.createdAt)}</span>
-                        )}
-                        {!statusLocked && canEditHandover && (
-                          <button type="button"
-                            onClick={() => void handleDeleteDetail(INITIAL_HANDOVER_SOURCE_ID, subtask.handover?.titles?.[INITIAL_HANDOVER_SOURCE_ID] ?? taskDetailName(subtask.description))}
-                            disabled={Boolean(deletingDetailId) || savingIteration || savingAcceptance || Boolean(iterationEditor)}
-                            className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-50">
-                            <Trash2 className="h-3.5 w-3.5" /> Xóa
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => setPromptImport({
-                            requestId: crypto.randomUUID(),
-                            taskTitle: INITIAL_HANDOVER_SOURCE_ID,
-                            content: subtask.description ?? "",
-                            imageUrls: subtask.images,
-                          })}
-                          disabled={!subtask.description?.trim() && subtask.images.length === 0}
-                          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-sky-200 bg-white px-2.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                          <Send className="h-3.5 w-3.5" />
-                          Đưa vào Prompt
-                        </button>
-                      </div>
-                    </div>
-                    {iterationEditor?.id === INITIAL_HANDOVER_SOURCE_ID ? (
-                      <div>
-                        <IterationTitleInput value={iterationEditor.title} onChange={(title) => setIterationEditor((current) => current ? { ...current, title } : current)} />
-                        <p className="mb-1 text-xs font-semibold text-gray-500">Nội dung</p>
-                        <textarea
-                          autoFocus
-                          aria-label="Mô tả chi tiết Task"
-                          maxLength={5000}
-                          rows={3}
-                          value={iterationEditor.description}
-                          onChange={(event) => setIterationEditor((current) => current ? { ...current, description: event.target.value } : current)}
-                          placeholder="Nhập nội dung chi tiết Task..."
-                          className="w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm leading-6 text-gray-700 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
-                        />
-                        <div className="mt-2 flex justify-end gap-2">
-                          <Button type="button" variant="ghost" size="sm" disabled={savingIteration} onClick={() => setIterationEditor(null)}>Hủy</Button>
-                          <Button type="button" size="sm" disabled={savingIteration} onClick={() => void handleSaveIteration()}>{savingIteration ? "Đang lưu..." : "Lưu"}</Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="max-w-full overflow-x-auto text-sm leading-6 text-gray-700">
-                        <DetailDescription description={subtask.description} emptyText="Chưa có mô tả cho Task này." />
-                      </div>
-                    )}
-                    <AcceptanceFields
-                      key={`${subtask.id}:initial`}
-                      members={subtask.assignees}
-                      row={subtask.handover?.rows?.[INITIAL_HANDOVER_SOURCE_ID] ?? emptyAcceptanceRow()}
-                      disabled={!canEditHandover || savingAcceptance || Boolean(deletingDetailId)}
-                      uploading={uploadingAcceptanceId === INITIAL_HANDOVER_SOURCE_ID}
-                      onSave={(patch) => saveAcceptance(INITIAL_HANDOVER_SOURCE_ID, patch)}
-                      onUpload={(file) => void uploadAcceptanceImage(INITIAL_HANDOVER_SOURCE_ID, file)}
-                    />
-                    {statusLocked ? (
-                      <DetailAttachments
-                        entityLabel="Task"
-                        files={subtask.files}
-                        links={subtask.links}
-                        images={subtask.images}
-                      />
-                    ) : (
-                      <InlineTaskAttachmentEditor
-                        key={subtask.id}
-                        entityLabel="Task"
-                        compact
-                        files={subtask.files}
-                        links={subtask.links}
-                        images={subtask.images}
-                        onUploadFile={subtaskService.uploadFile}
-                        onUploadImage={subtaskService.uploadImage}
-                        onSave={handleAttachmentSave}
-                      />
-                    )}
-                  </div>}
-                  {subtask.handover?.initialDeleted && subtask.updates.length === 0 && !iterationEditor && (
-                    <p className="rounded-xl border border-dashed border-gray-200 p-4 text-sm text-gray-500">Chưa có chi tiết Task. Bấm Thêm chi tiết để tạo mới.</p>
-                  )}
-                  {subtask.updates.length > 0 && (
-                    <div className="space-y-2.5">
-                      {subtask.updates.map((entry) => (
-                        <div key={entry.id} className="rounded-xl border border-gray-200 bg-white p-3 sm:p-4">
-                          <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                  <div className="max-w-full overflow-x-auto rounded-xl border border-gray-200">
+                    <table className="w-full min-w-[1200px] table-fixed border-collapse text-sm [&_tbody>tr>td]:px-2 [&_tbody>tr>td]:py-2">
+                      <caption className="sr-only">Chi tiết Task</caption>
+                      <colgroup><col className="w-9" /><col className="w-[16%]" /><col className="w-[20%]" /><col className="w-[36%]" /><col className="w-[16%]" /><col className="w-[12%]" /></colgroup>
+                      <thead className="bg-gray-50 text-left text-xs font-semibold text-gray-500">
+                        <tr>
+                          <th scope="col" className="px-2 py-3">
+                            <input type="checkbox" aria-label="Chọn tất cả chi tiết Task" checked={detailIds.length > 0 && selectedVisibleDetailIds.length === detailIds.length} disabled={detailIds.length === 0}
+                              onChange={(event) => setSelectedDetailIds(event.target.checked ? detailIds : [])}
+                              className="h-4 w-4 rounded border-gray-300 accent-violet-600" />
+                          </th>
+                          <th scope="col" className="px-3 py-3">Chi tiết / Thao tác</th>
+                          <th scope="col" className="px-3 py-3">Nội dung</th>
+                          <th scope="col" className="px-3 py-3">Nghiệm thu</th>
+                          <th scope="col" className="px-3 py-3">Nhân sự</th>
+                          <th scope="col" className="px-3 py-3">Tệp đính kèm</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 [&>tr>td]:border-r [&>tr>td]:border-gray-100 [&>tr>td:last-child]:border-r-0">
+                      {[
+                        ...(!subtask.handover?.initialDeleted ? [{
+                          id: INITIAL_HANDOVER_SOURCE_ID,
+                          description: subtask.description,
+                          createdAt: subtask.createdAt,
+                          files: subtask.files,
+                          links: subtask.links,
+                          images: subtask.images,
+                        }] : []),
+                        ...subtask.updates,
+                      ].map((entry) => (
+                        <tr key={entry.id} className="align-top">
+                          <td className="px-2 py-3">
+                            <input type="checkbox" aria-label={`Chọn ${subtask.handover?.titles?.[entry.id] ?? taskDetailName(entry.description)} để lập biên bản nghiệm thu`}
+                              checked={selectedDetailIds.includes(entry.id)}
+                              onChange={(event) => setSelectedDetailIds((current) => event.target.checked ? [...current, entry.id] : current.filter((id) => id !== entry.id))}
+                              className="h-4 w-4 rounded border-gray-300 accent-violet-600" />
+                          </td>
+                          <td className="px-3 py-4">
+                          <div className="flex flex-col items-start gap-1">
                             <span className="text-sm font-semibold text-gray-700">{subtask.handover?.titles?.[entry.id] ?? taskDetailName(entry.description)}</span>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-xs text-gray-400">{formatDateVN(entry.createdAt)}</span>
+                            <span className="text-xs text-gray-400">{entry.createdAt ? formatDateVN(entry.createdAt) : "—"}</span>
+                            <div className="flex items-center gap-1 whitespace-nowrap">
                               {!statusLocked && canEditHandover && (
                                 <button type="button"
                                   onClick={() => void handleDeleteDetail(entry.id, subtask.handover?.titles?.[entry.id] ?? taskDetailName(entry.description))}
@@ -1215,13 +1148,16 @@ export function SubtaskDetailView({
                                   imageUrls: entry.images,
                                 })}
                                 disabled={!entry.description?.trim() && entry.images.length === 0}
-                                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-sky-200 bg-white px-2.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                title="Đưa vào Prompt"
+                                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-sky-200 bg-white text-sky-700 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-40"
                               >
                                 <Send className="h-3.5 w-3.5" />
-                                Đưa vào Prompt
+                                <span className="sr-only">Đưa vào Prompt</span>
                               </button>
                             </div>
                           </div>
+                          </td>
+                          <td className="px-3 py-4">
                           {iterationEditor?.id === entry.id ? (
                             <div>
                               <IterationTitleInput value={iterationEditor.title} onChange={(title) => setIterationEditor((current) => current ? { ...current, title } : current)} />
@@ -1245,7 +1181,11 @@ export function SubtaskDetailView({
                               <DetailDescription description={entry.description} emptyText="Chi tiết này chưa có mô tả." />
                             </div>
                           )}
+                          </td>
+                          <td className="px-3 py-4">
                           <AcceptanceFields
+                            compact
+                            hideMembers
                             key={`${subtask.id}:${entry.id}`}
                             members={subtask.assignees}
                             row={subtask.handover?.rows?.[entry.id] ?? emptyAcceptanceRow()}
@@ -1254,6 +1194,29 @@ export function SubtaskDetailView({
                             onSave={(patch) => saveAcceptance(entry.id, patch)}
                             onUpload={(file) => void uploadAcceptanceImage(entry.id, file)}
                           />
+                          </td>
+                          <td className="px-3 py-4">
+                            <fieldset disabled={!canEditHandover || savingAcceptance || Boolean(deletingDetailId)} className="flex max-h-28 flex-col gap-1 overflow-y-auto">
+                              <legend className="sr-only">Nhân sự của {subtask.handover?.titles?.[entry.id] ?? taskDetailName(entry.description)}</legend>
+                              {subtask.assignees.map((member) => (
+                                <label key={member.id} className="flex cursor-pointer items-center gap-1.5 rounded-md px-1 py-1 text-xs text-gray-700 hover:bg-violet-50 has-[:disabled]:cursor-default">
+                                  <input
+                                    type="checkbox"
+                                    checked={subtask.handover?.rows?.[entry.id]?.assigneeIds?.includes(member.id) ?? false}
+                                    onChange={(event) => {
+                                      const ids = subtask.handover?.rows?.[entry.id]?.assigneeIds ?? [];
+                                      void saveAcceptance(entry.id, { assigneeIds: event.target.checked ? [...ids, member.id] : ids.filter((id) => id !== member.id) });
+                                    }}
+                                    className="h-4 w-4 shrink-0 rounded border-gray-300 accent-violet-600"
+                                  />
+                                  {member.name}
+                                </label>
+                              ))}
+                              {subtask.assignees.length === 0 && <p className="text-xs text-gray-400">Chưa có nhân sự.</p>}
+                            </fieldset>
+                          </td>
+                          <td className="px-3 py-4">
+                          <TaskAttachmentPopup count={entry.files.length + entry.links.length + entry.images.length} readOnly={statusLocked}>
                           {statusLocked ? (
                             <DetailAttachments
                               entityLabel="Task"
@@ -1271,13 +1234,19 @@ export function SubtaskDetailView({
                               images={entry.images}
                               onUploadFile={subtaskService.uploadFile}
                               onUploadImage={subtaskService.uploadImage}
-                              onSave={(value) => handleUpdateAttachmentSave(entry.id, value)}
+                              onSave={(value) => entry.id === INITIAL_HANDOVER_SOURCE_ID ? handleAttachmentSave(value) : handleUpdateAttachmentSave(entry.id, value)}
                             />
                           )}
-                        </div>
+                          </TaskAttachmentPopup>
+                          </td>
+                        </tr>
                       ))}
-                    </div>
-                  )}
+                      {subtask.handover?.initialDeleted && subtask.updates.length === 0 && (
+                        <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-500">Chưa có chi tiết Task. Bấm Thêm chi tiết để tạo mới.</td></tr>
+                      )}
+                      </tbody>
+                    </table>
+                  </div>
                   {iterationEditor?.id === null && (
                     <div className="rounded-xl border border-dashed border-violet-300 bg-violet-50/40 p-3 sm:p-4">
                       <div className="mb-2 text-sm font-semibold text-violet-800">{iterationEditor.title.trim() || "Chi tiết mới"}</div>
@@ -1672,6 +1641,8 @@ function IterationTitleInput({ value, onChange }: { value: string; onChange: (va
 }
 
 function AcceptanceFields({
+  compact = false,
+  hideMembers = false,
   members,
   row,
   disabled,
@@ -1679,6 +1650,8 @@ function AcceptanceFields({
   onSave,
   onUpload,
 }: {
+  compact?: boolean;
+  hideMembers?: boolean;
   members: ProjectMember[];
   row: AcceptanceRow;
   disabled: boolean;
@@ -1703,7 +1676,7 @@ function AcceptanceFields({
     setSaving(true);
     try {
       // Only send editable fields so an uploaded image is preserved.
-      await onSave({ note: draft.note, status: draft.status, assigneeIds: draft.assigneeIds ?? [] });
+      await onSave({ note: draft.note, status: draft.status, ...(!hideMembers ? { assigneeIds: draft.assigneeIds ?? [] } : {}) });
       setDirty(false);
     } catch {
       // Keep the draft available for retry; the parent displays the error.
@@ -1713,12 +1686,12 @@ function AcceptanceFields({
   }
 
   return (
-    <div className="mt-3 grid grid-cols-1 items-end gap-3 rounded-lg bg-gray-50 p-3 @md/detail:grid-cols-[160px_140px_minmax(0,1fr)]">
-      <fieldset disabled={disabled || saving} className="order-4 min-w-0 @md/detail:col-span-3">
-        <legend className="mb-1.5 text-xs font-semibold text-gray-500">Nhân sự (chọn nhiều)</legend>
-        <div className="flex max-h-40 flex-wrap gap-2 overflow-y-auto rounded-lg border border-gray-200 bg-white p-2">
+    <div className={cn("grid items-end rounded-lg bg-gray-50", compact ? "grid-cols-[140px_100px_minmax(0,1fr)] gap-x-2 gap-y-1.5 p-2 [&_input:not([type=checkbox])]:h-8 [&_select]:h-8 [&_button]:h-8" : "mt-3 grid-cols-1 gap-3 p-3 @md/detail:grid-cols-[160px_140px_minmax(0,1fr)]")}>
+      {!hideMembers && <fieldset disabled={disabled || saving} className={cn("order-4 min-w-0", compact ? "col-span-2" : "@md/detail:col-span-3")}>
+        <legend className={cn("text-xs font-semibold text-gray-500", compact ? "sr-only" : "mb-1.5")}>Nhân sự (chọn nhiều)</legend>
+        <div className={cn("flex gap-2 overflow-y-auto rounded-lg border border-gray-200 bg-white", compact ? "h-8 items-center overflow-x-auto px-1" : "max-h-40 flex-wrap p-2")}>
           {members.map((member) => (
-            <label key={member.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-gray-700 hover:bg-violet-50 has-[:disabled]:cursor-default">
+            <label key={member.id} className={cn("flex cursor-pointer items-center gap-2 rounded-lg text-gray-700 hover:bg-violet-50 has-[:disabled]:cursor-default", compact ? "shrink-0 px-1 py-0.5 text-xs" : "px-2 py-1.5 text-sm")}>
               <input
                 type="checkbox"
                 checked={draft.assigneeIds?.includes(member.id) ?? false}
@@ -1732,7 +1705,7 @@ function AcceptanceFields({
           ))}
           {members.length === 0 && <p className="text-xs text-gray-400">Task chưa có người phụ trách.</p>}
         </div>
-      </fieldset>
+      </fieldset>}
       <div className="order-2 min-w-0">
         <p className="mb-1.5 text-xs font-semibold text-gray-500">Ảnh nghiệm thu</p>
         <div className="flex h-9 items-center gap-2">
@@ -1787,8 +1760,8 @@ function AcceptanceFields({
           className="mt-1.5 h-9 w-full rounded-lg border border-gray-200 bg-white px-2.5 text-sm font-normal text-gray-800 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 disabled:bg-gray-50"
         />
       </label>
-      <div className="order-5 flex items-center justify-end gap-3 @md/detail:col-span-3">
-        {dirty && <span className="text-xs text-amber-700">Có thay đổi chưa lưu</span>}
+      <div className={cn("order-5 flex items-center justify-end gap-3", compact && hideMembers ? "col-span-3" : !compact && "@md/detail:col-span-3")}>
+        {dirty && !compact && <span className="text-xs text-amber-700">Có thay đổi chưa lưu</span>}
         <Button type="button" size="sm" disabled={disabled || saving || !dirty} onClick={() => void saveDraft()}>
           {saving ? "Đang lưu..." : "Lưu thay đổi"}
         </Button>

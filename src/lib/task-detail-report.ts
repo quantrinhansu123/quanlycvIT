@@ -31,3 +31,10 @@ export function groupTaskDetailsForReport(task: Subtask) {
       }),
   })).filter((group) => group.entries.length > 0);
 }
+
+export function selectedAcceptanceDetails(task: Subtask, selectedIds: string[]) {
+  const selected = new Set(selectedIds);
+  return groupTaskDetailsForReport(task).flatMap((group) =>
+    group.entries.filter((entry) => selected.has(entry.id)).map((entry) => ({ ...entry, status: group.label }))
+  );
+}

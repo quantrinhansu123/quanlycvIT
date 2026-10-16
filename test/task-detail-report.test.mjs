@@ -31,3 +31,13 @@ test("deleted initial is excluded and legacy entries default to unfinished", () 
   assert.equal(groups[0].entries.length, 3);
   assert.equal(exports.groupTaskDetailsForReport({ ...task, updates: [], handover: { initialDeleted: true, rows: {} } }).length, 0);
 });
+
+test("acceptance minutes include only selected existing details with current statuses", () => {
+  const entries = exports.selectedAcceptanceDetails(task, ["review", "initial", "missing", "review"]);
+  assert.deepEqual(entries.map((entry) => entry.id), ["review", "initial"]);
+  assert.deepEqual(entries.map((entry) => entry.status), ["Nghiệm thu", "Hoàn thành"]);
+  assert.equal(entries[0].title, "Custom title");
+  assert.equal(entries[0].description, "Review");
+  assert.deepEqual(exports.selectedAcceptanceDetails(task, []), []);
+  assert.deepEqual(exports.selectedAcceptanceDetails({ ...task, handover: { initialDeleted: true, rows: {} } }, ["initial"]), []);
+});

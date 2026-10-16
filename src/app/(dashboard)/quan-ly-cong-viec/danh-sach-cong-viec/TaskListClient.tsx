@@ -8,6 +8,8 @@ import {
   ArrowLeft,
   Download,
   LayoutGrid,
+  FolderOpen,
+  ListTree,
   Plus,
   Search,
   Table as TableIcon,
@@ -26,7 +28,7 @@ import { MemberFilterMultiSelect } from "@/components/ui/MemberFilterMultiSelect
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { TableSkeleton } from "@/components/ui/Skeleton";
-import { TaskTable } from "@/components/tasks/TaskTable";
+import { TaskTable, buildTaskGroups } from "@/components/tasks/TaskTable";
 import { TaskCard } from "@/components/tasks/TaskCard";
 import { ModalLoadingFallback } from "@/components/ui/ModalLoadingFallback";
 import { ListPaginationFooter } from "@/components/ui/ListPaginationFooter";
@@ -130,6 +132,7 @@ export function TaskListClient({
   const [overdueOnly, setOverdueOnly] = useState(false);
 
   const [viewMode, setViewMode] = useState<ViewMode>("table");
+  const [grouped, setGrouped] = useState(true);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [formModal, setFormModal] = useState<FormModalState>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -220,6 +223,7 @@ export function TaskListClient({
   );
 
   const projectsById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
+  const taskGroups = useMemo(() => buildTaskGroups(optimisticTasks, projectsById), [optimisticTasks, projectsById]);
   const membersById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
   useEffect(() => {
@@ -514,6 +518,19 @@ export function TaskListClient({
           </div>
           <button
             type="button"
+            onClick={() => setGrouped((current) => !current)}
+            title="Nhóm theo dự án"
+            aria-pressed={grouped}
+            className={cn(
+              "flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 text-xs font-medium transition-colors",
+              grouped ? "border-violet-300 bg-violet-50 text-violet-700" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+            )}
+          >
+            <ListTree className="h-4 w-4" />
+            <span className="hidden sm:inline">Nhóm</span>
+          </button>
+          <button
+            type="button"
             onClick={() => void handleExportPdf()}
             title="Xuất PDF"
             disabled={total === 0}
@@ -546,6 +563,8 @@ export function TaskListClient({
         ) : viewMode === "table" ? (
           <TaskTable
             tasks={optimisticTasks}
+            grouped={grouped}
+            hideProjectColumn={grouped}
             projectsById={projectsById}
             membersById={membersById}
             selectedIds={selectedIds}
@@ -557,8 +576,31 @@ export function TaskListClient({
             readOnly={readOnly}
           />
         ) : (
-          <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3">
-            {optimisticTasks.map((task) => (
+          <div className={grouped ? "space-y-6 p-5" : "grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3"}>
+            {grouped ? taskGroups.map((group) => (
+              <section key={group.key} className="space-y-3">
+                <h2 className="flex items-center gap-2 rounded-lg bg-violet-50 px-3 py-2.5 text-xs font-semibold text-violet-800">
+                  <FolderOpen className="h-4 w-4 shrink-0" />
+                  <span>{group.name}</span>
+                  <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px]">{group.items.length} công việc</span>
+                </h2>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {group.items.map((task) => (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      project={projectsById.get(task.projectId)}
+                      assignee={membersById.get(task.assigneeId)}
+                      onEdit={(task) => void openEdit(task)}
+                      onDelete={handleDelete}
+                      deletingId={deletingId}
+                      readOnly={readOnly}
+                    />
+                  ))}
+                </div>
+              </section>
+            )) : (
+            optimisticTasks.map((task) => (
               <TaskCard
                 key={task.id}
                 task={task}
@@ -569,7 +611,8 @@ export function TaskListClient({
                 deletingId={deletingId}
                 readOnly={readOnly}
               />
-            ))}
+            ))
+            )}
           </div>
         )}
         </div>
