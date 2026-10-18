@@ -76,6 +76,7 @@ interface SubtaskPromptPanelProps {
   onItemsChange?: (items: SubtaskPromptItem[]) => void;
   detailId?: string | null;
   onCloseDetail?: () => void;
+  inline?: boolean;
 }
 
 export interface SubtaskPromptImportRequest {
@@ -95,6 +96,7 @@ export function SubtaskPromptPanel({
   onItemsChange,
   detailId,
   onCloseDetail,
+  inline = false,
 }: SubtaskPromptPanelProps) {
   const { notify } = useFeedback();
   const initial = initialItems.length > 0 ? initialItems : [emptyItem(`prompt-empty-${subtaskId}`)];
@@ -710,7 +712,7 @@ export function SubtaskPromptPanel({
       )}
     </article>
   );
-  return detailId ? (
+  return detailId && !inline ? (
     <PromptDetailDialog onClose={() => {
       if (showMergedPopup) { setShowMergedPopup(false); return; }
       if (previewImage) { setPreviewImage(null); return; }

@@ -20,6 +20,7 @@ import {
   Minimize2,
   MessageSquareText,
   PanelRightClose,
+  PanelRightOpen,
   Pencil,
   Plus,
   Printer,
@@ -29,7 +30,11 @@ import {
   UsersRound,
   X,
   type LucideIcon,
+  Image as ImageIcon,
 } from "lucide-react";
+import { AcceptanceFields } from "@/components/subtasks/AcceptanceFields";
+import { TaskDetailDrawer } from "@/components/subtasks/TaskDetailDrawer";
+import { formatSessionDuration, taskTimeSessions } from "@/lib/task-time-sessions";
 import { AcceptanceImageInput } from "@/components/subtasks/AcceptanceImageInput";
 import { DetailTimeTracker } from "@/components/subtasks/DetailTimeTracker";
 import { projectService } from "@/services/project-service";
@@ -165,6 +170,15 @@ export function SubtaskDetailView({
   const [savingAcceptance, setSavingAcceptance] = useState(false);
   const [exportingDetailPdf, setExportingDetailPdf] = useState(false);
   const [uploadingAcceptanceId, setUploadingAcceptanceId] = useState<string | null>(null);
+  const [drawerDetailId, setDrawerDetailId] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  const hasRunningTimer = timeRecords.some((r) => r.type === "start");
+  useEffect(() => {
+    if (!hasRunningTimer) return;
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [hasRunningTimer]);
 
   useEffect(() => {
     if (!subtask) return;
@@ -912,205 +926,248 @@ export function SubtaskDetailView({
                   )}
                 </div>}
               >
-                <div className="space-y-2.5">
-                  <div className="max-w-full overflow-x-auto rounded-xl border border-gray-200">
-                    <table className="w-full min-w-[1200px] table-fixed border-collapse text-sm [&_tbody>tr>td]:px-2 [&_tbody>tr>td]:py-2">
-                      <caption className="sr-only">Chi tiết Task</caption>
-                      <colgroup><col className="w-9" /><col className="w-[16%]" /><col className="w-[20%]" /><col className="w-[36%]" /><col className="w-[16%]" /><col className="w-[12%]" /></colgroup>
-                      <thead className="bg-gray-50 text-left text-xs font-semibold text-gray-500">
-                        <tr>
-                          <th scope="col" className="px-2 py-3">
-                            <input type="checkbox" aria-label="Chọn tất cả chi tiết Task" checked={detailIds.length > 0 && selectedVisibleDetailIds.length === detailIds.length} disabled={detailIds.length === 0}
-                              onChange={(event) => setSelectedDetailIds(event.target.checked ? detailIds : [])}
-                              className="h-4 w-4 rounded border-gray-300 accent-violet-600" />
-                          </th>
-                          <th scope="col" className="px-3 py-3">Chi tiết / Thao tác</th>
-                          <th scope="col" className="px-3 py-3">Nội dung</th>
-                          <th scope="col" className="px-3 py-3">Nghiệm thu</th>
-                          <th scope="col" className="px-3 py-3">Nhân sự</th>
-                          <th scope="col" className="px-3 py-3">Tệp đính kèm</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200 [&>tr>td]:border-r [&>tr>td]:border-gray-100 [&>tr>td:last-child]:border-r-0">
-                      {[
-                        ...(!subtask.handover?.initialDeleted ? [{
-                          id: INITIAL_HANDOVER_SOURCE_ID,
-                          description: subtask.description,
-                          createdAt: subtask.createdAt,
-                          files: subtask.files,
-                          links: subtask.links,
-                          images: subtask.images,
-                        }] : []),
-                        ...subtask.updates,
-                      ].map((entry) => (
-                        <tr key={entry.id} className="align-top">
-                          <td className="px-2 py-3">
-                            <input type="checkbox" aria-label={`Chọn ${subtask.handover?.titles?.[entry.id] ?? taskDetailName(entry.description)} để lập biên bản nghiệm thu`}
-                              checked={selectedDetailIds.includes(entry.id)}
-                              onChange={(event) => setSelectedDetailIds((current) => event.target.checked ? [...current, entry.id] : current.filter((id) => id !== entry.id))}
-                              className="h-4 w-4 rounded border-gray-300 accent-violet-600" />
-                          </td>
-                          <td className="px-3 py-4">
-                          <div className="flex flex-col items-start gap-1">
-                            <span className="text-sm font-semibold text-gray-700">{subtask.handover?.titles?.[entry.id] ?? taskDetailName(entry.description)}</span>
-                            <span className="text-xs text-gray-400">{entry.createdAt ? formatDateVN(entry.createdAt) : "—"}</span>
-                            <div className="flex items-center gap-1 whitespace-nowrap">
-                              {!statusLocked && canEditHandover && (
-                                <button type="button"
-                                  onClick={() => void handleDeleteDetail(entry.id, subtask.handover?.titles?.[entry.id] ?? taskDetailName(entry.description))}
-                                  disabled={Boolean(deletingDetailId) || savingIteration || savingAcceptance || Boolean(iterationEditor)}
-                                  className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-50">
-                                  <Trash2 className="h-3.5 w-3.5" /> Xóa
-                                </button>
-                              )}
-                              {!statusLocked && (
-                                <button
-                                  type="button"
-                                  onClick={() => setIterationEditor({
-                                    id: entry.id,
-                                    title: subtask.handover?.titles?.[entry.id] ?? taskDetailName(entry.description),
-                                    description: entry.description ?? "",
-                                    files: entry.files,
-                                    links: entry.links,
-                                    images: entry.images,
-                                    acceptance: subtask.handover?.rows?.[entry.id] ?? emptyAcceptanceRow(),
-                                  })}
-                                  disabled={savingIteration || Boolean(iterationEditor) || Boolean(deletingDetailId)}
-                                  className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs font-medium text-gray-500 hover:bg-violet-50 hover:text-violet-700 disabled:opacity-50"
-                                >
-                                  <Pencil className="h-3.5 w-3.5" />
-                                  Sửa
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => setPromptDetailId(entry.id)}
-                                className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs font-medium text-sky-700 hover:bg-sky-50"
-                              >
-                                <MessageSquareText className="h-3.5 w-3.5" />
-                                Xem Prompt
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setPromptImport({
-                                  requestId: crypto.randomUUID(),
-                                  taskTitle: entry.id,
-                                  content: entry.description ?? "",
-                                  imageUrls: entry.images,
-                                })}
-                                disabled={!entry.description?.trim() && entry.images.length === 0}
-                                title="Đưa vào Prompt"
-                                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-sky-200 bg-white text-sky-700 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-40"
-                              >
-                                <Send className="h-3.5 w-3.5" />
-                                <span className="sr-only">Đưa vào Prompt</span>
-                              </button>
-                            </div>
-                          </div>
-                          </td>
-                          <td className="px-3 py-4">
-                          {iterationEditor?.id === entry.id ? (
-                            <div>
-                              <IterationTitleInput value={iterationEditor.title} onChange={(title) => setIterationEditor((current) => current ? { ...current, title } : current)} />
-                              <p className="mb-1 text-xs font-semibold text-gray-500">Nội dung</p>
-                              <textarea
-                                autoFocus
-                                maxLength={5000}
-                                rows={3}
-                                value={iterationEditor.description}
-                                onChange={(event) => setIterationEditor((current) => current ? { ...current, description: event.target.value } : current)}
-                                placeholder="Nhập nội dung chi tiết..."
-                                className="w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm leading-6 text-gray-700 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+                <div className="space-y-3">
+                  {/* Smart Table */}
+                  <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xs">
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[1180px] table-fixed border-collapse text-sm">
+                        <caption className="sr-only">Chi tiết Task</caption>
+                        <colgroup>
+                          <col className="w-10" />
+                          <col className="w-[21%]" />
+                          <col className="w-[24%]" />
+                          <col className="w-[15%]" />
+                          <col className="w-[11%]" />
+                          <col className="w-[11%]" />
+                          <col className="w-[18%]" />
+                        </colgroup>
+                        <thead className="border-b border-gray-200 bg-gray-50/75 text-left text-xs font-semibold text-gray-500">
+                          <tr>
+                            <th scope="col" className="px-3 py-3.5 text-center">
+                              <input
+                                type="checkbox"
+                                aria-label="Chọn tất cả chi tiết Task"
+                                checked={detailIds.length > 0 && selectedVisibleDetailIds.length === detailIds.length}
+                                disabled={detailIds.length === 0}
+                                onChange={(event) => setSelectedDetailIds(event.target.checked ? detailIds : [])}
+                                className="h-4 w-4 rounded border-gray-300 accent-violet-600 transition"
                               />
-                              <div className="mt-2 flex justify-end gap-2">
-                                <Button type="button" variant="ghost" size="sm" disabled={savingIteration} onClick={() => setIterationEditor(null)}>Hủy</Button>
-                                <Button type="button" size="sm" disabled={savingIteration} onClick={() => void handleSaveIteration()}>{savingIteration ? "Đang lưu..." : "Lưu"}</Button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="max-w-full overflow-x-auto text-sm leading-6 text-gray-700">
-                              <DetailDescription description={entry.description} emptyText="Chi tiết này chưa có mô tả." />
-                            </div>
-                          )}
-                          <DetailTimeTracker
-                            records={timeRecords.filter((record) => record.detailId === entry.id)}
-                            disabled={statusLocked || savingTimeRecord || !timeRecordsReady || Boolean(deletingDetailId)}
-                            onRecord={(type) => void recordTime(entry.id, type)}
-                          />
-                          </td>
-                          <td className="px-3 py-4">
-                          <AcceptanceFields
-                            compact
-                            hideMembers
-                            key={`${subtask.id}:${entry.id}`}
-                            members={subtask.assignees}
-                            row={subtask.handover?.rows?.[entry.id] ?? emptyAcceptanceRow()}
-                            disabled={!canEditHandover || savingAcceptance || Boolean(deletingDetailId)}
-                            uploading={uploadingAcceptanceId === entry.id}
-                            onSave={(patch) => saveAcceptance(entry.id, patch)}
-                            onUpload={(file) => uploadAcceptanceImage(entry.id, file)}
-                          />
-                          <div className="mt-2 flex justify-end">
-                            <AcceptanceMinutesPopup
-                              task={subtask}
-                              selectedIds={[entry.id]}
-                              workTaskTitle={workTask?.title}
-                              directPrint
-                              disabled={savingAcceptance || savingIteration || uploadingAcceptanceId === entry.id || Boolean(deletingDetailId)}
-                            />
-                          </div>
-                          </td>
-                          <td className="px-3 py-4">
-                            <fieldset disabled={!canEditHandover || savingAcceptance || Boolean(deletingDetailId)} className="flex max-h-28 flex-col gap-1 overflow-y-auto">
-                              <legend className="sr-only">Nhân sự của {subtask.handover?.titles?.[entry.id] ?? taskDetailName(entry.description)}</legend>
-                              {subtask.assignees.map((member) => (
-                                <label key={member.id} className="flex cursor-pointer items-center gap-1.5 rounded-md px-1 py-1 text-xs text-gray-700 hover:bg-violet-50 has-[:disabled]:cursor-default">
+                            </th>
+                            <th scope="col" className="px-3 py-3.5">Chi tiết công việc</th>
+                            <th scope="col" className="px-3 py-3.5">Nội dung tóm tắt</th>
+                            <th scope="col" className="px-3 py-3.5">Nghiệm thu</th>
+                            <th scope="col" className="px-3 py-3.5">Thời gian</th>
+                            <th scope="col" className="px-3 py-3.5">Nhân sự</th>
+                            <th scope="col" className="px-3 py-3.5 text-right pr-4">Thao tác</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {[
+                            ...(!subtask.handover?.initialDeleted ? [{
+                              id: INITIAL_HANDOVER_SOURCE_ID,
+                              description: subtask.description,
+                              createdAt: subtask.createdAt,
+                              files: subtask.files,
+                              links: subtask.links,
+                              images: subtask.images,
+                            }] : []),
+                            ...subtask.updates,
+                          ].map((entry, index) => {
+                            const detailTitle = subtask.handover?.titles?.[entry.id] ?? taskDetailName(entry.description);
+                            const acceptance = subtask.handover?.rows?.[entry.id] ?? emptyAcceptanceRow();
+                            const statusKey = acceptance.status ?? "pending";
+                            const statusStyles: Record<string, { label: string; bg: string; text: string; border: string; dot: string }> = {
+                              pending: { label: "Chưa hoàn thành", bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200", dot: "bg-amber-500" },
+                              testing: { label: "Đang test", bg: "bg-sky-50", text: "text-sky-700", border: "border-sky-200", dot: "bg-sky-500" },
+                              tested: { label: "Đã test", bg: "bg-indigo-50", text: "text-indigo-700", border: "border-indigo-200", dot: "bg-indigo-500" },
+                              acceptance: { label: "Nghiệm thu", bg: "bg-purple-50", text: "text-purple-700", border: "border-purple-200", dot: "bg-purple-500" },
+                              rework: { label: "Làm lại", bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-200", dot: "bg-rose-500" },
+                              cancelled: { label: "Hủy bỏ", bg: "bg-gray-100", text: "text-gray-600", border: "border-gray-200", dot: "bg-gray-400" },
+                              accepted: { label: "Hoàn thành", bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200", dot: "bg-emerald-500" },
+                            };
+                            const statusInfo = statusStyles[statusKey] ?? statusStyles.pending;
+                            const entryTimeRecords = timeRecords.filter((r) => r.detailId === entry.id);
+                            const sessions = taskTimeSessions(entryTimeRecords, now);
+                            const totalDuration = sessions.reduce((sum, s) => sum + s.duration, 0);
+                            const isTimerActive = entryTimeRecords.at(-1)?.type === "start";
+                            const assignedMembers = subtask.assignees.filter((m) => acceptance.assigneeIds?.includes(m.id));
+                            const totalAttachments = entry.files.length + entry.links.length + entry.images.length;
+                            const isSelected = selectedDetailIds.includes(entry.id);
+
+                            return (
+                              <tr
+                                key={entry.id}
+                                onClick={() => setDrawerDetailId(entry.id)}
+                                className={cn(
+                                  "group cursor-pointer transition-colors hover:bg-violet-50/40",
+                                  isSelected && "bg-violet-50/20"
+                                )}
+                              >
+                                {/* Checkbox */}
+                                <td className="px-3 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                                   <input
                                     type="checkbox"
-                                    checked={subtask.handover?.rows?.[entry.id]?.assigneeIds?.includes(member.id) ?? false}
-                                    onChange={(event) => {
-                                      const ids = subtask.handover?.rows?.[entry.id]?.assigneeIds ?? [];
-                                      void saveAcceptance(entry.id, { assigneeIds: event.target.checked ? [...ids, member.id] : ids.filter((id) => id !== member.id) });
-                                    }}
-                                    className="h-4 w-4 shrink-0 rounded border-gray-300 accent-violet-600"
+                                    aria-label={`Chọn ${detailTitle} để lập biên bản nghiệm thu`}
+                                    checked={isSelected}
+                                    onChange={(event) =>
+                                      setSelectedDetailIds((current) =>
+                                        event.target.checked ? [...current, entry.id] : current.filter((id) => id !== entry.id)
+                                      )
+                                    }
+                                    className="h-4 w-4 rounded border-gray-300 accent-violet-600 transition"
                                   />
-                                  {member.name}
-                                </label>
-                              ))}
-                              {subtask.assignees.length === 0 && <p className="text-xs text-gray-400">Chưa có nhân sự.</p>}
-                            </fieldset>
-                          </td>
-                          <td className="px-3 py-4">
-                          <TaskAttachmentPopup count={entry.files.length + entry.links.length + entry.images.length} readOnly={statusLocked}>
-                          {statusLocked ? (
-                            <DetailAttachments
-                              entityLabel="Task"
-                              files={entry.files}
-                              links={entry.links}
-                              images={entry.images}
-                            />
-                          ) : (
-                            <InlineTaskAttachmentEditor
-                              key={entry.id}
-                              entityLabel="Task"
-                              compact
-                              files={entry.files}
-                              links={entry.links}
-                              images={entry.images}
-                              onUploadFile={subtaskService.uploadFile}
-                              onUploadImage={subtaskService.uploadImage}
-                              onSave={(value) => entry.id === INITIAL_HANDOVER_SOURCE_ID ? handleAttachmentSave(value) : handleUpdateAttachmentSave(entry.id, value)}
-                            />
+                                </td>
+
+                                {/* Chi tiết công việc */}
+                                <td className="px-3 py-3">
+                                  <div className="flex flex-col items-start gap-1">
+                                    <span className="font-semibold text-gray-900 group-hover:text-violet-700 transition line-clamp-1" title={detailTitle}>
+                                      {detailTitle}
+                                    </span>
+                                    <div className="flex items-center gap-1.5 text-[11px] text-gray-400">
+                                      <span className="font-medium text-gray-400">#{index + 1}</span>
+                                      <span>•</span>
+                                      <span>{entry.createdAt ? formatDateVN(entry.createdAt) : "—"}</span>
+                                    </div>
+                                  </div>
+                                </td>
+
+                                {/* Nội dung tóm tắt */}
+                                <td className="px-3 py-3">
+                                  <p className="line-clamp-2 text-xs leading-5 text-gray-600" title={entry.description || "Chưa có mô tả"}>
+                                    {entry.description?.trim() || <span className="italic text-gray-400">Chưa có mô tả</span>}
+                                  </p>
+                                </td>
+
+                                {/* Nghiệm thu (Smart Badge) */}
+                                <td className="px-3 py-3">
+                                  <div className="flex flex-col items-start gap-1">
+                                    <span
+                                      className={cn(
+                                        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium shadow-2xs",
+                                        statusInfo.bg,
+                                        statusInfo.text,
+                                        statusInfo.border
+                                      )}
+                                    >
+                                      <span className={cn("h-1.5 w-1.5 rounded-full", statusInfo.dot)} />
+                                      {statusInfo.label}
+                                    </span>
+                                    <div className="flex items-center gap-2 text-[11px] text-gray-500">
+                                      {acceptance.imageUrl && (
+                                        <span className="inline-flex items-center gap-0.5 text-emerald-600" title="Đã có ảnh nghiệm thu">
+                                          <ImageIcon className="h-3 w-3" /> 1 ảnh
+                                        </span>
+                                      )}
+                                      {acceptance.note && (
+                                        <span className="truncate max-w-[120px] text-gray-400 italic" title={acceptance.note}>
+                                          “{acceptance.note}”
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </td>
+
+                                {/* Thời gian thực hiện */}
+                                <td className="px-3 py-3">
+                                  <div
+                                    className={cn(
+                                      "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-mono font-medium",
+                                      isTimerActive
+                                        ? "border-emerald-200 bg-emerald-50 text-emerald-700 shadow-xs"
+                                        : totalDuration > 0
+                                          ? "border-gray-200 bg-gray-50 text-gray-700"
+                                          : "border-gray-100 bg-gray-50/50 text-gray-400"
+                                    )}
+                                  >
+                                    <Clock3 className={cn("h-3.5 w-3.5", isTimerActive && "text-emerald-600 animate-spin")} />
+                                    <span>{formatSessionDuration(totalDuration)}</span>
+                                    {isTimerActive && (
+                                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                    )}
+                                  </div>
+                                </td>
+
+                                {/* Nhân sự */}
+                                <td className="px-3 py-3">
+                                  {assignedMembers.length > 0 ? (
+                                    <div className="flex flex-wrap items-center gap-1">
+                                      {assignedMembers.slice(0, 2).map((m) => (
+                                        <span
+                                          key={m.id}
+                                          className="inline-flex items-center rounded-md bg-gray-100 px-2 py-0.5 text-xs text-gray-700 border border-gray-200/60"
+                                          title={m.name}
+                                        >
+                                          {m.name}
+                                        </span>
+                                      ))}
+                                      {assignedMembers.length > 2 && (
+                                        <span className="text-[11px] text-gray-400 font-medium">
+                                          +{assignedMembers.length - 2}
+                                        </span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="text-xs text-gray-400 italic">—</span>
+                                  )}
+                                </td>
+
+                                {/* Thao tác */}
+                                <td className="px-3 py-3 text-right pr-4" onClick={(e) => e.stopPropagation()}>
+                                  <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="secondary"
+                                      onClick={() => setDrawerDetailId(entry.id)}
+                                      className="h-8 shrink-0 whitespace-nowrap rounded-lg bg-violet-50 border-violet-200 text-violet-700 hover:bg-violet-100 px-3 text-xs font-medium shadow-2xs inline-flex items-center gap-1.5 cursor-pointer"
+                                      title="Mở chi tiết & nghiệm thu"
+                                    >
+                                      <PanelRightOpen className="h-3.5 w-3.5 shrink-0" />
+                                      <span className="whitespace-nowrap">Chi tiết</span>
+                                    </Button>
+
+                                    <TaskAttachmentPopup count={totalAttachments} readOnly={statusLocked} compact>
+                                      {statusLocked ? (
+                                        <DetailAttachments
+                                          entityLabel="Task"
+                                          files={entry.files}
+                                          links={entry.links}
+                                          images={entry.images}
+                                        />
+                                      ) : (
+                                        <InlineTaskAttachmentEditor
+                                          key={entry.id}
+                                          entityLabel="Task"
+                                          compact
+                                          files={entry.files}
+                                          links={entry.links}
+                                          images={entry.images}
+                                          onUploadFile={subtaskService.uploadFile}
+                                          onUploadImage={subtaskService.uploadImage}
+                                          onSave={(value) =>
+                                            entry.id === INITIAL_HANDOVER_SOURCE_ID
+                                              ? handleAttachmentSave(value)
+                                              : handleUpdateAttachmentSave(entry.id, value)
+                                          }
+                                        />
+                                      )}
+                                    </TaskAttachmentPopup>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          {subtask.handover?.initialDeleted && subtask.updates.length === 0 && (
+                            <tr>
+                              <td colSpan={7} className="px-3 py-8 text-center text-gray-400 text-sm">
+                                Chưa có chi tiết Task. Bấm “Thêm chi tiết” để tạo mới.
+                              </td>
+                            </tr>
                           )}
-                          </TaskAttachmentPopup>
-                          </td>
-                        </tr>
-                      ))}
-                      {subtask.handover?.initialDeleted && subtask.updates.length === 0 && (
-                        <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-500">Chưa có chi tiết Task. Bấm Thêm chi tiết để tạo mới.</td></tr>
-                      )}
-                      </tbody>
-                    </table>
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
 
                 </div>
@@ -1535,6 +1592,62 @@ export function SubtaskDetailView({
         />
       )}
 
+      {/* Task Detail Drawer (Side Sheet phong cách Jira/Linear) */}
+      {(() => {
+        const allEntries = [
+          ...(!subtask.handover?.initialDeleted ? [{
+            id: INITIAL_HANDOVER_SOURCE_ID,
+            description: subtask.description,
+            createdAt: subtask.createdAt,
+            files: subtask.files,
+            links: subtask.links,
+            images: subtask.images,
+          }] : []),
+          ...subtask.updates,
+        ];
+        const activeEntry = allEntries.find((e) => e.id === drawerDetailId) ?? null;
+        const activeTitle = activeEntry
+          ? (subtask.handover?.titles?.[activeEntry.id] ?? taskDetailName(activeEntry.description))
+          : "";
+
+        return (
+          <TaskDetailDrawer
+            isOpen={Boolean(drawerDetailId && activeEntry)}
+            onClose={() => setDrawerDetailId(null)}
+            subtask={subtask}
+            workTaskTitle={workTask?.title}
+            detailEntry={activeEntry}
+            detailTitle={activeTitle}
+            isInitialSource={activeEntry?.id === INITIAL_HANDOVER_SOURCE_ID}
+            members={subtask.assignees}
+            timeRecords={timeRecords}
+            timeRecordsReady={timeRecordsReady}
+            savingTimeRecord={savingTimeRecord}
+            statusLocked={statusLocked}
+            canEditHandover={canEditHandover}
+            savingAcceptance={savingAcceptance}
+            uploadingAcceptanceId={uploadingAcceptanceId}
+            savingIteration={savingIteration}
+            deletingDetailId={deletingDetailId}
+            onRecordTime={(detailId, type) => void recordTime(detailId, type)}
+            onSaveAcceptance={saveAcceptance}
+            onUploadAcceptanceImage={uploadAcceptanceImage}
+            onDeleteDetail={handleDeleteDetail}
+            onStartEdit={(draft) => {
+              setDrawerDetailId(null);
+              setIterationEditor(draft);
+            }}
+            onOpenPrompt={(detailId) => setPromptDetailId(detailId)}
+            onImportPrompt={(item) => setPromptImport(item)}
+            onSaveAttachments={(detailId, value) =>
+              detailId === INITIAL_HANDOVER_SOURCE_ID
+                ? handleAttachmentSave(value)
+                : handleUpdateAttachmentSave(detailId, value)
+            }
+          />
+        );
+      })()}
+
     </div>
   );
 }
@@ -1593,126 +1706,7 @@ function IterationTitleInput({ value, onChange }: { value: string; onChange: (va
   );
 }
 
-function AcceptanceFields({
-  compact = false,
-  hideMembers = false,
-  members,
-  row,
-  disabled,
-  uploading,
-  onSave,
-  onDraftChange,
-  onUpload,
-}: {
-  compact?: boolean;
-  hideMembers?: boolean;
-  members: ProjectMember[];
-  row: AcceptanceRow;
-  disabled: boolean;
-  uploading: boolean;
-  onSave: (patch: Partial<AcceptanceRow>) => void | Promise<void>;
-  onDraftChange?: (patch: Partial<AcceptanceRow>) => void;
-  onUpload: (file: File) => Promise<void>;
-}) {
-  const [localDraft, setDraft] = useState(row);
-  const draft = onDraftChange ? row : localDraft;
-  const [dirty, setDirty] = useState(false);
-  const [saving, setSaving] = useState(false);
-  useEffect(() => {
-    if (!dirty) setDraft(row);
-  }, [row, dirty]);
 
-  function updateDraft(patch: Partial<AcceptanceRow>) {
-    if (onDraftChange) {
-      onDraftChange(patch);
-      return;
-    }
-    setDirty(true);
-    setDraft((current) => ({ ...current, ...patch }));
-  }
-
-  async function saveDraft() {
-    if (disabled || saving || !dirty) return;
-    setSaving(true);
-    try {
-      // Only send editable fields so an uploaded image is preserved.
-      await onSave({ note: draft.note, status: draft.status, ...(!hideMembers ? { assigneeIds: draft.assigneeIds ?? [] } : {}) });
-      setDirty(false);
-    } catch {
-      // Keep the draft available for retry; the parent displays the error.
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div
-      role="group"
-      aria-label="Nghiệm thu"
-
-      className={cn("grid items-start gap-3 rounded-xl border border-gray-200 bg-white p-3", compact ? "grid-cols-[minmax(120px,0.8fr)_minmax(0,1.2fr)]" : "mt-3 grid-cols-1 @md/detail:grid-cols-2")}
-    >
-      {!hideMembers && <fieldset disabled={disabled || saving} className="order-4 col-span-full min-w-0">
-        <legend className={cn("text-xs font-semibold text-gray-500", compact ? "sr-only" : "mb-1.5")}>Nhân sự (chọn nhiều)</legend>
-        <div className={cn("flex gap-2 overflow-y-auto rounded-lg border border-gray-200 bg-white", compact ? "h-8 items-center overflow-x-auto px-1" : "max-h-40 flex-wrap p-2")}>
-          {members.map((member) => (
-            <label key={member.id} className={cn("flex cursor-pointer items-center gap-2 rounded-lg text-gray-700 hover:bg-violet-50 has-[:disabled]:cursor-default", compact ? "shrink-0 px-1 py-0.5 text-xs" : "px-2 py-1.5 text-sm")}>
-              <input
-                type="checkbox"
-                checked={draft.assigneeIds?.includes(member.id) ?? false}
-                onChange={(event) => updateDraft({ assigneeIds: event.target.checked
-                  ? [...(draft.assigneeIds ?? []), member.id]
-                  : (draft.assigneeIds ?? []).filter((id) => id !== member.id) })}
-                className="h-4 w-4 rounded border-gray-300 accent-violet-600"
-              />
-              {member.name}
-            </label>
-          ))}
-          {members.length === 0 && <p className="text-xs text-gray-400">Task chưa có người phụ trách.</p>}
-        </div>
-      </fieldset>}
-      <div className="order-3 col-span-full min-w-0 border-t border-gray-100 pt-3">
-        <p className="mb-1.5 text-xs font-semibold text-gray-500">Ảnh nghiệm thu</p>
-        <AcceptanceImageInput imageUrl={row.imageUrl} disabled={disabled || saving} uploading={uploading} onUpload={onUpload} />
-      </div>
-      <label className="order-1 min-w-0 text-xs font-semibold text-gray-500">
-        Trạng thái
-        <select
-          value={draft.status}
-          disabled={disabled || saving}
-          onChange={(event) => updateDraft({ status: event.target.value as AcceptanceRow["status"] })}
-          className="mt-1.5 h-9 w-full rounded-lg border border-gray-200 bg-white px-2 text-sm font-medium text-gray-800 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 disabled:bg-gray-50"
-        >
-          <option value="pending">Chưa hoàn thành</option>
-          <option value="testing">Đang test</option>
-          <option value="tested">Đã test</option>
-          <option value="acceptance">Nghiệm thu</option>
-          <option value="rework">Làm lại</option>
-          <option value="cancelled">Hủy bỏ</option>
-          <option value="accepted">Hoàn thành</option>
-        </select>
-      </label>
-      <label className="order-2 min-w-0 text-xs font-semibold text-gray-500">
-        Ghi chú
-        <input
-          type="text"
-          value={draft.note}
-          disabled={disabled || saving}
-          maxLength={5000}
-          placeholder="Ghi chú nghiệm thu..."
-          onChange={(event) => updateDraft({ note: event.target.value })}
-          className="mt-1.5 h-9 w-full rounded-lg border border-gray-200 bg-white px-2.5 text-sm font-normal text-gray-800 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 disabled:bg-gray-50"
-        />
-      </label>
-      {!onDraftChange && <div className="order-5 col-span-full flex flex-wrap items-center justify-end gap-3 border-t border-gray-100 pt-3">
-        {dirty && !compact && <span className="text-xs text-amber-700">Có thay đổi chưa lưu</span>}
-        <Button type="button" size="sm" disabled={disabled || saving || uploading || !dirty} onClick={() => void saveDraft()}>
-          {saving ? "Đang lưu..." : "Lưu thay đổi"}
-        </Button>
-      </div>}
-    </div>
-  );
-}
 
 function DetailDescription({
   description,
