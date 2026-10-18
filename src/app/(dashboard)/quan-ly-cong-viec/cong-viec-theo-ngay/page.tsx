@@ -65,7 +65,7 @@ export default function DailyWorkPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-xl font-bold text-gray-900">Danh sách công việc theo ngày</h1>
-            <p className="mt-1 text-sm text-gray-500">Tổng hợp thời gian thực làm từ các chi tiết Task theo ngày và nhân sự.</p>
+            <p className="mt-1 text-sm text-gray-500">Tổng hợp thời gian thực làm theo ngày, gán cho người phụ trách Task/chi tiết.</p>
           </div>
           <button type="button" disabled={loading} onClick={() => setRevision((value) => value + 1)} className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm disabled:opacity-50">
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Làm mới
@@ -153,7 +153,7 @@ export default function DailyWorkPage() {
             </tbody>
           </table>
         </div>
-        <p className="text-xs leading-5 text-gray-500">Giờ làm được tính cho người bấm bắt đầu, không gồm thời gian tạm dừng. Phiên qua nửa đêm được chia theo ngày Việt Nam. Phiên đang chạy được tính đến lúc tải dữ liệu; bấm Làm mới để cập nhật. Chỉ hiển thị các task có thời gian làm việc được ghi nhận.</p>
+        <p className="text-xs leading-5 text-gray-500">Giờ làm được tính cho người được gán chi tiết Task (nếu có), không thì theo người phụ trách Task; nhiều người thì chia đều. Không gồm thời gian tạm dừng. Phiên qua nửa đêm được chia theo ngày Việt Nam. Phiên đang chạy được tính đến lúc tải dữ liệu; bấm Làm mới để cập nhật. Chỉ hiển thị các task có thời gian làm việc được ghi nhận.</p>
       </div>
     </div>
   );

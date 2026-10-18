@@ -15,16 +15,17 @@ function load(path, imports = {}) {
 }
 const { dailyWorkRows } = load("../src/lib/daily-work.ts", { "@/lib/task-time-sessions": load("../src/lib/task-time-sessions.ts") });
 const hour = 3_600_000;
-const record = (id, type, at, actorId = "alice", detailId = "initial") => ({ id, type, at: `${at}+07:00`, actorId, detailId });
-const task = (records, id = "task-1") => ({ id, title: id, records });
+const record = (id, type, at, actorId = "other", detailId = "initial") => ({ id, type, at: `${at}+07:00`, actorId, detailId });
+const task = (records, extras = {}, id = "task-1") => ({ id, title: id, records, assigneeIds: ["alice"], ...extras });
 const summarize = (tasks, start = "2026-10-17", end = "2026-10-18", now = Date.parse("2026-10-19T00:00:00+07:00")) => dailyWorkRows(tasks, start, end, { alice: "Alice", bob: "Bob" }, now);
 
-test("sums detail sessions and tasks per person, excluding paused time", () => {
+test("sums detail sessions and tasks per assignee, excluding paused time", () => {
   const rows = summarize([
-    task([record("1", "start", "2026-10-18T08:00:00"), record("2", "pause", "2026-10-18T09:00:00"), record("3", "start", "2026-10-18T10:00:00"), record("4", "end", "2026-10-18T11:00:00"), record("5", "start", "2026-10-18T11:00:00", "alice", "second"), record("6", "end", "2026-10-18T12:00:00", "alice", "second")]),
-    task([record("7", "start", "2026-10-18T13:00:00"), record("8", "end", "2026-10-18T14:00:00")], "task-2"),
+    task([record("1", "start", "2026-10-18T08:00:00"), record("2", "pause", "2026-10-18T09:00:00"), record("3", "start", "2026-10-18T10:00:00"), record("4", "end", "2026-10-18T11:00:00"), record("5", "start", "2026-10-18T11:00:00", "other", "second"), record("6", "end", "2026-10-18T12:00:00", "other", "second")]),
+    task([record("7", "start", "2026-10-18T13:00:00"), record("8", "end", "2026-10-18T14:00:00")], {}, "task-2"),
   ]);
   assert.equal(rows.length, 1);
+  assert.equal(rows[0].employeeName, "Alice");
   assert.equal(rows[0].duration, 4 * hour);
   assert.deepEqual(rows[0].tasks.map((t) => t.duration), [3 * hour, hour]);
   assert.deepEqual(rows[0].tasks[0].details.map((d) => [d.id, d.duration]), [["initial", 2 * hour], ["second", hour]]);
@@ -37,9 +38,25 @@ test("splits overnight work at Vietnam midnight and clips the selected range", (
   assert.deepEqual(summarize(tasks).map((r) => r.tasks[0].details[0].duration), [2 * hour, hour]);
 });
 
-test("uses starter identity even when another person stops; details stay independent", () => {
-  const rows = summarize([task([record("1", "start", "2026-10-18T08:00:00"), record("2", "start", "2026-10-18T08:00:00", "bob", "second"), record("3", "end", "2026-10-18T09:00:00", "bob"), record("4", "end", "2026-10-18T10:00:00", "alice", "second")])]);
-  assert.deepEqual(rows.map((r) => [r.employeeName, r.duration]), [["Alice", hour], ["Bob", 2 * hour]]);
+test("credits detail assignees over task assignees; ignores starter", () => {
+  const rows = summarize([task(
+    [
+      record("1", "start", "2026-10-18T08:00:00"),
+      record("2", "end", "2026-10-18T09:00:00"),
+      record("3", "start", "2026-10-18T08:00:00", "other", "second"),
+      record("4", "end", "2026-10-18T10:00:00", "other", "second"),
+    ],
+    { assigneeIds: ["bob"], detailAssignees: { second: ["alice"] } },
+  )]);
+  assert.deepEqual(rows.map((r) => [r.employeeName, r.duration]), [["Alice", 2 * hour], ["Bob", hour]]);
+});
+
+test("splits hours evenly when a detail has multiple assignees", () => {
+  const rows = summarize([task(
+    [record("1", "start", "2026-10-18T08:00:00"), record("2", "end", "2026-10-18T10:00:00")],
+    { assigneeIds: ["alice", "bob"] },
+  )]);
+  assert.deepEqual(rows.map((r) => [r.employeeName, r.duration]), [["Alice", hour], ["Bob", hour]]);
 });
 
 test("active sessions stop at snapshot time; invalid timestamps and empty data are ignored", () => {
@@ -48,7 +65,8 @@ test("active sessions stop at snapshot time; invalid timestamps and empty data a
   assert.deepEqual(summarize([task([])]), []);
 });
 
-test("legacy records without a person are not assigned to current assignees", () => {
-  const records = [record("1", "start", "2026-10-18T08:00:00"), record("2", "end", "2026-10-18T09:00:00")].map(({ actorId, detailId, ...r }) => r);
-  assert.equal(summarize([task(records)])[0].employeeName, "Chưa xác định nhân sự");
+test("sessions without assignees stay unassigned; actorId alone does not credit anyone", () => {
+  const records = [record("1", "start", "2026-10-18T08:00:00"), record("2", "end", "2026-10-18T09:00:00")];
+  assert.equal(summarize([task(records, { assigneeIds: [] })])[0].employeeName, "Chưa xác định nhân sự");
+  assert.equal(summarize([task(records.map(({ actorId, ...rest }) => rest), { assigneeIds: ["alice"] })])[0].employeeName, "Alice");
 });
