@@ -80,6 +80,7 @@ export function InlineTaskAttachmentEditor({
   const [fileError, setFileError] = useState("");
   const [imageError, setImageError] = useState("");
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draftRevisionRef = useRef(0);
 
   useEffect(() => () => {
     if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
@@ -92,12 +93,17 @@ export function InlineTaskAttachmentEditor({
   }, []);
 
   const persist = useCallback(async (value: AttachmentValue) => {
+    const revision = draftRevisionRef.current;
     setSaving(true);
     try {
       await onSave(value);
-      setDraftFiles(value.files);
-      setDraftLinks(value.links);
-      showSaved();
+      // A response acknowledges only the submitted revision. Never replace the
+      // live inputs with a normalized snapshot while the user is still typing.
+      if (draftRevisionRef.current === revision) {
+        setFilesDirty(false);
+        setLinksDirty(false);
+        showSaved();
+      }
     } finally {
       setSaving(false);
     }
@@ -123,10 +129,6 @@ export function InlineTaskAttachmentEditor({
     }
     const timer = setTimeout(() => {
       void persist({ files: draftFiles, links: normalized, images })
-        .then(() => {
-          setFilesDirty(false);
-          setLinksDirty(false);
-        })
         .catch(() => undefined);
     }, 700);
     return () => clearTimeout(timer);
@@ -210,6 +212,8 @@ export function InlineTaskAttachmentEditor({
   }
 
   function updateFile(url: string, patch: Partial<TaskFileAttachment>) {
+    draftRevisionRef.current += 1;
+    setSaved(false);
     setDraftFiles((current) => current.map((file) => file.url === url ? { ...file, ...patch } : file));
     setFilesDirty(true);
   }
@@ -221,10 +225,14 @@ export function InlineTaskAttachmentEditor({
 
   function addLink() {
     if (draftLinks.length >= MAX_ITEMS) return;
+    draftRevisionRef.current += 1;
+    setSaved(false);
     setDraftLinks((current) => [...current, { label: "", url: "", description: "" }]);
   }
 
   function updateLink(index: number, patch: Partial<TaskLinkAttachment>) {
+    draftRevisionRef.current += 1;
+    setSaved(false);
     setDraftLinks((current) => current.map((link, itemIndex) => itemIndex === index ? { ...link, ...patch } : link));
     setLinksDirty(true);
   }

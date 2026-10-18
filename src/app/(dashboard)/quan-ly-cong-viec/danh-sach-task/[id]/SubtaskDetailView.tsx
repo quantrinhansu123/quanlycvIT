@@ -934,12 +934,12 @@ export function SubtaskDetailView({
                         <caption className="sr-only">Chi tiết Task</caption>
                         <colgroup>
                           <col className="w-10" />
-                          <col className="w-[21%]" />
-                          <col className="w-[24%]" />
-                          <col className="w-[15%]" />
-                          <col className="w-[11%]" />
-                          <col className="w-[11%]" />
-                          <col className="w-[18%]" />
+                          <col />
+                          <col />
+                          <col className="w-40" />
+                          <col className="w-32" />
+                          <col className="w-32" />
+                          <col className="w-72" />
                         </colgroup>
                         <thead className="border-b border-gray-200 bg-gray-50/75 text-left text-xs font-semibold text-gray-500">
                           <tr>
@@ -1114,7 +1114,28 @@ export function SubtaskDetailView({
 
                                 {/* Thao tác */}
                                 <td className="px-3 py-3 text-right pr-4" onClick={(e) => e.stopPropagation()}>
-                                  <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+                                  <div className="flex flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
+                                    {!statusLocked && (
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="secondary"
+                                        disabled={savingIteration || Boolean(deletingDetailId) || Boolean(iterationEditor)}
+                                        onClick={() => setIterationEditor({
+                                          id: entry.id,
+                                          title: detailTitle,
+                                          description: entry.description ?? "",
+                                          files: entry.files,
+                                          links: entry.links,
+                                          images: entry.images,
+                                          acceptance,
+                                        })}
+                                        aria-label={`Sửa chi tiết ${detailTitle}`}
+                                        className="h-8 shrink-0 gap-1.5 whitespace-nowrap text-xs"
+                                      >
+                                        <Pencil className="h-3.5 w-3.5" /> Sửa
+                                      </Button>
+                                    )}
                                     <Button
                                       type="button"
                                       size="sm"
@@ -1484,8 +1505,8 @@ export function SubtaskDetailView({
         </div>
       </div>
 
-                  {iterationEditor?.id === null && (
-                    <NewDetailDialog busy={savingIteration || uploadingAcceptanceId === "draft"} onClose={() => setIterationEditor(null)}>
+                  {iterationEditor && !statusLocked && (
+                    <NewDetailDialog title={iterationEditor.id === null ? "Thêm chi tiết Task" : "Sửa chi tiết Task"} busy={savingIteration || uploadingAcceptanceId === "draft"} onClose={() => setIterationEditor(null)}>
                       <div className="mb-2 text-sm font-semibold text-violet-800">{iterationEditor.title.trim() || "Chi tiết mới"}</div>
                       <IterationTitleInput value={iterationEditor.title} onChange={(title) => setIterationEditor((current) => current ? { ...current, title } : current)} />
                       <textarea
@@ -1494,11 +1515,11 @@ export function SubtaskDetailView({
                         rows={3}
                         value={iterationEditor.description}
                         onChange={(event) => setIterationEditor((current) => current ? { ...current, description: event.target.value } : current)}
-                        aria-label="Nội dung chi tiết mới"
+                        aria-label="Nội dung chi tiết Task"
                         placeholder="Nhập nội dung chi tiết..."
                         className="w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm leading-6 text-gray-700 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
                       />
-                      <AcceptanceFields
+                      {iterationEditor.id === null && <><AcceptanceFields
                         key={`${subtask.id}:draft`}
                         members={subtask.assignees}
                         row={iterationEditor.acceptance}
@@ -1523,6 +1544,7 @@ export function SubtaskDetailView({
                             : current);
                         }}
                       />
+                      </>}
                       <div className="mt-2 flex justify-end gap-2">
                         <Button type="button" variant="ghost" size="sm" disabled={savingIteration || uploadingAcceptanceId === "draft"} onClick={() => setIterationEditor(null)}>Hủy</Button>
                         <Button type="button" size="sm" disabled={savingIteration || uploadingAcceptanceId === "draft"} onClick={() => void handleSaveIteration()}>{savingIteration ? "Đang lưu..." : "Lưu chi tiết"}</Button>
@@ -1652,8 +1674,9 @@ export function SubtaskDetailView({
   );
 }
 
-function NewDetailDialog({ children, busy, onClose }: {
+function NewDetailDialog({ children, title, busy, onClose }: {
   children: React.ReactNode;
+  title: string;
   busy: boolean;
   onClose: () => void;
 }) {
@@ -1680,7 +1703,7 @@ function NewDetailDialog({ children, busy, onClose }: {
       className="fixed inset-0 m-auto max-h-[90dvh] w-[calc(100%_-_2rem)] max-w-4xl overflow-y-auto rounded-2xl border border-gray-200 bg-white p-0 shadow-2xl backdrop:bg-gray-950/40"
     >
       <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-gray-100 bg-white px-5 py-4">
-        <h2 id="new-task-detail-title" className="text-base font-bold text-gray-900">Thêm chi tiết Task</h2>
+        <h2 id="new-task-detail-title" className="text-base font-bold text-gray-900">{title}</h2>
         <button type="button" aria-label="Đóng" disabled={busy} onClick={onClose} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 disabled:opacity-50">
           <X className="h-4 w-4" />
         </button>

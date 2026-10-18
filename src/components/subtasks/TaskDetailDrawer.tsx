@@ -243,7 +243,7 @@ export function TaskDetailDrawer({
             </div>
 
             {/* Header Actions */}
-            <div className="flex items-center gap-1">
+            <div className="flex flex-wrap items-center justify-end gap-1">
               <AcceptanceMinutesPopup
                 task={subtask}
                 selectedIds={[entry.id]}
@@ -301,9 +301,11 @@ export function TaskDetailDrawer({
                   }
                   disabled={savingIteration || Boolean(deletingDetailId)}
                   title="Chỉnh sửa chi tiết"
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-violet-50 hover:text-violet-700 transition cursor-pointer"
+                  aria-label={`Sửa chi tiết ${detailTitle}`}
+                  className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 text-xs font-medium text-violet-700 hover:bg-violet-100 transition cursor-pointer disabled:opacity-50"
                 >
                   <Pencil className="h-3.5 w-3.5" />
+                  Sửa
                 </button>
               )}
 
