@@ -1,5 +1,7 @@
 "use client";
 
+import { updateVisibleSubtaskPage } from "@/lib/subtask-list-update";
+
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
@@ -251,25 +253,15 @@ export function SubtaskListClient({
       const accepted = (event as CustomEvent<Subtask>).detail;
       if (!accepted?.id) return;
 
-      setSubtaskPage((previous) => {
-        if (!previous || !previous.items.some((item) => item.id === accepted.id)) {
-          return previous ?? { items: [], total: 0 };
-        }
-
-        // Xác nhận chuyển Task từ Chưa làm sang Đang làm. Nếu danh sách
-        // đang lọc theo trạng thái cũ thì loại bản ghi ngay.
-        if (statuses.length > 0 && !statuses.includes(accepted.status)) {
-          return {
-            items: previous.items.filter((item) => item.id !== accepted.id),
-            total: Math.max(0, previous.total - 1),
-          };
-        }
-
-        return {
-          items: previous.items.map((item) => item.id === accepted.id ? accepted : item),
-          total: previous.total,
-        };
-      });
+      // An absent cache entry must not be replaced by a fresh empty result.
+      const visiblePage = cache.get<SubtaskPageResult>(listKey)?.data ?? lastLoadedSubtaskPage;
+      if (!visiblePage) return;
+      setSubtaskPage((previous) => updateVisibleSubtaskPage(
+        previous ?? visiblePage,
+        accepted,
+        statuses,
+        event.type === SUBTASK_ACCEPTED_EVENT,
+      ));
       // Key đang hiển thị đã được patch; các trang/bộ lọc khác sẽ
       // tải dữ liệu mới khi người dùng chuyển sang.
       cache.invalidate(CACHE_RESOURCE.subtasksList, listKey);
@@ -281,7 +273,7 @@ export function SubtaskListClient({
       window.removeEventListener(SUBTASK_ACCEPTED_EVENT, handleSubtaskAccepted);
       window.removeEventListener("app:subtask-details-updated", handleSubtaskAccepted);
     };
-  }, [cache, listKey, setSubtaskPage, statuses]);
+  }, [cache, listKey, setSubtaskPage, statuses, lastLoadedSubtaskPage]);
 
   // Đổi dự án thì bỏ những lựa chọn "Công việc" không thuộc dự án mới.
   function handleProjectChange(nextProjectId: string) {

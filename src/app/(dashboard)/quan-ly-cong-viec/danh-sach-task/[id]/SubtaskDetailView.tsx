@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -14,24 +14,24 @@ import {
   FileClock,
   Flag,
   History,
-  ImagePlus,
   Info,
   LoaderCircle,
   Maximize2,
   Minimize2,
+  MessageSquareText,
   PanelRightClose,
   Pencil,
-  Pause,
-  Play,
   Plus,
   Printer,
   Send,
-  Square,
   TestTube2,
   Trash2,
   UsersRound,
+  X,
   type LucideIcon,
 } from "lucide-react";
+import { AcceptanceImageInput } from "@/components/subtasks/AcceptanceImageInput";
+import { DetailTimeTracker } from "@/components/subtasks/DetailTimeTracker";
 import { projectService } from "@/services/project-service";
 import { taskService } from "@/services/task-service";
 import { subtaskService } from "@/services/subtask-service";
@@ -86,33 +86,6 @@ function getDayDistance(date: string): number {
   return Math.round((target.getTime() - today.getTime()) / DAY_IN_MS);
 }
 
-function getRecordedDuration(records: SubtaskTimeRecord[]): number {
-  let startedAt: number | null = null;
-  let total = 0;
-  for (const record of records) {
-    if (record.type === "start") {
-      startedAt = Date.parse(record.at);
-    } else if (startedAt !== null) {
-      const endedAt = Date.parse(record.at);
-      if (Number.isFinite(endedAt) && endedAt >= startedAt) total += endedAt - startedAt;
-      startedAt = null;
-    }
-  }
-  return total;
-}
-
-function formatRecordedDuration(milliseconds: number): string {
-  const minutes = Math.floor(milliseconds / 60_000);
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  return hours > 0 ? `${hours} giờ ${remainingMinutes} phút` : `${minutes} phút`;
-}
-
-function formatTimeRecordDate(value: string): string {
-  return new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" })
-    .format(new Date(value));
-}
-
 type IterationDraft = {
   id: string | null;
   title: string;
@@ -138,15 +111,6 @@ function emptyIterationDraft(): IterationDraft {
     images: [],
     acceptance: emptyAcceptanceRow(),
   };
-}
-
-function isSafeImageUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:" || url.protocol === "http:";
-  } catch {
-    return false;
-  }
 }
 
 interface SubtaskDetailViewProps {
@@ -181,6 +145,7 @@ export function SubtaskDetailView({
   const [testHistory, setTestHistory] = useState<SubtaskTestHistoryEntry[]>(initialTestHistory);
   const [timeRecords, setTimeRecords] = useState<SubtaskTimeRecord[]>([]);
   const [savingTimeRecord, setSavingTimeRecord] = useState(false);
+  const [timeRecordsReady, setTimeRecordsReady] = useState(false);
   const [iterationEditor, setIterationEditor] = useState<IterationDraft | null>(null);
   const [selectedDetailIds, setSelectedDetailIds] = useState<string[]>([]);
   const [savingIteration, setSavingIteration] = useState(false);
@@ -196,6 +161,7 @@ export function SubtaskDetailView({
   const [quickUpdating, setQuickUpdating] = useState(false);
   const [accepting, setAccepting] = useState(false);
   const [promptImport, setPromptImport] = useState<SubtaskPromptImportRequest | null>(null);
+  const [promptDetailId, setPromptDetailId] = useState<string | null>(null);
   const [savingAcceptance, setSavingAcceptance] = useState(false);
   const [exportingDetailPdf, setExportingDetailPdf] = useState(false);
   const [uploadingAcceptanceId, setUploadingAcceptanceId] = useState<string | null>(null);
@@ -208,11 +174,11 @@ export function SubtaskDetailView({
     }));
   }, [subtask]);
 
-  const recordTime = useCallback(async (type: SubtaskTimeRecord["type"]) => {
+  const recordTime = useCallback(async (detailId: string, type: SubtaskTimeRecord["type"]) => {
     if (savingTimeRecord) return;
     setSavingTimeRecord(true);
     try {
-      setTimeRecords(await subtaskService.appendTimeRecord(subtaskId, type));
+      setTimeRecords(await subtaskService.appendTimeRecord(subtaskId, type, detailId));
     } catch (recordError) {
       notify({
         type: "error",
@@ -247,7 +213,9 @@ export function SubtaskDetailView({
   }, [subtaskId, notify, tab]);
 
   async function saveAcceptance(sourceId: string, patch: Partial<AcceptanceRow>) {
-    if (!subtask || savingAcceptance || deletingDetailId) return;
+    if (!subtask || savingAcceptance || deletingDetailId) {
+      throw new Error("Đang lưu thay đổi khác. Vui lòng thử lưu ảnh lại.");
+    }
     const current = subtask.handover?.rows?.[sourceId] ?? emptyAcceptanceRow();
     const rows = {
       ...(subtask.handover?.rows ?? {}),
@@ -299,7 +267,7 @@ export function SubtaskDetailView({
   async function uploadAcceptanceImage(sourceId: string, file: File | null) {
     if (!file || !file.type.startsWith("image/")) {
       notify({ type: "error", title: "Hãy chọn một ảnh JPG, PNG, WEBP hoặc AVIF." });
-      return;
+      throw new Error("Invalid image");
     }
     setUploadingAcceptanceId(sourceId);
     try {
@@ -311,6 +279,7 @@ export function SubtaskDetailView({
         title: "Không thể tải ảnh nghiệm thu",
         description: getErrorMessage(uploadError, "Ảnh phải là JPG, PNG, WEBP hoặc AVIF và tối đa 10 MB."),
       });
+      throw uploadError;
     } finally {
       setUploadingAcceptanceId(null);
     }
@@ -319,7 +288,7 @@ export function SubtaskDetailView({
   async function uploadDraftAcceptanceImage(file: File | null) {
     if (!file || !file.type.startsWith("image/")) {
       notify({ type: "error", title: "Hãy chọn một ảnh JPG, PNG, WEBP hoặc AVIF." });
-      return;
+      throw new Error("Invalid image");
     }
     setUploadingAcceptanceId("draft");
     try {
@@ -333,6 +302,7 @@ export function SubtaskDetailView({
         title: "Không thể tải ảnh nghiệm thu",
         description: getErrorMessage(uploadError, "Ảnh phải là JPG, PNG, WEBP hoặc AVIF và tối đa 10 MB."),
       });
+      throw uploadError;
     } finally {
       setUploadingAcceptanceId(null);
     }
@@ -364,6 +334,7 @@ export function SubtaskDetailView({
           if (!active) return;
           setTestHistory(historyData);
           setTimeRecords(timeRecordData);
+          setTimeRecordsReady(true);
         })
         .catch(() => undefined);
     }, 400);
@@ -760,8 +731,6 @@ export function SubtaskDetailView({
   const statusOptions = account?.role === "member" && !statusLocked
     ? SUBTASK_STATUS_OPTIONS.filter((option) => option.value !== "done")
     : SUBTASK_STATUS_OPTIONS;
-  const lastTimeRecord = timeRecords.at(-1);
-  const recordedDuration = getRecordedDuration(timeRecords);
   const actualProgress = detailTaskProgressPercent(
     subtask.updates.map((entry) => entry.id),
     subtask.handover?.rows,
@@ -894,132 +863,6 @@ export function SubtaskDetailView({
       <div className="mx-auto w-full max-w-none px-3 pb-8 pt-4 @sm/detail:px-5">
         {tab === "info" ? (
           <div className="space-y-3">
-            <section className="grid grid-cols-2 gap-2 @3xl/detail:grid-cols-4">
-              <OverviewCard
-                label="Tiến độ thực tế"
-                icon={CircleCheck}
-                iconClassName="bg-violet-50 text-violet-600"
-              >
-                <strong className="text-lg font-bold text-gray-950">
-                  {actualProgress}%
-                </strong>
-                <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-gray-100">
-                  <div
-                    className="h-full rounded-full bg-violet-600"
-                    style={{ width: `${actualProgress}%` }}
-                  />
-                </div>
-              </OverviewCard>
-
-              <OverviewCard
-                label="Hạn hoàn thành"
-                icon={Clock3}
-                iconClassName="bg-rose-50 text-rose-600"
-              >
-                <p
-                  className={cn(
-                    "text-sm font-bold leading-snug",
-                    overdue ? "text-rose-500" : "text-gray-900"
-                  )}
-                >
-                  {overdue
-                    ? `Trễ hạn ${Math.abs(dueDistance)} ngày`
-                    : dueDistance === 0
-                      ? "Hạn hôm nay"
-                      : `Còn ${dueDistance} ngày`}
-                </p>
-                <p className="mt-1 text-[11px] text-gray-400">
-                  {formatDateVN(subtask.dueDate)}
-                </p>
-              </OverviewCard>
-
-              <OverviewCard
-                label="Mức độ ưu tiên"
-                icon={Flag}
-                iconClassName="bg-orange-50 text-orange-500"
-              >
-                <QuickSelect
-                  value={subtask.priority}
-                  disabled={quickUpdating || statusLocked}
-                  options={TASK_PRIORITY_OPTIONS}
-                  onChange={(value) =>
-                    handleQuickUpdate({
-                      priority: value as Subtask["priority"],
-                    })
-                  }
-                />
-              </OverviewCard>
-
-              <OverviewCard
-                label="Trạng thái"
-                icon={CircleAlert}
-                iconClassName="bg-teal-50 text-teal-600"
-              >
-                <QuickSelect
-                  value={subtask.status}
-                  disabled={quickUpdating || statusLocked || !canUpdateStatus}
-                  options={statusOptions}
-                  onChange={(value) => {
-                    if (value === "testing" && subtask.status !== "testing" && account?.role === "member") {
-                      setReportAtCompletion(true);
-                      void ensureDirectory().then(() => setReportDrawerOpen(true));
-                      return;
-                    }
-                    handleQuickUpdate({ status: value as Subtask["status"] });
-                  }}
-                />
-              </OverviewCard>
-            </section>
-
-            <SubtaskPromptPanel
-              key={`${subtask.id}-${subtask.updatedAt ?? ""}`}
-              subtaskId={subtask.id}
-              taskDetailOptions={[
-                ...(!subtask.handover?.initialDeleted ? [{ value: INITIAL_HANDOVER_SOURCE_ID, label: subtask.handover?.titles?.[INITIAL_HANDOVER_SOURCE_ID] ?? taskDetailName(subtask.description) }] : []),
-                ...subtask.updates.map((entry) => ({
-                  value: entry.id,
-                  label: subtask.handover?.titles?.[entry.id] ?? taskDetailName(entry.description),
-                })),
-              ]}
-              initialItems={subtask.promptItems}
-              initialDataLoaded
-              importRequest={promptImport}
-              onImported={(requestId) => {
-                setPromptImport((current) => current?.requestId === requestId ? null : current);
-              }}
-            />
-
-
-            {subtask.issues.length > 0 && (
-              <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-                <h2 className="mb-3 text-base font-bold text-gray-900">Vấn đề &amp; giải pháp</h2>
-                <div className="overflow-hidden rounded-xl border border-gray-200">
-                  <table className="w-full border-collapse text-sm">
-                    <thead className="bg-gray-50">
-                      <tr className="text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                        <th className="w-10 px-3 py-2.5">#</th>
-                        <th className="px-3 py-2.5">Vấn đề</th>
-                        <th className="px-3 py-2.5">Giải pháp</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {subtask.issues.map((entry, index) => (
-                        <tr key={entry.id}>
-                          <td className="px-3 py-3 align-top text-xs text-gray-400">{index + 1}</td>
-                          <td className="px-3 py-3 align-top whitespace-pre-wrap text-gray-700">
-                            {entry.problem || "—"}
-                          </td>
-                          <td className="px-3 py-3 align-top whitespace-pre-wrap text-gray-700">
-                            {entry.solution || "—"}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            )}
-
             <section>
               <Panel
                 accentClassName="bg-violet-600"
@@ -1141,6 +984,14 @@ export function SubtaskDetailView({
                               )}
                               <button
                                 type="button"
+                                onClick={() => setPromptDetailId(entry.id)}
+                                className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs font-medium text-sky-700 hover:bg-sky-50"
+                              >
+                                <MessageSquareText className="h-3.5 w-3.5" />
+                                Xem Prompt
+                              </button>
+                              <button
+                                type="button"
                                 onClick={() => setPromptImport({
                                   requestId: crypto.randomUUID(),
                                   taskTitle: entry.id,
@@ -1181,6 +1032,11 @@ export function SubtaskDetailView({
                               <DetailDescription description={entry.description} emptyText="Chi tiết này chưa có mô tả." />
                             </div>
                           )}
+                          <DetailTimeTracker
+                            records={timeRecords.filter((record) => record.detailId === entry.id)}
+                            disabled={statusLocked || savingTimeRecord || !timeRecordsReady || Boolean(deletingDetailId)}
+                            onRecord={(type) => void recordTime(entry.id, type)}
+                          />
                           </td>
                           <td className="px-3 py-4">
                           <AcceptanceFields
@@ -1192,8 +1048,17 @@ export function SubtaskDetailView({
                             disabled={!canEditHandover || savingAcceptance || Boolean(deletingDetailId)}
                             uploading={uploadingAcceptanceId === entry.id}
                             onSave={(patch) => saveAcceptance(entry.id, patch)}
-                            onUpload={(file) => void uploadAcceptanceImage(entry.id, file)}
+                            onUpload={(file) => uploadAcceptanceImage(entry.id, file)}
                           />
+                          <div className="mt-2 flex justify-end">
+                            <AcceptanceMinutesPopup
+                              task={subtask}
+                              selectedIds={[entry.id]}
+                              workTaskTitle={workTask?.title}
+                              directPrint
+                              disabled={savingAcceptance || savingIteration || uploadingAcceptanceId === entry.id || Boolean(deletingDetailId)}
+                            />
+                          </div>
                           </td>
                           <td className="px-3 py-4">
                             <fieldset disabled={!canEditHandover || savingAcceptance || Boolean(deletingDetailId)} className="flex max-h-28 flex-col gap-1 overflow-y-auto">
@@ -1247,51 +1112,14 @@ export function SubtaskDetailView({
                       </tbody>
                     </table>
                   </div>
-                  {iterationEditor?.id === null && (
-                    <div className="rounded-xl border border-dashed border-violet-300 bg-violet-50/40 p-3 sm:p-4">
-                      <div className="mb-2 text-sm font-semibold text-violet-800">{iterationEditor.title.trim() || "Chi tiết mới"}</div>
-                      <IterationTitleInput value={iterationEditor.title} onChange={(title) => setIterationEditor((current) => current ? { ...current, title } : current)} />
-                      <AcceptanceFields
-                        key={`${subtask.id}:draft`}
-                        members={subtask.assignees}
-                        row={iterationEditor.acceptance}
-                        disabled={savingIteration || !canEditHandover}
-                        uploading={uploadingAcceptanceId === "draft"}
-                        onSave={(patch) => setIterationEditor((current) => current
-                          ? { ...current, acceptance: { ...current.acceptance, ...patch } }
-                          : current)}
-                        onUpload={(file) => void uploadDraftAcceptanceImage(file)}
-                      />
-                      <textarea
-                        autoFocus
-                        maxLength={5000}
-                        rows={3}
-                        value={iterationEditor.description}
-                        onChange={(event) => setIterationEditor((current) => current ? { ...current, description: event.target.value } : current)}
-                        aria-label="Nội dung chi tiết mới"
-                        placeholder="Nhập nội dung chi tiết..."
-                        className="w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm leading-6 text-gray-700 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
-                      />
-                      <InlineTaskAttachmentEditor
-                        entityLabel="Task"
-                        files={iterationEditor.files}
-                        links={iterationEditor.links}
-                        images={iterationEditor.images}
-                        onUploadFile={subtaskService.uploadFile}
-                        onUploadImage={subtaskService.uploadImage}
-                        onSave={async (value) => {
-                          setIterationEditor((current) => current
-                            ? { ...current, files: value.files, links: value.links, images: value.images }
-                            : current);
-                        }}
-                      />
-                      <div className="mt-2 flex justify-end gap-2">
-                        <Button type="button" variant="ghost" size="sm" disabled={savingIteration} onClick={() => setIterationEditor(null)}>Hủy</Button>
-                        <Button type="button" size="sm" disabled={savingIteration || uploadingAcceptanceId === "draft"} onClick={() => void handleSaveIteration()}>{savingIteration ? "Đang lưu..." : "Lưu chi tiết"}</Button>
-                      </div>
-                    </div>
-                  )}
+
                 </div>
+                {timeRecords.some((record) => !record.detailId) && (
+                  <details className="mt-4 text-xs text-gray-500">
+                    <summary className="cursor-pointer">Lịch sử cũ của Task (chưa phân vào chi tiết)</summary>
+                    <DetailTimeTracker records={timeRecords.filter((record) => !record.detailId)} disabled readOnly onRecord={() => undefined} />
+                  </details>
+                )}
                 <div className="mt-6 grid grid-cols-1 gap-5 border-t border-gray-100 pt-4 @md/detail:grid-cols-2">
                   <DateInfo
                     label="Thời gian bắt đầu:"
@@ -1307,6 +1135,136 @@ export function SubtaskDetailView({
               </Panel>
 
             </section>
+
+            <section className="grid grid-cols-2 gap-2 @3xl/detail:grid-cols-4">
+              <OverviewCard
+                label="Tiến độ thực tế"
+                icon={CircleCheck}
+                iconClassName="bg-violet-50 text-violet-600"
+              >
+                <strong className="text-lg font-bold text-gray-950">
+                  {actualProgress}%
+                </strong>
+                <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-gray-100">
+                  <div
+                    className="h-full rounded-full bg-violet-600"
+                    style={{ width: `${actualProgress}%` }}
+                  />
+                </div>
+              </OverviewCard>
+
+              <OverviewCard
+                label="Hạn hoàn thành"
+                icon={Clock3}
+                iconClassName="bg-rose-50 text-rose-600"
+              >
+                <p
+                  className={cn(
+                    "text-sm font-bold leading-snug",
+                    overdue ? "text-rose-500" : "text-gray-900"
+                  )}
+                >
+                  {overdue
+                    ? `Trễ hạn ${Math.abs(dueDistance)} ngày`
+                    : dueDistance === 0
+                      ? "Hạn hôm nay"
+                      : `Còn ${dueDistance} ngày`}
+                </p>
+                <p className="mt-1 text-[11px] text-gray-400">
+                  {formatDateVN(subtask.dueDate)}
+                </p>
+              </OverviewCard>
+
+              <OverviewCard
+                label="Mức độ ưu tiên"
+                icon={Flag}
+                iconClassName="bg-orange-50 text-orange-500"
+              >
+                <QuickSelect
+                  value={subtask.priority}
+                  disabled={quickUpdating || statusLocked}
+                  options={TASK_PRIORITY_OPTIONS}
+                  onChange={(value) =>
+                    handleQuickUpdate({
+                      priority: value as Subtask["priority"],
+                    })
+                  }
+                />
+              </OverviewCard>
+
+              <OverviewCard
+                label="Trạng thái"
+                icon={CircleAlert}
+                iconClassName="bg-teal-50 text-teal-600"
+              >
+                <QuickSelect
+                  value={subtask.status}
+                  disabled={quickUpdating || statusLocked || !canUpdateStatus}
+                  options={statusOptions}
+                  onChange={(value) => {
+                    if (value === "testing" && subtask.status !== "testing" && account?.role === "member") {
+                      setReportAtCompletion(true);
+                      void ensureDirectory().then(() => setReportDrawerOpen(true));
+                      return;
+                    }
+                    handleQuickUpdate({ status: value as Subtask["status"] });
+                  }}
+                />
+              </OverviewCard>
+            </section>
+
+            <SubtaskPromptPanel
+              key={`${subtask.id}-${subtask.updatedAt ?? ""}`}
+              subtaskId={subtask.id}
+              taskDetailOptions={[
+                ...(!subtask.handover?.initialDeleted ? [{ value: INITIAL_HANDOVER_SOURCE_ID, label: subtask.handover?.titles?.[INITIAL_HANDOVER_SOURCE_ID] ?? taskDetailName(subtask.description) }] : []),
+                ...subtask.updates.map((entry) => ({
+                  value: entry.id,
+                  label: subtask.handover?.titles?.[entry.id] ?? taskDetailName(entry.description),
+                })),
+              ]}
+              initialItems={subtask.promptItems}
+              detailId={promptDetailId}
+              onCloseDetail={() => setPromptDetailId(null)}
+              initialDataLoaded
+              importRequest={promptImport}
+              onImported={(requestId) => {
+                setPromptImport((current) => current?.requestId === requestId ? null : current);
+              }}
+            />
+
+
+            {subtask.issues.length > 0 && (
+              <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+                <h2 className="mb-3 text-base font-bold text-gray-900">Vấn đề &amp; giải pháp</h2>
+                <div className="overflow-hidden rounded-xl border border-gray-200">
+                  <table className="w-full border-collapse text-sm">
+                    <thead className="bg-gray-50">
+                      <tr className="text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        <th className="w-10 px-3 py-2.5">#</th>
+                        <th className="px-3 py-2.5">Vấn đề</th>
+                        <th className="px-3 py-2.5">Giải pháp</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {subtask.issues.map((entry, index) => (
+                        <tr key={entry.id}>
+                          <td className="px-3 py-3 align-top text-xs text-gray-400">{index + 1}</td>
+                          <td className="px-3 py-3 align-top whitespace-pre-wrap text-gray-700">
+                            {entry.problem || "—"}
+                          </td>
+                          <td className="px-3 py-3 align-top whitespace-pre-wrap text-gray-700">
+                            {entry.solution || "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+
+
 
             <section className="grid grid-cols-1 gap-5">
               <Panel
@@ -1328,95 +1286,6 @@ export function SubtaskDetailView({
                   emptyHint="Công việc chưa có người phụ trách"
                   disabled={quickUpdating || statusLocked}
                 />
-
-                <div className="mt-5 border-t border-gray-100 pt-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="mb-1 text-xs font-medium text-gray-400">Ghi nhận thời gian:</p>
-                      <p className="text-sm font-semibold text-gray-800">
-                        Tổng thời gian: {formatRecordedDuration(recordedDuration)}
-                      </p>
-                    </div>
-                    {lastTimeRecord?.type === "start" && (
-                      <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700">
-                        Đang thực hiện
-                      </span>
-                    )}
-                    {lastTimeRecord?.type === "pause" && (
-                      <span className="rounded-full bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700">
-                        Đang tạm dừng
-                      </span>
-                    )}
-                  </div>
-                  {!statusLocked && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {lastTimeRecord?.type !== "start" && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          disabled={savingTimeRecord}
-                          onClick={() => void recordTime("start")}
-                        >
-                          <Play className="h-3.5 w-3.5" />
-                          {lastTimeRecord?.type === "pause"
-                            ? "Tiếp tục"
-                            : lastTimeRecord?.type === "end"
-                              ? "Bắt đầu phiên mới"
-                              : "Bắt đầu"}
-                        </Button>
-                      )}
-                      {lastTimeRecord?.type === "start" && (
-                        <>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="secondary"
-                            disabled={savingTimeRecord}
-                            onClick={() => void recordTime("pause")}
-                          >
-                            <Pause className="h-3.5 w-3.5" />
-                            Tạm dừng
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="danger"
-                            disabled={savingTimeRecord}
-                            onClick={() => void recordTime("end")}
-                          >
-                            <Square className="h-3.5 w-3.5" />
-                            Kết thúc
-                          </Button>
-                        </>
-                      )}
-                      {lastTimeRecord?.type === "pause" && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="danger"
-                          disabled={savingTimeRecord}
-                          onClick={() => void recordTime("end")}
-                        >
-                          <Square className="h-3.5 w-3.5" />
-                          Kết thúc
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                  {timeRecords.length > 0 && (
-                    <ul className="mt-3 space-y-1.5">
-                      {[...timeRecords].reverse().slice(0, 5).map((record) => (
-                        <li key={record.id} className="flex justify-between gap-2 text-[11px] text-gray-500">
-                          <span>{record.type === "start" ? "Bắt đầu" : record.type === "pause" ? "Tạm dừng" : "Kết thúc"}</span>
-                          <time dateTime={record.at}>{formatTimeRecordDate(record.at)}</time>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {timeRecords.length === 0 && (
-                    <p className="mt-2 text-[11px] text-gray-400">Chưa có mốc thời gian.</p>
-                  )}
-                </div>
 
                 <div className="mt-5 border-t border-gray-100 pt-4">
                   <p className="mb-2 text-xs font-medium text-gray-400">
@@ -1558,6 +1427,52 @@ export function SubtaskDetailView({
         </div>
       </div>
 
+                  {iterationEditor?.id === null && (
+                    <NewDetailDialog busy={savingIteration || uploadingAcceptanceId === "draft"} onClose={() => setIterationEditor(null)}>
+                      <div className="mb-2 text-sm font-semibold text-violet-800">{iterationEditor.title.trim() || "Chi tiết mới"}</div>
+                      <IterationTitleInput value={iterationEditor.title} onChange={(title) => setIterationEditor((current) => current ? { ...current, title } : current)} />
+                      <textarea
+                        autoFocus
+                        maxLength={5000}
+                        rows={3}
+                        value={iterationEditor.description}
+                        onChange={(event) => setIterationEditor((current) => current ? { ...current, description: event.target.value } : current)}
+                        aria-label="Nội dung chi tiết mới"
+                        placeholder="Nhập nội dung chi tiết..."
+                        className="w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm leading-6 text-gray-700 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+                      />
+                      <AcceptanceFields
+                        key={`${subtask.id}:draft`}
+                        members={subtask.assignees}
+                        row={iterationEditor.acceptance}
+                        disabled={savingIteration || !canEditHandover}
+                        uploading={uploadingAcceptanceId === "draft"}
+                        onDraftChange={(patch) => setIterationEditor((current) => current
+                          ? { ...current, acceptance: { ...current.acceptance, ...patch } }
+                          : current)}
+                        onSave={() => undefined}
+                        onUpload={(file) => uploadDraftAcceptanceImage(file)}
+                      />
+                      <InlineTaskAttachmentEditor
+                        entityLabel="Task"
+                        files={iterationEditor.files}
+                        links={iterationEditor.links}
+                        images={iterationEditor.images}
+                        onUploadFile={subtaskService.uploadFile}
+                        onUploadImage={subtaskService.uploadImage}
+                        onSave={async (value) => {
+                          setIterationEditor((current) => current
+                            ? { ...current, files: value.files, links: value.links, images: value.images }
+                            : current);
+                        }}
+                      />
+                      <div className="mt-2 flex justify-end gap-2">
+                        <Button type="button" variant="ghost" size="sm" disabled={savingIteration || uploadingAcceptanceId === "draft"} onClick={() => setIterationEditor(null)}>Hủy</Button>
+                        <Button type="button" size="sm" disabled={savingIteration || uploadingAcceptanceId === "draft"} onClick={() => void handleSaveIteration()}>{savingIteration ? "Đang lưu..." : "Lưu chi tiết"}</Button>
+                      </div>
+                    </NewDetailDialog>
+                  )}
+
       {editing && !statusLocked && (
         <SubtaskFormModal
           mode="edit"
@@ -1624,6 +1539,44 @@ export function SubtaskDetailView({
   );
 }
 
+function NewDetailDialog({ children, busy, onClose }: {
+  children: React.ReactNode;
+  busy: boolean;
+  onClose: () => void;
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    dialog?.showModal();
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      dialog?.close();
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
+
+  return (
+    <dialog
+      ref={dialogRef}
+      aria-labelledby="new-task-detail-title"
+      onCancel={(event) => {
+        event.preventDefault();
+        if (!busy) onClose();
+      }}
+      className="fixed inset-0 m-auto max-h-[90dvh] w-[calc(100%_-_2rem)] max-w-4xl overflow-y-auto rounded-2xl border border-gray-200 bg-white p-0 shadow-2xl backdrop:bg-gray-950/40"
+    >
+      <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-gray-100 bg-white px-5 py-4">
+        <h2 id="new-task-detail-title" className="text-base font-bold text-gray-900">Thêm chi tiết Task</h2>
+        <button type="button" aria-label="Đóng" disabled={busy} onClick={onClose} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 disabled:opacity-50">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="p-4 sm:p-5">{children}</div>
+    </dialog>
+  );
+}
+
 function IterationTitleInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   return (
     <label className="mb-3 block text-xs font-semibold text-gray-500">
@@ -1648,6 +1601,7 @@ function AcceptanceFields({
   disabled,
   uploading,
   onSave,
+  onDraftChange,
   onUpload,
 }: {
   compact?: boolean;
@@ -1657,9 +1611,11 @@ function AcceptanceFields({
   disabled: boolean;
   uploading: boolean;
   onSave: (patch: Partial<AcceptanceRow>) => void | Promise<void>;
-  onUpload: (file: File) => void;
+  onDraftChange?: (patch: Partial<AcceptanceRow>) => void;
+  onUpload: (file: File) => Promise<void>;
 }) {
-  const [draft, setDraft] = useState(row);
+  const [localDraft, setDraft] = useState(row);
+  const draft = onDraftChange ? row : localDraft;
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   useEffect(() => {
@@ -1667,6 +1623,10 @@ function AcceptanceFields({
   }, [row, dirty]);
 
   function updateDraft(patch: Partial<AcceptanceRow>) {
+    if (onDraftChange) {
+      onDraftChange(patch);
+      return;
+    }
     setDirty(true);
     setDraft((current) => ({ ...current, ...patch }));
   }
@@ -1686,8 +1646,13 @@ function AcceptanceFields({
   }
 
   return (
-    <div className={cn("grid items-end rounded-lg bg-gray-50", compact ? "grid-cols-[140px_100px_minmax(0,1fr)] gap-x-2 gap-y-1.5 p-2 [&_input:not([type=checkbox])]:h-8 [&_select]:h-8 [&_button]:h-8" : "mt-3 grid-cols-1 gap-3 p-3 @md/detail:grid-cols-[160px_140px_minmax(0,1fr)]")}>
-      {!hideMembers && <fieldset disabled={disabled || saving} className={cn("order-4 min-w-0", compact ? "col-span-2" : "@md/detail:col-span-3")}>
+    <div
+      role="group"
+      aria-label="Nghiệm thu"
+
+      className={cn("grid items-start gap-3 rounded-xl border border-gray-200 bg-white p-3", compact ? "grid-cols-[minmax(120px,0.8fr)_minmax(0,1.2fr)]" : "mt-3 grid-cols-1 @md/detail:grid-cols-2")}
+    >
+      {!hideMembers && <fieldset disabled={disabled || saving} className="order-4 col-span-full min-w-0">
         <legend className={cn("text-xs font-semibold text-gray-500", compact ? "sr-only" : "mb-1.5")}>Nhân sự (chọn nhiều)</legend>
         <div className={cn("flex gap-2 overflow-y-auto rounded-lg border border-gray-200 bg-white", compact ? "h-8 items-center overflow-x-auto px-1" : "max-h-40 flex-wrap p-2")}>
           {members.map((member) => (
@@ -1706,30 +1671,9 @@ function AcceptanceFields({
           {members.length === 0 && <p className="text-xs text-gray-400">Task chưa có người phụ trách.</p>}
         </div>
       </fieldset>}
-      <div className="order-2 min-w-0">
+      <div className="order-3 col-span-full min-w-0 border-t border-gray-100 pt-3">
         <p className="mb-1.5 text-xs font-semibold text-gray-500">Ảnh nghiệm thu</p>
-        <div className="flex h-9 items-center gap-2">
-          {isSafeImageUrl(row.imageUrl) && (
-            <a href={row.imageUrl} target="_blank" rel="noreferrer" className="block h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-gray-200">
-              <img src={row.imageUrl} alt="Ảnh nghiệm thu" className="h-full w-full object-cover" />
-            </a>
-          )}
-          <label className={`inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 text-xs font-semibold text-gray-700 ${disabled || uploading ? "pointer-events-none opacity-50" : "hover:bg-gray-50"}`}>
-            {uploading ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <ImagePlus className="h-3.5 w-3.5" />}
-            {uploading ? "Đang tải..." : "Tải ảnh"}
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/avif"
-              className="sr-only"
-              disabled={disabled || uploading}
-              onChange={(event) => {
-                const file = event.target.files?.[0] ?? null;
-                if (file) onUpload(file);
-                event.target.value = "";
-              }}
-            />
-          </label>
-        </div>
+        <AcceptanceImageInput imageUrl={row.imageUrl} disabled={disabled || saving} uploading={uploading} onUpload={onUpload} />
       </div>
       <label className="order-1 min-w-0 text-xs font-semibold text-gray-500">
         Trạng thái
@@ -1748,7 +1692,7 @@ function AcceptanceFields({
           <option value="accepted">Hoàn thành</option>
         </select>
       </label>
-      <label className="order-3 min-w-0 text-xs font-semibold text-gray-500">
+      <label className="order-2 min-w-0 text-xs font-semibold text-gray-500">
         Ghi chú
         <input
           type="text"
@@ -1760,12 +1704,12 @@ function AcceptanceFields({
           className="mt-1.5 h-9 w-full rounded-lg border border-gray-200 bg-white px-2.5 text-sm font-normal text-gray-800 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 disabled:bg-gray-50"
         />
       </label>
-      <div className={cn("order-5 flex items-center justify-end gap-3", compact && hideMembers ? "col-span-3" : !compact && "@md/detail:col-span-3")}>
+      {!onDraftChange && <div className="order-5 col-span-full flex flex-wrap items-center justify-end gap-3 border-t border-gray-100 pt-3">
         {dirty && !compact && <span className="text-xs text-amber-700">Có thay đổi chưa lưu</span>}
-        <Button type="button" size="sm" disabled={disabled || saving || !dirty} onClick={() => void saveDraft()}>
+        <Button type="button" size="sm" disabled={disabled || saving || uploading || !dirty} onClick={() => void saveDraft()}>
           {saving ? "Đang lưu..." : "Lưu thay đổi"}
         </Button>
-      </div>
+      </div>}
     </div>
   );
 }

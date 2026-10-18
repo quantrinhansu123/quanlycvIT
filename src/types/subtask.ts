@@ -41,6 +41,7 @@ export interface SubtaskPromptStatusChange {
 }
 
 export interface SubtaskTimeRecord {
+  detailId?: string;
   id: string;
   type: "start" | "pause" | "end";
   at: string;

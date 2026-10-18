@@ -9,8 +9,8 @@ import { Button } from "@/components/ui/Button";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 
-export function AcceptanceMinutesPopup({ task, selectedIds, workTaskTitle, disabled }: {
-  task: Subtask; selectedIds: string[]; workTaskTitle?: string; disabled?: boolean;
+export function AcceptanceMinutesPopup({ task, selectedIds, workTaskTitle, disabled, directPrint = false }: {
+  task: Subtask; selectedIds: string[]; workTaskTitle?: string; disabled?: boolean; directPrint?: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -38,13 +38,22 @@ export function AcceptanceMinutesPopup({ task, selectedIds, workTaskTitle, disab
     }
   }
 
+  if (directPrint) return (
+    <Button type="button" variant="secondary" size="sm" disabled={printing || disabled || !entries.length}
+      title="In nội dung và ảnh nghiệm thu đã lưu của chi tiết này"
+      onClick={() => void print()}>
+      <Printer className="h-4 w-4" />{printing ? "Đang chuẩn bị..." : "In nghiệm thu"}
+    </Button>
+  );
+
   return <>
     <Button type="button" variant="secondary" size="sm" disabled={disabled || !entries.length} onClick={() => dialog.current?.showModal()}>
       Biên bản nghiệm thu ({entries.length})
     </Button>
     <dialog ref={dialog} aria-labelledby={titleId} className="fixed inset-0 m-auto max-h-[85dvh] w-[min(960px,calc(100vw-2rem))] overflow-auto rounded-2xl border border-gray-200 bg-white p-5 text-gray-800 shadow-xl backdrop:bg-black/40">
-      <div className="mb-5 flex items-center justify-between gap-3">
+      <div className="sticky -top-5 z-10 -mx-5 -mt-5 mb-5 flex items-center justify-between gap-3 border-b border-gray-100 bg-white px-5 py-4">
         <h2 id={titleId} className="text-lg font-bold">Biên bản nghiệm thu</h2>
+        <Button type="button" size="sm" disabled={printing || disabled || !entries.length} onClick={() => void print()}><Printer className="h-4 w-4" />{printing ? "Đang chuẩn bị..." : "In nghiệm thu"}</Button>
         <button type="button" autoFocus aria-label="Đóng biên bản" onClick={() => dialog.current?.close()} className="rounded-lg p-2 hover:bg-gray-100"><X className="h-4 w-4" /></button>
       </div>
       <div className="mb-6 flex items-center justify-between gap-4 border-b-2 border-brand-600 pb-4">
@@ -61,10 +70,20 @@ export function AcceptanceMinutesPopup({ task, selectedIds, workTaskTitle, disab
       <div className="mb-3 flex items-center justify-between gap-2"><h3 className="text-sm font-bold">01 &nbsp; NỘI DUNG NGHIỆM THU</h3><span className="text-xs text-gray-500">{entries.length} hạng mục / {entries.filter((entry) => entry.status === "Hoàn thành").length} hoàn thành</span></div>
       <div className="overflow-x-auto rounded-lg border border-gray-200">
         <table className="w-full min-w-[720px] table-fixed text-left text-sm">
-          <thead className="bg-gray-800 text-xs text-white"><tr><th className="w-12 p-3">STT</th><th className="p-3">Chi tiết Task</th><th className="p-3">Nội dung</th><th className="w-36 p-3">Trạng thái</th><th className="w-32 p-3">Ghi chú</th></tr></thead>
+          <thead className="bg-gray-800 text-xs text-white"><tr><th scope="col" className="w-12 p-3">STT</th><th scope="col" className="w-[52%] p-3">Nội dung nghiệm thu</th><th scope="col" className="p-3">Ảnh nghiệm thu</th></tr></thead>
           <tbody className="divide-y divide-gray-100">{entries.map((entry, index) => <tr key={entry.id} className="align-top">
-            <td className="p-3">{index + 1}</td><td className="break-words p-3 font-medium">{entry.title}</td><td className="whitespace-pre-wrap break-words p-3">{entry.description}</td><td className="p-3"><span className={`inline-block rounded-md px-2 py-1 text-xs font-medium ${entry.status === "Hoàn thành" ? "bg-emerald-50 text-emerald-700" : entry.status === "Làm lại" || entry.status === "Hủy bỏ" ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-800"}`}>{entry.status}</span></td>
-            <td className="whitespace-pre-wrap break-words p-3">{entry.note}</td>
+            <td className="p-3 text-gray-500">{index + 1}</td>
+            <td className="break-words p-4">
+              <p className="font-semibold text-gray-900">{entry.title}</p>
+              <p className="mt-2 whitespace-pre-wrap leading-6">{entry.description}</p>
+              <p className="mt-3 text-xs"><strong>Trạng thái:</strong> {entry.status}</p>
+              <p className="mt-2 whitespace-pre-wrap text-xs leading-5"><strong>Ghi chú:</strong> {entry.note}</p>
+            </td>
+            <td className="p-4">
+              {/^https?:\/\//i.test(entry.imageUrl) ? <a href={entry.imageUrl} target="_blank" rel="noopener noreferrer" title="Mở ảnh nghiệm thu gốc">
+                <Image src={entry.imageUrl} alt={`Ảnh nghiệm thu: ${entry.title}`} width={900} height={700} unoptimized className="h-auto max-h-80 w-full rounded border border-gray-100 object-contain" />
+              </a> : <p className="text-xs italic text-gray-400">Chưa có ảnh nghiệm thu</p>}
+            </td>
           </tr>)}</tbody>
         </table>
       </div>
@@ -75,7 +94,7 @@ export function AcceptanceMinutesPopup({ task, selectedIds, workTaskTitle, disab
       </div>
       <div className="mt-5 flex justify-end gap-2">
         <Button type="button" variant="secondary" size="sm" onClick={() => dialog.current?.close()}>Đóng</Button>
-        <Button type="button" size="sm" disabled={printing} onClick={() => void print()}><Printer className="h-4 w-4" />{printing ? "Đang chuẩn bị..." : "In / Lưu PDF"}</Button>
+        <Button type="button" size="sm" disabled={printing || disabled || !entries.length} onClick={() => void print()}><Printer className="h-4 w-4" />{printing ? "Đang chuẩn bị..." : "In nghiệm thu / Lưu PDF"}</Button>
       </div>
     </dialog>
   </>;

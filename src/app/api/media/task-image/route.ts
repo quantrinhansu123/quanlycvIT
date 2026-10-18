@@ -74,6 +74,12 @@ export async function POST(request: Request) {
         "Cloudinary task image upload failed:",
         payload.error?.message ?? response.status
       );
+      if (/cloud_name is disabled/i.test(payload.error?.message ?? "")) {
+        throw new ApiException(
+          "Dịch vụ lưu ảnh Cloudinary đang bị vô hiệu hóa. Quản trị viên cần kích hoạt lại tài khoản hoặc cập nhật cấu hình Cloudinary trước khi lưu ảnh.",
+          503
+        );
+      }
       throw new ApiException("Không thể tải ảnh Task lên Cloudinary. Vui lòng thử lại.", 502);
     }
 

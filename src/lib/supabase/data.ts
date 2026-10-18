@@ -2122,12 +2122,14 @@ export async function appendSubtaskTimeRecord(
   supabase: ApiSupabaseClient,
   id: string,
   type: SubtaskTimeRecord["type"],
-  actorId: string
+  actorId: string,
+  detailId: string
 ): Promise<SubtaskTimeRecord[] | null> {
-  const { data, error } = await supabase.rpc("append_task_time_record", {
+  const { data, error } = await supabase.rpc("append_task_detail_time_record", {
     p_task_id: id,
     p_type: type,
     p_actor_id: actorId,
+    p_detail_id: detailId,
   });
   if (error?.code === "42883" || error?.code === "PGRST202" || error?.code === "42703") {
     throw new ApiException(
@@ -2155,6 +2157,7 @@ function normalizeSubtaskTimeRecords(value: unknown): SubtaskTimeRecord[] {
     ) return [];
     return [{
       id: entry.id,
+      ...(typeof entry.detailId === "string" ? { detailId: entry.detailId } : {}),
       type: entry.type,
       at: entry.at,
       ...(typeof entry.actorId === "string" ? { actorId: entry.actorId } : {}),

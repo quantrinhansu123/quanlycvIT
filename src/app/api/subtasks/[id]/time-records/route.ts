@@ -29,7 +29,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (body.type !== "start" && body.type !== "pause" && body.type !== "end") {
       throw new ApiException("Mốc thời gian không hợp lệ.", 400);
     }
-    const records = await appendSubtaskTimeRecord(supabase, id, body.type, access.id);
+    if (typeof body.detailId !== "string" || !body.detailId.trim() || body.detailId.length > 80) {
+      throw new ApiException("Chi tiết Task không hợp lệ.", 400);
+    }
+    const records = await appendSubtaskTimeRecord(supabase, id, body.type, access.id, body.detailId);
     if (!records) throw new ApiException("Không tìm thấy Task.", 404);
     return apiSuccess(records, 200, "Đã ghi nhận mốc thời gian.");
   } catch (error) {

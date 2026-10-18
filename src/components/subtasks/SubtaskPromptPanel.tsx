@@ -74,6 +74,8 @@ interface SubtaskPromptPanelProps {
   importRequest?: SubtaskPromptImportRequest | null;
   onImported?: (requestId: string) => void;
   onItemsChange?: (items: SubtaskPromptItem[]) => void;
+  detailId?: string | null;
+  onCloseDetail?: () => void;
 }
 
 export interface SubtaskPromptImportRequest {
@@ -91,6 +93,8 @@ export function SubtaskPromptPanel({
   importRequest,
   onImported,
   onItemsChange,
+  detailId,
+  onCloseDetail,
 }: SubtaskPromptPanelProps) {
   const { notify } = useFeedback();
   const initial = initialItems.length > 0 ? initialItems : [emptyItem(`prompt-empty-${subtaskId}`)];
@@ -133,9 +137,10 @@ export function SubtaskPromptPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- tránh refetch khi parent re-render
   }, [subtaskId, initialDataLoaded]);
 
-  const allSelected = items.length > 0 && items.every((item) => selectedIds.includes(item.id));
-  const someSelected = selectedIds.length > 0 && !allSelected;
-  const selectedItems = items.filter((item) => selectedIds.includes(item.id));
+  const visibleItems = detailId ? items.filter((item) => item.taskTitle === detailId) : items;
+  const allSelected = visibleItems.length > 0 && visibleItems.every((item) => selectedIds.includes(item.id));
+  const selectedItems = visibleItems.filter((item) => selectedIds.includes(item.id));
+  const someSelected = selectedItems.length > 0 && !allSelected;
   const mergedPrompt = mergeSelectedPrompts(selectedItems);
 
   async function handleCopyMerged() {
@@ -208,7 +213,7 @@ export function SubtaskPromptPanel({
   function addItem() {
     if (itemsRef.current.length >= MAX_PROMPT_ITEMS) return;
     hasEditedRef.current = true;
-    const next = [...itemsRef.current, emptyItem()];
+    const next = [...itemsRef.current, { ...emptyItem(), ...(detailId ? { taskTitle: detailId } : {}) }];
     replaceItems(next);
   }
 
@@ -233,7 +238,10 @@ export function SubtaskPromptPanel({
   }
 
   function toggleSelectAll() {
-    setSelectedIds(allSelected ? [] : items.map((item) => item.id));
+    const visibleIds = new Set(visibleItems.map((item) => item.id));
+    setSelectedIds((current) => allSelected
+      ? current.filter((id) => !visibleIds.has(id))
+      : [...new Set([...current, ...visibleIds])]);
   }
 
   async function uploadImages(itemId: string, files: File[]) {
@@ -346,7 +354,7 @@ export function SubtaskPromptPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [importRequest?.requestId]);
 
-  return (
+  const panel = (
     <article className="min-w-0 max-w-full overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm [contain:inline-size]">
       <div className="h-1 bg-sky-500" />
       <div className="p-4 @md/detail:p-6">
@@ -354,7 +362,7 @@ export function SubtaskPromptPanel({
           <div>
             <h2 className="flex items-center gap-2 text-base font-bold text-gray-900">
               <MessageSquareText className="h-4 w-4 text-sky-600" />
-              Prompt
+              {detailId ? `Prompt · ${taskDetailOptions.find((option) => option.value === detailId)?.label ?? "Chi tiết Task"}` : "Prompt"}
             </h2>
             <p className="mt-2 text-xs text-gray-500">
               Nhập yêu cầu, tải nhiều ảnh (mỗi ảnh một link Cloudinary). Tick chọn yêu cầu để ghép Prompt.
@@ -376,16 +384,16 @@ export function SubtaskPromptPanel({
               className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-sky-600 px-3 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Plus className="h-4 w-4" />
-              Thêm yêu cầu
+              {detailId ? "Thêm Prompt" : "Thêm yêu cầu"}
             </button>
-            {selectedIds.length > 0 && (
+            {selectedItems.length > 0 && (
               <button
                 type="button"
                 onClick={() => { setCopiedMerged(false); setShowMergedPopup(true); }}
                 className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-sky-200 bg-sky-50 px-3 text-sm font-semibold text-sky-700 transition hover:bg-sky-100"
               >
                 <MessageSquareText className="h-4 w-4" />
-                Prompt ({selectedIds.length})
+                Prompt ({selectedItems.length})
               </button>
             )}
           </div>
@@ -403,7 +411,7 @@ export function SubtaskPromptPanel({
                       if (el) el.indeterminate = someSelected;
                     }}
                     onChange={toggleSelectAll}
-                    disabled={items.length === 0}
+                    disabled={visibleItems.length === 0}
                     className="h-4 w-4 rounded border-gray-300 text-sky-600 focus:ring-sky-500"
                     aria-label="Chọn tất cả yêu cầu"
                   />
@@ -417,7 +425,8 @@ export function SubtaskPromptPanel({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {items.map((item, index) => {
+              {visibleItems.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">Chi tiết này chưa có Prompt. Bấm Thêm Prompt để tạo mới.</td></tr>}
+              {visibleItems.map((item, index) => {
                 const uploading = uploadingIds.has(item.id);
                 const selected = selectedIds.includes(item.id);
                 const images = itemImageUrls(item);
@@ -443,6 +452,7 @@ export function SubtaskPromptPanel({
                     <td className="px-2 py-3 text-sm font-medium text-gray-800">
                       <select
                         value={item.taskTitle ?? ""}
+                        disabled={Boolean(detailId)}
                         onChange={(event) => updateItem(item.id, { taskTitle: event.target.value }, true)}
                         aria-label={`Chi tiết Task của yêu cầu ${index + 1}`}
                         className="h-9 w-full rounded-lg border border-gray-200 bg-white px-2 text-sm text-gray-800 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
@@ -657,7 +667,7 @@ export function SubtaskPromptPanel({
               <div>
                 <h3 className="flex items-center gap-2 text-base font-bold text-gray-900">
                   <MessageSquareText className="h-4 w-4 text-sky-600" />
-                  Prompt tổng ({selectedIds.length} yêu cầu)
+                  Prompt tổng ({selectedItems.length} yêu cầu)
                 </h3>
                 <p className="mt-1 text-xs text-gray-500">Nội dung ghép từ các yêu cầu đã tick chọn.</p>
               </div>
@@ -700,4 +710,30 @@ export function SubtaskPromptPanel({
       )}
     </article>
   );
+  return detailId ? (
+    <PromptDetailDialog onClose={() => {
+      if (showMergedPopup) { setShowMergedPopup(false); return; }
+      if (previewImage) { setPreviewImage(null); return; }
+      onCloseDetail?.();
+    }}>{panel}</PromptDetailDialog>
+  ) : panel;
+}
+
+function PromptDetailDialog({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    dialog?.showModal();
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { dialog?.close(); document.body.style.overflow = overflow; };
+  }, []);
+  return <dialog ref={dialogRef} aria-label="Prompt của chi tiết Task"
+    onCancel={(event) => { event.preventDefault(); onClose(); }}
+    className="fixed inset-0 m-auto max-h-[90dvh] w-[calc(100%_-_2rem)] max-w-6xl overflow-y-auto rounded-2xl border border-gray-200 bg-white p-0 shadow-2xl backdrop:bg-gray-950/40">
+    <div className="sticky top-0 z-10 flex justify-end border-b border-gray-100 bg-white px-3 py-2">
+      <button type="button" aria-label="Đóng Prompt chi tiết" onClick={onClose} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100"><X className="h-4 w-4" /></button>
+    </div>
+    {children}
+  </dialog>;
 }

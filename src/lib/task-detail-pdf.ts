@@ -45,9 +45,50 @@ export async function exportTaskDetailPdf(task: Subtask, workTaskTitle?: string,
   pdfMake.createPdf(definition).print({}, printWindow);
 }
 
+// Convert browser-supported formats (including WebP/AVIF) to lossless PNG for PDF.
+async function acceptanceImageForPrint(url: string): Promise<string> {
+  if (!/^https?:\/\//i.test(url)) throw new Error("Đường dẫn ảnh nghiệm thu không hợp lệ.");
+  return new Promise((resolve, reject) => {
+    const image = new window.Image();
+    const timer = window.setTimeout(() => {
+      image.onload = null;
+      image.onerror = null;
+      image.src = "";
+      reject(new Error("Tải ảnh nghiệm thu quá lâu. Vui lòng thử lại."));
+    }, 20000);
+    image.crossOrigin = "anonymous";
+    image.onload = () => {
+      window.clearTimeout(timer);
+      try {
+        const canvas = document.createElement("canvas");
+        const scale = Math.min(1, 2400 / Math.max(image.naturalWidth, image.naturalHeight));
+        canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+        canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("Không thể xử lý ảnh nghiệm thu.");
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/png"));
+      } catch {
+        reject(new Error("Không thể đưa ảnh nghiệm thu vào bản in. Vui lòng kiểm tra quyền truy cập ảnh."));
+      }
+    };
+    image.onerror = () => {
+      window.clearTimeout(timer);
+      reject(new Error("Không tải được ảnh nghiệm thu. Vui lòng kiểm tra ảnh và thử lại."));
+    };
+    image.src = url;
+  });
+}
+
 export async function printAcceptanceMinutes(task: Subtask, selectedIds: string[], printWindow: Window, workTaskTitle?: string): Promise<void> {
   const entries = selectedAcceptanceDetails(task, selectedIds);
   if (!entries.length) throw new Error("Vui lòng chọn chi tiết Task để lập biên bản.");
+  const images: Record<string, string> = {};
+  for (const entry of entries) {
+    if (entry.imageUrl && !images[entry.imageUrl]) {
+      images[entry.imageUrl] = await acceptanceImageForPrint(entry.imageUrl);
+    }
+  }
   const logoResponse = await fetch("/logo-viet-nhat-ipt.png");
   if (!logoResponse.ok) throw new Error("Không tải được logo cho biên bản.");
   const logo = await new Promise<string>((resolve, reject) => {
@@ -79,14 +120,19 @@ export async function printAcceptanceMinutes(task: Subtask, selectedIds: string[
         ],
       ] }, layout: { fillColor: () => "#f8fafc", hLineWidth: () => 0, vLineWidth: () => 0, paddingLeft: () => 12, paddingRight: () => 12, paddingTop: () => 7, paddingBottom: () => 7 }, margin: [0, 0, 0, 20] },
       { columns: [{ text: "01  NỘI DUNG NGHIỆM THU", bold: true, fontSize: 11, color: "#111827" }, { text: `${entries.length} hạng mục  /  ${completed} hoàn thành`, alignment: "right", fontSize: 8, color: "#64748b" }], margin: [0, 0, 0, 10] },
-      { table: { headerRows: 1, widths: [22, 120, "*", 85, 70], body: [
-        ["STT", "CHI TIẾT TASK", "NỘI DUNG", "TRẠNG THÁI", "GHI CHÚ"].map((text) => ({ text, bold: true, fontSize: 8, color: "#ffffff", fillColor: "#252b36" })),
-        ...entries.map((entry, index) => [
+      { table: { headerRows: 1, widths: [22, "*", 190], body: [
+        ["STT", "NỘI DUNG NGHIỆM THU", "ẢNH NGHIỆM THU"].map((text) => ({ text, bold: true, fontSize: 9, color: "#ffffff", fillColor: "#252b36" })),
+        ...entries.map((entry, index): TableCell[] => [
           { text: String(index + 1), color: "#64748b" },
-          { text: entry.title, bold: true, color: "#111827" },
-          { text: entry.description },
-          { text: entry.status, bold: true, fontSize: 8, color: entry.status === "Hoàn thành" ? "#047857" : entry.status === "Làm lại" || entry.status === "Hủy bỏ" ? "#be123c" : "#92400e" },
-          { text: entry.note },
+          { stack: [
+            { text: entry.title, bold: true, fontSize: 11, color: "#111827" },
+            { text: entry.description, fontSize: 10, margin: [0, 6, 0, 10] },
+            { text: `Trạng thái: ${entry.status}`, bold: true, fontSize: 9, color: entry.status === "Hoàn thành" ? "#047857" : "#334155" },
+            { text: `Ghi chú: ${entry.note}`, margin: [0, 5, 0, 0] },
+          ] },
+          images[entry.imageUrl]
+            ? { image: images[entry.imageUrl], fit: [190, 260], alignment: "center" }
+            : { text: "Chưa có ảnh nghiệm thu", italics: true, color: "#64748b" },
         ]),
       ] }, layout: { fillColor: (row) => row === 0 ? "#252b36" : row % 2 === 0 ? "#f8fafc" : "#ffffff", hLineWidth: () => 0.5, vLineWidth: () => 0, hLineColor: () => "#e2e8f0", paddingLeft: () => 8, paddingRight: () => 8, paddingTop: () => 10, paddingBottom: () => 10 } },
       { text: "Biên bản ghi nhận trạng thái của các hạng mục được chọn tại thời điểm lập; nội dung xác nhận được thể hiện trong bảng trên.", fontSize: 8, italics: true, color: "#64748b", margin: [0, 10, 0, 22] },
