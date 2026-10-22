@@ -16,8 +16,21 @@ export interface DailyWorkRow {
   date: string;
   employeeId: string;
   employeeName: string;
-  tasks: { id: string; title: string; duration: number; details: { id: string; title: string; duration: number }[] }[];
+  tasks: { id: string; title: string; duration: number; intervals: [number, number][]; details: { id: string; title: string; duration: number; isRunning: boolean }[] }[];
   duration: number;
+  actualDuration: number;
+}
+
+/** Elapsed work time, counting overlapping sessions only once. */
+export function actualWorkDuration(tasks: DailyWorkRow["tasks"]): number {
+  const intervals = tasks.flatMap((task) => task.intervals).sort((a, b) => a[0] - b[0]);
+  let total = 0;
+  let end = -Infinity;
+  for (const [start, stop] of intervals) {
+    total += Math.max(0, stop - Math.max(start, end));
+    end = Math.max(end, stop);
+  }
+  return total;
 }
 
 const DAY = 86_400_000;
@@ -37,26 +50,30 @@ function addDuration(
   date: string,
   employeeId: string,
   duration: number,
+  interval: [number, number],
+  isRunning: boolean,
 ) {
   if (duration <= 0) return;
   const key = `${date}:${employeeId}`;
   let row = rows.get(key);
   if (!row) {
-    row = { date, employeeId, employeeName: names[employeeId] || "Chưa xác định nhân sự", tasks: [], duration: 0 };
+    row = { date, employeeId, employeeName: names[employeeId] || "Chưa xác định nhân sự", tasks: [], duration: 0, actualDuration: 0 };
     rows.set(key, row);
   }
   let item = row.tasks.find((entry) => entry.id === task.id);
   if (!item) {
-    item = { id: task.id, title: task.title, duration: 0, details: [] };
+    item = { id: task.id, title: task.title, duration: 0, intervals: [], details: [] };
     row.tasks.push(item);
   }
   item.duration += duration;
+  item.intervals.push(interval);
   let detail = item.details.find((entry) => entry.id === detailId);
   if (!detail) {
     detail = {
       id: detailId,
       title: task.detailTitles?.[detailId] || (detailId === "initial" ? "Chi tiết ban đầu" : "Chi tiết không còn thông tin"),
       duration: 0,
+      isRunning,
     };
     item.details.push(detail);
   }
@@ -82,6 +99,7 @@ export function dailyWorkRows(tasks: DailyWorkTask[], startDate: string, endDate
       records.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
       const employees = assigneesForDetail(task, detailId);
       const targets = employees.length > 0 ? employees : [""];
+      const isRunning = records.at(-1)?.type === "start";
       for (const session of taskTimeSessions(records, now)) {
         const started = Date.parse(session.startedAt);
         const end = Math.min(started + session.duration, until, now);
@@ -92,12 +110,13 @@ export function dailyWorkRows(tasks: DailyWorkTask[], startDate: string, endDate
           const slice = next - cursor;
           const share = slice / targets.length;
           for (const employeeId of targets) {
-            addDuration(rows, names, task, detailId, date, employeeId, share);
+            addDuration(rows, names, task, detailId, date, employeeId, share, [cursor, next], isRunning);
           }
           cursor = next;
         }
       }
     }
   }
-  return [...rows.values()].sort((a, b) => b.date.localeCompare(a.date) || a.employeeName.localeCompare(b.employeeName, "vi"));
+  return [...rows.values()].map((row) => ({ ...row, actualDuration: actualWorkDuration(row.tasks) }))
+    .sort((a, b) => b.date.localeCompare(a.date) || a.employeeName.localeCompare(b.employeeName, "vi"));
 }

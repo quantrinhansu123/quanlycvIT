@@ -4,6 +4,7 @@ import { requireRequestAccount } from "@/lib/supabase/authorization";
 import { dailyWorkRows, type DailyWorkTask } from "@/lib/daily-work";
 import type { SubtaskTimeRecord } from "@/types/subtask";
 import { decodeHandoverContent } from "@/lib/handover";
+import { existingDetailTimeRecords } from "@/lib/task-time-sessions";
 
 function detailTitlesFrom(task: { mo_ta: string | null; cap_nhat_bo_sung: unknown; ban_giao_noi_dung: string | null }): Record<string, string> {
   const titles: Record<string, string> = {};
@@ -112,7 +113,7 @@ export async function GET(request: Request) {
       tasks.push(...page.map((task) => ({
         id: task.id,
         title: task.ten_task,
-        records: recordsFrom(task.time_records),
+        records: existingDetailTimeRecords(recordsFrom(task.time_records), Array.isArray(task.cap_nhat_bo_sung) ? task.cap_nhat_bo_sung : [], decodeHandoverContent(task.ban_giao_noi_dung).initialDeleted),
         assigneeIds: taskAssigneeIds(task.task_phu_trach),
         detailAssignees: detailAssigneesFrom(task.ban_giao_noi_dung),
         detailTitles: detailTitlesFrom(task),

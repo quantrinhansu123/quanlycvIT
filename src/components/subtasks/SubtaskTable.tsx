@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarDays, CheckCircle2, Eye, FilePenLine, FolderOpen, History, ListTodo, Pencil, Plus, Trash2, XCircle } from "lucide-react";
 import type { Subtask } from "@/types/subtask";
@@ -20,6 +20,7 @@ import {
   WORK_ITEM_TITLE_CLASS,
 } from "@/components/ui/work-item-table-layout";
 import { cn, formatDateVN } from "@/lib/utils";
+import { formatSessionDuration, runningTaskTimeSessions } from "@/lib/task-time-sessions";
 
 interface SubtaskTableProps {
   subtasks: Subtask[];
@@ -133,6 +134,13 @@ export function SubtaskTable({
 }: SubtaskTableProps) {
   const router = useRouter();
   const splitView = useSplitView();
+  const [now, setNow] = useState(() => Date.now());
+  const hasRunningTimer = subtasks.some((task) => runningTaskTimeSessions(task.timeRecords ?? [], now).length > 0);
+  useEffect(() => {
+    if (!hasRunningTimer) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [hasRunningTimer]);
   const selectableSubtasks = readOnly
     ? []
     : subtasks.filter((subtask) => subtask.status !== "done");
@@ -234,6 +242,8 @@ export function SubtaskTable({
             const overdue = isSubtaskOverdue(subtask);
             const rowReadOnly = readOnly || subtask.status === "done";
             const isActive = activeId === subtask.id;
+            const runningSessions = runningTaskTimeSessions(subtask.timeRecords ?? [], now);
+            const runningDuration = runningSessions.reduce((sum, session) => sum + session.duration, 0);
             const needsAcceptance = Boolean(
               isMember &&
               currentAccountId &&
@@ -398,6 +408,14 @@ export function SubtaskTable({
                     </div>
                   )}
                   </div>
+                  {runningSessions.length > 0 && (
+                    <div className="mt-1 flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600" title="Thời gian của các phiên đang chạy">
+                      <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-emerald-500" aria-hidden="true" />
+                      <span>Đang chạy</span>
+                      <span className="tabular-nums">{formatSessionDuration(runningDuration)}</span>
+                      {runningSessions.length > 1 && <span>({runningSessions.length} phiên)</span>}
+                    </div>
+                  )}
                   {compact && (
                     <div className="mt-1">
                       <ProgressBar value={subtask.progress} className="min-w-0 flex-1" />

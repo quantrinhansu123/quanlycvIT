@@ -115,6 +115,7 @@ export interface Subtask {
   updates: SubtaskUpdateEntry[];
   /** Các dòng yêu cầu và ảnh dùng trong khu vực tạo Prompt. */
   promptItems: SubtaskPromptItem[];
+  timeRecords?: SubtaskTimeRecord[];
   /** Các dòng vấn đề và giải pháp. */
   issues: SubtaskIssueEntry[];
   /** Nội dung bàn giao và link ảnh. */

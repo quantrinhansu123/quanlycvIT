@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/Button";
 import { cn, formatDateVN } from "@/lib/utils";
 import type { ProjectMember } from "@/types/project";
 import type { TaskFileAttachment, TaskLinkAttachment } from "@/types/task";
-import type { AcceptanceRow, Subtask, SubtaskTimeRecord } from "@/types/subtask";
+import type { AcceptanceRow, Subtask, SubtaskPromptItem, SubtaskTimeRecord } from "@/types/subtask";
 import { INITIAL_HANDOVER_SOURCE_ID } from "@/lib/handover";
 import { AcceptanceFields } from "./AcceptanceFields";
 import { DetailTimeTracker } from "./DetailTimeTracker";
@@ -76,6 +76,7 @@ interface TaskDetailDrawerProps {
     acceptance: AcceptanceRow;
   }) => void;
   onOpenPrompt: (detailId: string) => void;
+  onPromptItemsChange: (items: SubtaskPromptItem[]) => void;
   onImportPrompt: (entry: {
     requestId: string;
     taskTitle: string;
@@ -115,6 +116,7 @@ export function TaskDetailDrawer({
   onDeleteDetail,
   onStartEdit,
   onOpenPrompt,
+  onPromptItemsChange,
   onImportPrompt,
   onSaveAttachments,
 }: TaskDetailDrawerProps) {
@@ -427,7 +429,7 @@ export function TaskDetailDrawer({
             )}
 
             {/* Tab 3: Prompt chi tiết Task */}
-            {activeTab === "prompt" && (
+            <div hidden={activeTab !== "prompt"}>
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
@@ -495,6 +497,7 @@ export function TaskDetailDrawer({
                     })),
                   ]}
                   initialItems={subtask.promptItems}
+                  onItemsChange={onPromptItemsChange}
                   detailId={entry.id}
                   initialDataLoaded
                   inline
@@ -504,7 +507,7 @@ export function TaskDetailDrawer({
                   }}
                 />
               </div>
-            )}
+            </div>
 
             {/* Tab 4: Nhân sự thực hiện */}
             {activeTab === "assignees" && (

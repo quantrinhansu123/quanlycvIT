@@ -6,7 +6,7 @@ import { BarChart3, List, RefreshCw } from "lucide-react";
 import { apiClient } from "@/services/api-client";
 import { getAppDateKey } from "@/lib/utils";
 import { formatSessionDuration } from "@/lib/task-time-sessions";
-import type { DailyWorkRow } from "@/lib/daily-work";
+import { actualWorkDuration, type DailyWorkRow } from "@/lib/daily-work";
 import { DailyWorkChart } from "@/components/tasks/DailyWorkChart";
 
 const VIEW_TABS = [
@@ -53,10 +53,11 @@ export default function DailyWorkPage() {
     .filter((row) => employee === "all" || row.employeeId === employee)
     .map((row) => {
       const matchingTasks = row.tasks.filter((task) => selectedTask === "all" || task.id === selectedTask);
-      return { ...row, tasks: matchingTasks, duration: matchingTasks.reduce((sum, task) => sum + task.duration, 0) };
+      return { ...row, tasks: matchingTasks, actualDuration: actualWorkDuration(matchingTasks), duration: matchingTasks.reduce((sum, task) => sum + task.duration, 0) };
     })
     .filter((row) => row.tasks.length > 0);
   const total = visible.reduce((sum, row) => sum + row.duration, 0);
+  const actualTotal = visible.reduce((sum, row) => sum + row.actualDuration, 0);
   const fieldClass = "h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800";
 
   return (
@@ -90,6 +91,7 @@ export default function DailyWorkPage() {
           </label>
           <div className="ml-auto text-right text-sm text-gray-500">Tổng giờ làm (giờ:phút:giây)<p className="mt-1 text-2xl font-semibold tabular-nums text-violet-700">{loading || error ? "—" : formatSessionDuration(total)}</p></div>
         </div>
+        <div className="text-right text-sm text-gray-500">Tổng giờ thực tế (giờ:phút:giây)<p className="mt-1 text-2xl font-semibold tabular-nums text-emerald-700">{loading || error ? "—" : formatSessionDuration(actualTotal)}</p></div>
         {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
         <div role="tablist" aria-label="Chế độ xem công việc" className="flex gap-1 border-b border-gray-200">
           {VIEW_TABS.map((tab, index) => (
@@ -127,9 +129,10 @@ export default function DailyWorkPage() {
             <caption className="sr-only">Công việc và tổng giờ làm theo ngày, nhân sự</caption>
             <thead className="border-b border-gray-200 bg-gray-50 text-gray-600"><tr>
               <th scope="col" className="w-32 px-4 py-3">Ngày</th><th scope="col" className="w-52 px-4 py-3">Nhân sự</th><th scope="col" className="px-4 py-3">Các công việc (Task)</th><th scope="col" className="min-w-72 px-4 py-3">Task chi tiết</th><th scope="col" className="w-44 px-4 py-3 text-right">Tổng giờ làm</th>
+              <th scope="col" className="w-44 px-4 py-3 text-right">Tổng giờ thực tế</th>
             </tr></thead>
             <tbody className="divide-y divide-gray-100">
-              {loading ? <tr><td colSpan={5} className="p-10 text-center text-gray-500">Đang tải dữ liệu...</td></tr> : error ? <tr><td colSpan={5} className="p-10 text-center text-gray-500">Không thể tải dữ liệu. Bấm Làm mới để thử lại.</td></tr> : visible.length === 0 ? <tr><td colSpan={5} className="p-10 text-center text-gray-500">Chưa có thời gian làm việc được ghi nhận trong bộ lọc này.</td></tr> : visible.map((row) => (
+              {loading ? <tr><td colSpan={6} className="p-10 text-center text-gray-500">Đang tải dữ liệu...</td></tr> : error ? <tr><td colSpan={6} className="p-10 text-center text-gray-500">Không thể tải dữ liệu. Bấm Làm mới để thử lại.</td></tr> : visible.length === 0 ? <tr><td colSpan={6} className="p-10 text-center text-gray-500">Chưa có thời gian làm việc được ghi nhận trong bộ lọc này.</td></tr> : visible.map((row) => (
                 <tr key={`${row.date}:${row.employeeId}`} className="align-top hover:bg-gray-50">
                   <td className="whitespace-nowrap px-4 py-4 text-gray-600">{row.date.split("-").reverse().join("/")}</td>
                   <td className="px-4 py-4 font-medium text-gray-900">{row.employeeName}</td>
@@ -140,20 +143,27 @@ export default function DailyWorkPage() {
                         <p className="mb-1 text-xs font-medium text-gray-500">{task.title}</p>
                         <ul className="space-y-1.5">{task.details.map((detail) => (
                           <li key={detail.id} className="flex items-start justify-between gap-4">
-                            <span className="text-gray-800">{detail.title}</span>
-                            <span className="shrink-0 tabular-nums text-gray-500">{formatSessionDuration(detail.duration)}</span>
+                            <Link
+                              href={`/quan-ly-cong-viec/danh-sach-task/${task.id}#detail-${encodeURIComponent(detail.id)}`}
+                              className={detail.isRunning ? "font-medium text-emerald-700 hover:underline" : "text-gray-800 hover:text-violet-700 hover:underline"}
+                            >
+                              {detail.title}
+                              {detail.isRunning && <span className="ml-2 inline-flex items-center gap-1 text-xs"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Đang chạy</span>}
+                            </Link>
+                            <span className={`shrink-0 tabular-nums ${detail.isRunning ? "text-emerald-700" : "text-gray-500"}`}>{formatSessionDuration(detail.duration)}</span>
                           </li>
                         ))}</ul>
                       </div>
                     ))}</div>
                   </td>
                   <td className="px-4 py-4 text-right font-semibold tabular-nums text-gray-900">{formatSessionDuration(row.duration)}</td>
+                  <td className="px-4 py-4 text-right font-semibold tabular-nums text-emerald-700">{formatSessionDuration(row.actualDuration)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <p className="text-xs leading-5 text-gray-500">Giờ làm được tính cho người được gán chi tiết Task (nếu có), không thì theo người phụ trách Task; nhiều người thì chia đều. Không gồm thời gian tạm dừng. Phiên qua nửa đêm được chia theo ngày Việt Nam. Phiên đang chạy được tính đến lúc tải dữ liệu; bấm Làm mới để cập nhật. Chỉ hiển thị các task có thời gian làm việc được ghi nhận.</p>
+        <p className="text-xs leading-5 text-gray-500">Tổng giờ thực tế gộp các khoảng làm việc trùng nhau của từng nhân sự trong ngày; mỗi người được tính toàn bộ khoảng thời gian được gán, không chia đều. Tổng giờ làm cộng thời lượng từng việc, chia đều khi có nhiều người được gán. Giờ làm được tính cho người được gán chi tiết Task (nếu có), không thì theo người phụ trách Task. Không gồm thời gian tạm dừng. Phiên qua nửa đêm được chia theo ngày Việt Nam. Phiên đang chạy được tính đến lúc tải dữ liệu; bấm Làm mới để cập nhật. Chỉ hiển thị các task có thời gian làm việc được ghi nhận.</p>
       </div>
     </div>
   );

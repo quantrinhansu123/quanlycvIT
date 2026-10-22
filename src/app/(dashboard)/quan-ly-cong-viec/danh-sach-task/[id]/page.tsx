@@ -1,6 +1,6 @@
 import { createServerSupabaseClient } from "@/lib/supabase/api";
 import { assertSubtaskReadable, requireRequestAccount } from "@/lib/supabase/authorization";
-import { getSubtaskDetailPageData } from "@/lib/supabase/data";
+import { getProject, getSubtaskDetailPageData } from "@/lib/supabase/data";
 import { SubtaskDetailView } from "./SubtaskDetailView";
 
 interface SubtaskDetailPageProps {
@@ -18,11 +18,13 @@ export default async function SubtaskDetailPage({ params }: SubtaskDetailPagePro
     getSubtaskDetailPageData(supabase, id),
   ]);
   const { subtask, parentWorkTask } = detailData;
+  const project = parentWorkTask ? await getProject(supabase, parentWorkTask.projectId) : null;
 
   return (
     <SubtaskDetailView
       subtaskId={id}
       initialSubtask={subtask}
+      initialProjectName={project?.name}
       initialWorkTasks={parentWorkTask ? [parentWorkTask] : []}
       initialReports={[]}
       initialMembers={[]}

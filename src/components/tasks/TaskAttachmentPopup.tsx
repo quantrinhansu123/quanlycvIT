@@ -1,21 +1,27 @@
 "use client";
 
-import { useId, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Paperclip, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 
-export function TaskAttachmentPopup({ count, readOnly, compact = false, children }: {
+export function TaskAttachmentPopup({ count, readOnly, compact = false, renderTrigger, children }: {
   count: number;
   readOnly: boolean;
   compact?: boolean;
+  renderTrigger?: (open: () => void) => ReactNode;
   children: ReactNode;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (open) dialog.current?.showModal();
+  }, [open]);
 
   return (
     <>
-      {compact ? (
+      {renderTrigger ? renderTrigger(() => setOpen(true)) : compact ? (
         <button
           type="button"
           onClick={() => dialog.current?.showModal()}
@@ -34,7 +40,7 @@ export function TaskAttachmentPopup({ count, readOnly, compact = false, children
           </Button>
         </div>
       )}
-      <dialog ref={dialog} aria-labelledby={titleId} className="fixed inset-0 m-auto max-h-[85dvh] w-[min(720px,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-gray-200 bg-white p-0 text-gray-800 shadow-xl backdrop:bg-black/40">
+      <dialog ref={dialog} onClose={() => setOpen(false)} aria-labelledby={titleId} className="fixed inset-0 m-auto max-h-[85dvh] w-[min(720px,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-gray-200 bg-white p-0 text-gray-800 shadow-xl backdrop:bg-black/40">
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4">
           <h2 id={titleId} className="text-base font-semibold">{readOnly ? "Tệp đính kèm" : "Thêm tệp đính kèm"}</h2>
           <button type="button" autoFocus aria-label="Đóng" onClick={() => dialog.current?.close()} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100">

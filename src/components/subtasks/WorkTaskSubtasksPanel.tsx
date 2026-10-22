@@ -78,6 +78,7 @@ export function WorkTaskSubtasksPanel({
   const [assigneeId, setAssigneeId] = useState("");
   const [priority, setPriority] = useState<TaskPriority | "">("");
   const [status, setStatus] = useState<TaskStatus | "">("");
+  const [runningOnly, setRunningOnly] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("table");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [formModal, setFormModal] = useState<FormModalState>(null);
@@ -104,8 +105,9 @@ export function WorkTaskSubtasksPanel({
       assigneeId: assigneeId || undefined,
       priority: priority || undefined,
       status: status || undefined,
+      runningOnly: runningOnly || undefined,
     }),
-    [assigneeId, priority, search, status, workTask.id]
+    [assigneeId, priority, search, status, workTask.id, runningOnly]
   );
 
   const loadSubtasks = useCallback(
@@ -136,6 +138,20 @@ export function WorkTaskSubtasksPanel({
       loadSubtasks(filters);
     }, 250);
     return () => window.clearTimeout(timer);
+  }, [filters, loadSubtasks]);
+
+  useEffect(() => {
+    function handleDetailUpdated(event: Event) {
+      const updated = (event as CustomEvent<Subtask>).detail;
+      if (!updated?.id) return;
+      if (filters.runningOnly) {
+        void loadSubtasks(filters);
+        return;
+      }
+      setSubtasks((current) => current.map((task) => task.id === updated.id ? { ...task, ...updated } : task));
+    }
+    window.addEventListener("app:subtask-details-updated", handleDetailUpdated);
+    return () => window.removeEventListener("app:subtask-details-updated", handleDetailUpdated);
   }, [filters, loadSubtasks]);
 
   const totalPages = Math.max(1, Math.ceil(subtasks.length / pageSize));
@@ -369,6 +385,10 @@ export function WorkTaskSubtasksPanel({
             label: option.label,
           }))}
         />
+        <button type="button" aria-pressed={runningOnly} onClick={() => setRunningOnly((current) => !current)}
+          className={cn("h-9 rounded-lg border px-3 text-xs font-semibold", runningOnly ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-gray-200 text-gray-600 hover:bg-gray-50")}>
+          Đang chạy
+        </button>
         <div className="ml-auto flex items-center gap-2">
           {!viewOnly && <Button size="sm" onClick={() => setFormModal({ mode: "create" })}>
             <Plus className="h-4 w-4" />

@@ -21,6 +21,7 @@ import {
   MessageSquareText,
   PanelRightClose,
   PanelRightOpen,
+  Paperclip,
   Pencil,
   Plus,
   Printer,
@@ -32,10 +33,8 @@ import {
   type LucideIcon,
   Image as ImageIcon,
 } from "lucide-react";
-import { AcceptanceFields } from "@/components/subtasks/AcceptanceFields";
 import { TaskDetailDrawer } from "@/components/subtasks/TaskDetailDrawer";
-import { formatSessionDuration, taskTimeSessions } from "@/lib/task-time-sessions";
-import { AcceptanceImageInput } from "@/components/subtasks/AcceptanceImageInput";
+import { formatSessionDuration, runningTaskTimeSessions, taskTimeSessions } from "@/lib/task-time-sessions";
 import { DetailTimeTracker } from "@/components/subtasks/DetailTimeTracker";
 import { projectService } from "@/services/project-service";
 import { taskService } from "@/services/task-service";
@@ -44,10 +43,11 @@ import type { ProjectDirectoryItem, ProjectMember } from "@/types/project";
 import type { TaskFileAttachment, TaskLinkAttachment, WorkTaskDirectoryItem } from "@/types/task";
 import { SUBTASK_STATUS_OPTIONS, TASK_PRIORITY_OPTIONS } from "@/types/task";
 import { detailTaskProgressPercent, emptyAcceptanceRow, INITIAL_HANDOVER_SOURCE_ID } from "@/lib/handover";
-import type { AcceptanceRow, Subtask, SubtaskReport, SubtaskTestHistoryEntry, SubtaskTimeRecord } from "@/types/subtask";
+import type { AcceptanceRow, Subtask, SubtaskPromptItem, SubtaskReport, SubtaskTestHistoryEntry, SubtaskTimeRecord } from "@/types/subtask";
 import { isSubtaskOverdue } from "@/types/subtask";
 import { AvatarStack } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
+import { RowActionMenu } from "@/components/ui/RowActionMenu";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { MemberMultiSelect } from "@/components/ui/MemberMultiSelect";
@@ -121,6 +121,7 @@ function emptyIterationDraft(): IterationDraft {
 interface SubtaskDetailViewProps {
   subtaskId: string;
   initialSubtask: Subtask | null;
+  initialProjectName?: string;
   initialWorkTasks: WorkTaskDirectoryItem[];
   initialReports: SubtaskReport[];
   initialMembers: ProjectMember[];
@@ -132,6 +133,7 @@ const SUBTASK_ACCEPTED_EVENT = "app:subtask-accepted";
 export function SubtaskDetailView({
   subtaskId,
   initialSubtask,
+  initialProjectName,
   initialWorkTasks,
   initialReports,
   initialMembers,
@@ -143,12 +145,15 @@ export function SubtaskDetailView({
   const cache = useSessionDataCache();
   const splitView = useSplitView();
   const [subtask, setSubtask] = useState<Subtask | null>(initialSubtask);
+  const handlePromptItemsChange = useCallback((items: SubtaskPromptItem[]) => {
+    setSubtask((current) => current ? { ...current, promptItems: items } : current);
+  }, []);
   const [workTasks, setWorkTasks] = useState<WorkTaskDirectoryItem[]>(initialWorkTasks);
   const [reports, setReports] = useState<SubtaskReport[]>(initialReports);
   const [members, setMembers] = useState<ProjectMember[]>(initialMembers);
   const [projects, setProjects] = useState<ProjectDirectoryItem[]>([]);
   const [testHistory, setTestHistory] = useState<SubtaskTestHistoryEntry[]>(initialTestHistory);
-  const [timeRecords, setTimeRecords] = useState<SubtaskTimeRecord[]>([]);
+  const [timeRecords, setTimeRecords] = useState<SubtaskTimeRecord[]>(initialSubtask?.timeRecords ?? []);
   const [savingTimeRecord, setSavingTimeRecord] = useState(false);
   const [timeRecordsReady, setTimeRecordsReady] = useState(false);
   const [iterationEditor, setIterationEditor] = useState<IterationDraft | null>(null);
@@ -173,7 +178,42 @@ export function SubtaskDetailView({
   const [drawerDetailId, setDrawerDetailId] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
-  const hasRunningTimer = timeRecords.some((r) => r.type === "start");
+  useEffect(() => {
+    function openLinkedDetail() {
+      const prefix = "#detail-";
+      if (!window.location.hash.startsWith(prefix) || !subtask) return;
+      let detailId: string;
+      try {
+        detailId = decodeURIComponent(window.location.hash.slice(prefix.length));
+      } catch {
+        return;
+      }
+      const exists = detailId === INITIAL_HANDOVER_SOURCE_ID
+        ? !subtask.handover?.initialDeleted
+        : subtask.updates.some((entry) => entry.id === detailId);
+      if (exists) {
+        setTab("info");
+        setDrawerDetailId(detailId);
+      }
+    }
+    openLinkedDetail();
+    window.addEventListener("hashchange", openLinkedDetail);
+    return () => window.removeEventListener("hashchange", openLinkedDetail);
+  }, [subtask]);
+
+  const projectId = workTasks.find((item) => item.id === subtask?.workTaskId)?.projectId;
+  const projectName = projects.find((item) => item.id === projectId)?.name ?? initialProjectName;
+  const runningSessions = runningTaskTimeSessions(timeRecords, now);
+  const hasRunningTimer = runningSessions.length > 0;
+  const browserTitle = projectName;
+
+  useEffect(() => {
+    if (!browserTitle) return;
+    const previousTitle = document.title;
+    document.title = browserTitle;
+    return () => { document.title = previousTitle; };
+  }, [browserTitle]);
+
   useEffect(() => {
     if (!hasRunningTimer) return;
     const interval = setInterval(() => setNow(Date.now()), 1000);
@@ -184,9 +224,9 @@ export function SubtaskDetailView({
     if (!subtask) return;
     const progress = detailTaskProgressPercent(subtask.updates.map((entry) => entry.id), subtask.handover?.rows, !subtask.handover?.initialDeleted);
     window.dispatchEvent(new CustomEvent("app:subtask-details-updated", {
-      detail: { ...subtask, progress },
+      detail: { ...subtask, progress, timeRecords },
     }));
-  }, [subtask]);
+  }, [subtask, timeRecords]);
 
   const recordTime = useCallback(async (detailId: string, type: SubtaskTimeRecord["type"]) => {
     if (savingTimeRecord) return;
@@ -287,29 +327,6 @@ export function SubtaskDetailView({
     try {
       const imageUrl = await subtaskService.uploadImage(file);
       await saveAcceptance(sourceId, { imageUrl });
-    } catch (uploadError) {
-      notify({
-        type: "error",
-        title: "Không thể tải ảnh nghiệm thu",
-        description: getErrorMessage(uploadError, "Ảnh phải là JPG, PNG, WEBP hoặc AVIF và tối đa 10 MB."),
-      });
-      throw uploadError;
-    } finally {
-      setUploadingAcceptanceId(null);
-    }
-  }
-
-  async function uploadDraftAcceptanceImage(file: File | null) {
-    if (!file || !file.type.startsWith("image/")) {
-      notify({ type: "error", title: "Hãy chọn một ảnh JPG, PNG, WEBP hoặc AVIF." });
-      throw new Error("Invalid image");
-    }
-    setUploadingAcceptanceId("draft");
-    try {
-      const imageUrl = await subtaskService.uploadImage(file);
-      setIterationEditor((current) => current
-        ? { ...current, acceptance: { ...current.acceptance, imageUrl } }
-        : current);
     } catch (uploadError) {
       notify({
         type: "error",
@@ -575,6 +592,7 @@ export function SubtaskDetailView({
       } : current);
       const updated = await subtaskService.updateUpdates(taskId, updates, { handover });
       if (!updated) throw new Error("Task không tồn tại hoặc đã bị xóa.");
+      setTimeRecords(updated.timeRecords ?? []);
       setSubtask((current) => current?.id === taskId ? {
         ...current,
         updates: updated.updates,
@@ -938,10 +956,10 @@ export function SubtaskDetailView({
                           <col />
                           <col className="w-40" />
                           <col className="w-32" />
-                          <col className="w-32" />
-                          <col className="w-72" />
+                          <col className="w-60" />
+                          <col className="w-20" />
                         </colgroup>
-                        <thead className="border-b border-gray-200 bg-gray-50/75 text-left text-xs font-semibold text-gray-500">
+                        <thead className="whitespace-nowrap border-b border-gray-200 bg-gray-50/75 text-left text-xs font-semibold text-gray-500">
                           <tr>
                             <th scope="col" className="px-3 py-3.5 text-center">
                               <input
@@ -1034,7 +1052,7 @@ export function SubtaskDetailView({
 
                                 {/* Nội dung tóm tắt */}
                                 <td className="px-3 py-3">
-                                  <p className="line-clamp-2 text-xs leading-5 text-gray-600" title={entry.description || "Chưa có mô tả"}>
+                                  <p className="truncate text-xs leading-5 text-gray-600" title={entry.description || "Chưa có mô tả"}>
                                     {entry.description?.trim() || <span className="italic text-gray-400">Chưa có mô tả</span>}
                                   </p>
                                 </td>
@@ -1044,7 +1062,7 @@ export function SubtaskDetailView({
                                   <div className="flex flex-col items-start gap-1">
                                     <span
                                       className={cn(
-                                        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium shadow-2xs",
+                                        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-medium shadow-2xs",
                                         statusInfo.bg,
                                         statusInfo.text,
                                         statusInfo.border
@@ -1091,18 +1109,18 @@ export function SubtaskDetailView({
                                 {/* Nhân sự */}
                                 <td className="px-3 py-3">
                                   {assignedMembers.length > 0 ? (
-                                    <div className="flex flex-wrap items-center gap-1">
+                                    <div className="flex min-w-0 items-center gap-1 overflow-hidden">
                                       {assignedMembers.slice(0, 2).map((m) => (
                                         <span
                                           key={m.id}
-                                          className="inline-flex items-center rounded-md bg-gray-100 px-2 py-0.5 text-xs text-gray-700 border border-gray-200/60"
+                                          className="block min-w-0 truncate rounded-md bg-gray-100 px-2 py-0.5 text-xs text-gray-700 border border-gray-200/60"
                                           title={m.name}
                                         >
                                           {m.name}
                                         </span>
                                       ))}
                                       {assignedMembers.length > 2 && (
-                                        <span className="text-[11px] text-gray-400 font-medium">
+                                        <span className="shrink-0 text-[11px] text-gray-400 font-medium">
                                           +{assignedMembers.length - 2}
                                         </span>
                                       )}
@@ -1114,41 +1132,42 @@ export function SubtaskDetailView({
 
                                 {/* Thao tác */}
                                 <td className="px-3 py-3 text-right pr-4" onClick={(e) => e.stopPropagation()}>
-                                  <div className="flex flex-nowrap items-center justify-end gap-2 whitespace-nowrap">
-                                    {!statusLocked && (
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="secondary"
-                                        disabled={savingIteration || Boolean(deletingDetailId) || Boolean(iterationEditor)}
-                                        onClick={() => setIterationEditor({
-                                          id: entry.id,
-                                          title: detailTitle,
-                                          description: entry.description ?? "",
-                                          files: entry.files,
-                                          links: entry.links,
-                                          images: entry.images,
-                                          acceptance,
-                                        })}
-                                        aria-label={`Sửa chi tiết ${detailTitle}`}
-                                        className="h-8 shrink-0 gap-1.5 whitespace-nowrap text-xs"
-                                      >
-                                        <Pencil className="h-3.5 w-3.5" /> Sửa
-                                      </Button>
-                                    )}
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="secondary"
-                                      onClick={() => setDrawerDetailId(entry.id)}
-                                      className="h-8 shrink-0 whitespace-nowrap rounded-lg bg-violet-50 border-violet-200 text-violet-700 hover:bg-violet-100 px-3 text-xs font-medium shadow-2xs inline-flex items-center gap-1.5 cursor-pointer"
-                                      title="Mở chi tiết & nghiệm thu"
+                                  <div className="flex justify-end">
+                                    <TaskAttachmentPopup
+                                      count={totalAttachments}
+                                      readOnly={statusLocked}
+                                      renderTrigger={(openAttachments) => (
+                                        <RowActionMenu
+                                          label={`Thao tác chi tiết ${detailTitle}`}
+                                          items={[
+                                            ...(!statusLocked ? [{
+                                              label: "Sửa",
+                                              icon: Pencil,
+                                              disabled: savingIteration || Boolean(deletingDetailId) || Boolean(iterationEditor),
+                                              onClick: () => setIterationEditor({
+                                                id: entry.id,
+                                                title: detailTitle,
+                                                description: entry.description ?? "",
+                                                files: entry.files,
+                                                links: entry.links,
+                                                images: entry.images,
+                                                acceptance,
+                                              }),
+                                            }] : []),
+                                            {
+                                              label: "Chi tiết",
+                                              icon: PanelRightOpen,
+                                              onClick: () => setDrawerDetailId(entry.id),
+                                            },
+                                            {
+                                              label: `Tài liệu (${totalAttachments})`,
+                                              icon: Paperclip,
+                                              onClick: openAttachments,
+                                            },
+                                          ]}
+                                        />
+                                      )}
                                     >
-                                      <PanelRightOpen className="h-3.5 w-3.5 shrink-0" />
-                                      <span className="whitespace-nowrap">Chi tiết</span>
-                                    </Button>
-
-                                    <TaskAttachmentPopup count={totalAttachments} readOnly={statusLocked} compact>
                                       {statusLocked ? (
                                         <DetailAttachments
                                           entityLabel="Task"
@@ -1506,7 +1525,7 @@ export function SubtaskDetailView({
       </div>
 
                   {iterationEditor && !statusLocked && (
-                    <NewDetailDialog title={iterationEditor.id === null ? "Thêm chi tiết Task" : "Sửa chi tiết Task"} busy={savingIteration || uploadingAcceptanceId === "draft"} onClose={() => setIterationEditor(null)}>
+                    <NewDetailDialog title={iterationEditor.id === null ? "Thêm chi tiết Task" : "Sửa chi tiết Task"} busy={savingIteration} onClose={() => setIterationEditor(null)}>
                       <div className="mb-2 text-sm font-semibold text-violet-800">{iterationEditor.title.trim() || "Chi tiết mới"}</div>
                       <IterationTitleInput value={iterationEditor.title} onChange={(title) => setIterationEditor((current) => current ? { ...current, title } : current)} />
                       <textarea
@@ -1519,19 +1538,22 @@ export function SubtaskDetailView({
                         placeholder="Nhập nội dung chi tiết..."
                         className="w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm leading-6 text-gray-700 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
                       />
-                      {iterationEditor.id === null && <><AcceptanceFields
-                        key={`${subtask.id}:draft`}
-                        members={subtask.assignees}
-                        row={iterationEditor.acceptance}
-                        disabled={savingIteration || !canEditHandover}
-                        uploading={uploadingAcceptanceId === "draft"}
-                        onDraftChange={(patch) => setIterationEditor((current) => current
-                          ? { ...current, acceptance: { ...current.acceptance, ...patch } }
-                          : current)}
-                        onSave={() => undefined}
-                        onUpload={(file) => uploadDraftAcceptanceImage(file)}
-                      />
-                      <InlineTaskAttachmentEditor
+                      {iterationEditor.id === null && (
+                        <fieldset disabled={savingIteration} className="my-3 min-w-0">
+                          <legend className="mb-1.5 text-xs font-semibold text-gray-500">Nhân sự thực hiện</legend>
+                          <MemberMultiSelect
+                            options={subtask.assignees}
+                            value={iterationEditor.acceptance.assigneeIds ?? []}
+                            onChange={(assigneeIds) => setIterationEditor((current) => current
+                              ? { ...current, acceptance: { ...current.acceptance, assigneeIds } }
+                              : current)}
+                            placeholder="Chọn nhân sự thực hiện..."
+                            emptyHint="Task chưa có nhân sự được phân công."
+                            disabled={savingIteration}
+                          />
+                        </fieldset>
+                      )}
+                      {iterationEditor.id === null && <InlineTaskAttachmentEditor
                         entityLabel="Task"
                         files={iterationEditor.files}
                         links={iterationEditor.links}
@@ -1544,10 +1566,10 @@ export function SubtaskDetailView({
                             : current);
                         }}
                       />
-                      </>}
+                      }
                       <div className="mt-2 flex justify-end gap-2">
-                        <Button type="button" variant="ghost" size="sm" disabled={savingIteration || uploadingAcceptanceId === "draft"} onClick={() => setIterationEditor(null)}>Hủy</Button>
-                        <Button type="button" size="sm" disabled={savingIteration || uploadingAcceptanceId === "draft"} onClick={() => void handleSaveIteration()}>{savingIteration ? "Đang lưu..." : "Lưu chi tiết"}</Button>
+                        <Button type="button" variant="ghost" size="sm" disabled={savingIteration} onClick={() => setIterationEditor(null)}>Hủy</Button>
+                        <Button type="button" size="sm" disabled={savingIteration} onClick={() => void handleSaveIteration()}>{savingIteration ? "Đang lưu..." : "Lưu chi tiết"}</Button>
                       </div>
                     </NewDetailDialog>
                   )}
@@ -1660,6 +1682,7 @@ export function SubtaskDetailView({
               setIterationEditor(draft);
             }}
             onOpenPrompt={(detailId) => setPromptDetailId(detailId)}
+            onPromptItemsChange={handlePromptItemsChange}
             onImportPrompt={(item) => setPromptImport(item)}
             onSaveAttachments={(detailId, value) =>
               detailId === INITIAL_HANDOVER_SOURCE_ID

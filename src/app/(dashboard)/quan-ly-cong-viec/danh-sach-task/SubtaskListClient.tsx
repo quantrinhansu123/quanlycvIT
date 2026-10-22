@@ -108,6 +108,7 @@ export function SubtaskListClient({
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [priorities, setPriorities] = useState<TaskPriority[]>([]);
   const [statuses, setStatuses] = useState<TaskStatus[]>([]);
+  const [runningOnly, setRunningOnly] = useState(false);
 
   const [viewMode, setViewMode] = useState<ViewMode>("table");
   const [grouped, setGrouped] = useState(true);
@@ -128,6 +129,7 @@ export function SubtaskListClient({
       assigneeIds: assigneeIds.length > 0 ? assigneeIds : undefined,
       priorities: priorities.length > 0 ? priorities : undefined,
       statuses: statuses.length > 0 ? statuses : undefined,
+      runningOnly: runningOnly || undefined,
     };
   }
 
@@ -135,7 +137,7 @@ export function SubtaskListClient({
     accountId,
     role: accountRole,
     resource: CACHE_RESOURCE.subtasksList,
-    filters: { search, projectId, workTaskIds, assigneeIds, priorities, statuses },
+    filters: { search, projectId, workTaskIds, assigneeIds, priorities, statuses, runningOnly },
     page,
     pageSize,
   });
@@ -252,6 +254,10 @@ export function SubtaskListClient({
     function handleSubtaskAccepted(event: Event) {
       const accepted = (event as CustomEvent<Subtask>).detail;
       if (!accepted?.id) return;
+      if (runningOnly) {
+        void refreshSubtasks();
+        return;
+      }
 
       // An absent cache entry must not be replaced by a fresh empty result.
       const visiblePage = cache.get<SubtaskPageResult>(listKey)?.data ?? lastLoadedSubtaskPage;
@@ -273,7 +279,7 @@ export function SubtaskListClient({
       window.removeEventListener(SUBTASK_ACCEPTED_EVENT, handleSubtaskAccepted);
       window.removeEventListener("app:subtask-details-updated", handleSubtaskAccepted);
     };
-  }, [cache, listKey, setSubtaskPage, statuses, lastLoadedSubtaskPage]);
+  }, [cache, listKey, setSubtaskPage, statuses, lastLoadedSubtaskPage, runningOnly, refreshSubtasks]);
 
   // Đổi dự án thì bỏ những lựa chọn "Công việc" không thuộc dự án mới.
   function handleProjectChange(nextProjectId: string) {
@@ -289,7 +295,7 @@ export function SubtaskListClient({
     // Bộ lọc thay đổi thì quay về trang đầu để không rơi vào trang trống.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(1);
-  }, [search, projectId, workTaskIds, assigneeIds, priorities, statuses]);
+  }, [search, projectId, workTaskIds, assigneeIds, priorities, statuses, runningOnly]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -637,7 +643,16 @@ return (
             options={SUBTASK_STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
           />
           {/* Active filter chips */}
-          {Boolean(projectId || workTaskIds.length || assigneeIds.length || priorities.length || statuses.length) && (
+          <button
+            type="button"
+            aria-pressed={runningOnly}
+            onClick={() => setRunningOnly((current) => !current)}
+            className={cn("inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg border px-2 text-xs font-semibold", compactList && "col-span-6", runningOnly ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50")}
+          >
+            <span className={cn("h-1.5 w-1.5 rounded-full", runningOnly ? "bg-emerald-500" : "bg-gray-400")} aria-hidden="true" />
+            Đang chạy
+          </button>
+          {Boolean(runningOnly || projectId || workTaskIds.length || assigneeIds.length || priorities.length || statuses.length) && (
             <div className={cn("flex min-w-0 items-center gap-1.5 [&>span]:min-w-0 [&>span]:whitespace-nowrap [&>span>button]:shrink-0", compactList ? "col-span-6 w-full flex-nowrap [&>span]:max-w-[calc(100%-2rem)] [&>span]:text-[10px]" : "ml-auto flex-wrap border-l border-gray-200 pl-2 [&>span]:max-w-full")}>
               {projectId && projects.find(p => p.id === projectId) && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 text-brand-700 px-2 py-0.5 text-xs font-medium">
@@ -673,7 +688,7 @@ return (
                 type="button"
                 title="Xóa tất cả bộ lọc"
                 aria-label="Xóa tất cả bộ lọc"
-                onClick={() => { handleProjectChange(""); setWorkTaskIds([]); setAssigneeIds([]); setPriorities([]); setStatuses([]); }}
+                onClick={() => { handleProjectChange(""); setWorkTaskIds([]); setAssigneeIds([]); setPriorities([]); setStatuses([]); setRunningOnly(false); }}
                 className="ml-auto flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 px-2 text-xs font-medium transition-colors"
               >
                 <X className="h-3.5 w-3.5" />

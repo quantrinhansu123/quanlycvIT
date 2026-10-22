@@ -1,4 +1,5 @@
 import { decodeHandover, detailTaskProgressPercent, encodeHandoverContent } from "@/lib/handover";
+import { existingDetailTimeRecords, runningTaskTimeSessions } from "@/lib/task-time-sessions";
 import type { ApiSupabaseClient } from "@/lib/supabase/api";
 import { ApiException, isSchemaCacheError, throwDatabaseError } from "@/lib/api/response";
 import { resolveAuthUserId, type RequestAccountAccess } from "@/lib/supabase/authorization";
@@ -171,6 +172,7 @@ interface SubtaskRow {
   tester: AccountRow | null;
   /** Chỉ có khi select chi tiết (`SUBTASK_DETAIL_SELECT`). */
   prompt_items?: unknown;
+  time_records?: unknown;
   /** Chỉ có trên select danh sách: công việc cha và tên dự án. */
   parent_work_task?: {
     id: string;
@@ -229,6 +231,7 @@ export interface TaskReportInput {
 }
 
 export interface SubtaskFilters {
+  runningOnly?: boolean;
   search?: string;
   workTaskId?: string;
   assigneeId?: string;
@@ -322,7 +325,7 @@ const WORK_TASK_DIRECTORY_SELECT =
   `legacy_assignee:tai_khoan!nguoi_phu_trach_id(${ACCOUNT_SELECT}),` +
   `cong_viec_phu_trach(tai_khoan_id,la_chinh,tai_khoan(${ACCOUNT_SELECT}))`;
 const SUBTASK_SELECT =
-  "id,ten_task,mo_ta,created_at,updated_at,ngay_bat_dau,ngay_ket_thuc,nguoi_phu_trach_id,nguoi_tao_id,nguoi_test_id,ghi_chu_test,trang_thai,uu_tien,tien_do_thuc_te,nhan_tag,hinh_anh,tep_dinh_kem,lien_ket_dinh_kem,cap_nhat_bo_sung,task_tien_de_id,cong_viec_id," +
+  "id,ten_task,mo_ta,created_at,updated_at,ngay_bat_dau,ngay_ket_thuc,nguoi_phu_trach_id,nguoi_tao_id,nguoi_test_id,ghi_chu_test,trang_thai,uu_tien,tien_do_thuc_te,nhan_tag,hinh_anh,tep_dinh_kem,lien_ket_dinh_kem,cap_nhat_bo_sung,task_tien_de_id,cong_viec_id,time_records," +
   `legacy_assignee:tai_khoan!nguoi_phu_trach_id(${ACCOUNT_SELECT}),` +
   `creator:tai_khoan!nguoi_tao_id(${ACCOUNT_SELECT}),` +
   `tester:tai_khoan!nguoi_test_id(${ACCOUNT_SELECT}),` +
@@ -1838,6 +1841,7 @@ function hydrateSubtasks(rows: SubtaskRow[]): Subtask[] {
       images: row.hinh_anh ?? [],
       updates: row.cap_nhat_bo_sung ?? [],
       issues: normalizeSubtaskIssueEntries(row.van_de_giai_phap),
+      timeRecords: existingDetailTimeRecords(normalizeSubtaskTimeRecords(row.time_records), row.cap_nhat_bo_sung ?? [], decodeHandover(row.ban_giao_noi_dung, row.ban_giao_link_anh).initialDeleted),
       handover: decodeHandover(row.ban_giao_noi_dung, row.ban_giao_link_anh),
       promptItems: row.prompt_items !== undefined
         ? normalizeSubtaskPromptItems(row.prompt_items)
@@ -1893,7 +1897,8 @@ export async function listSubtasks(
 
   const { data, error } = await query;
   throwDatabaseError(error);
-  return hydrateSubtasks((data ?? []) as unknown as SubtaskRow[]);
+  const items = hydrateSubtasks((data ?? []) as unknown as SubtaskRow[]);
+  return filters.runningOnly ? items.filter((task) => runningTaskTimeSessions(task.timeRecords ?? [], 0).length > 0) : items;
 }
 
 /**
@@ -1958,6 +1963,29 @@ export async function listSubtasksPage(
   };
 
   const { from, to } = pageRange(filters.page, filters.pageSize);
+  if (filters.runningOnly) {
+    // Scan matching histories before pagination so stopped tasks cannot fill a page.
+    const runningIds: string[] = [];
+    const batchSize = 500;
+    for (let offset = 0; ; offset += batchSize) {
+      const result = await applySubtaskFilters(
+        supabase.from("task").select("id,time_records,cap_nhat_bo_sung,ban_giao_noi_dung,ban_giao_link_anh")
+          .order("created_at", { ascending: false }).order("id")
+      ).range(offset, offset + batchSize - 1);
+      throwDatabaseError(result.error);
+      const rows = result.data as Pick<SubtaskRow, "id" | "time_records" | "cap_nhat_bo_sung" | "ban_giao_noi_dung" | "ban_giao_link_anh">[] ?? [];
+      runningIds.push(...rows.filter((row) =>
+        runningTaskTimeSessions(existingDetailTimeRecords(normalizeSubtaskTimeRecords(row.time_records), row.cap_nhat_bo_sung ?? [], decodeHandover(row.ban_giao_noi_dung, row.ban_giao_link_anh).initialDeleted), 0).length > 0
+      ).map((row) => row.id));
+      if (rows.length < batchSize) break;
+    }
+    const pageIds = runningIds.slice(from, to + 1);
+    if (pageIds.length === 0) return { items: [], total: runningIds.length };
+    const result = await supabase.from("task").select(SUBTASK_LIST_SELECT).in("id", pageIds)
+      .order("created_at", { ascending: false }).order("id");
+    throwDatabaseError(result.error);
+    return { items: hydrateSubtasks((result.data ?? []) as unknown as SubtaskRow[]), total: runningIds.length };
+  }
   const [pageResult, countResult] = await Promise.all([
     applySubtaskFilters(
       supabase.from("task").select(SUBTASK_LIST_SELECT).order("created_at", { ascending: false })
@@ -2109,13 +2137,13 @@ export async function listSubtaskTimeRecords(
 ): Promise<SubtaskTimeRecord[]> {
   const { data, error } = await supabase
     .from("task")
-    .select("time_records")
+    .select("time_records,cap_nhat_bo_sung,ban_giao_noi_dung,ban_giao_link_anh")
     .eq("id", id)
     .maybeSingle();
   if (error?.code === "42703" || error?.code === "PGRST204") return [];
   throwDatabaseError(error);
   if (!data) return [];
-  return normalizeSubtaskTimeRecords(data.time_records);
+  return existingDetailTimeRecords(normalizeSubtaskTimeRecords(data.time_records), data.cap_nhat_bo_sung ?? [], decodeHandover(data.ban_giao_noi_dung, data.ban_giao_link_anh).initialDeleted);
 }
 
 export async function appendSubtaskTimeRecord(

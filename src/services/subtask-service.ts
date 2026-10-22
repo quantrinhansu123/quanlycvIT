@@ -18,6 +18,7 @@ export interface SubtaskFilters {
   /** Lọc đồng thời nhiều trạng thái; `status` được giữ cho các màn hình cũ. */
   statuses?: TaskStatus[];
   overdueOnly?: boolean;
+  runningOnly?: boolean;
   needsTesting?: boolean;
 }
 
@@ -31,6 +32,7 @@ function buildQuery(filters: SubtaskFilters): string {
   if (filters.status) params.set("status", filters.status);
   if (filters.statuses && filters.statuses.length > 0) params.set("statuses", filters.statuses.join(","));
   if (filters.overdueOnly) params.set("overdueOnly", "true");
+  if (filters.runningOnly) params.set("runningOnly", "true");
   if (filters.needsTesting) params.set("needsTesting", "true");
   const query = params.toString();
   return query ? `?${query}` : "";
@@ -104,6 +106,7 @@ export const subtaskService = {
       params.set("statuses", filters.statuses.join(","));
     }
     if (filters.overdueOnly) params.set("overdueOnly", "true");
+    if (filters.runningOnly) params.set("runningOnly", "true");
     if (filters.needsTesting) params.set("needsTesting", "true");
     params.set("page", String(filters.page));
     params.set("pageSize", String(filters.pageSize));

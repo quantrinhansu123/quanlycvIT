@@ -30,6 +30,7 @@ function filtersFromRequest(request: NextRequest): SubtaskFilters {
     status: (params.get("status") as TaskStatus | null) ?? undefined,
     statuses: statuses?.length ? statuses : undefined,
     overdueOnly: params.get("overdueOnly") === "true",
+    runningOnly: params.get("runningOnly") === "true",
   };
 }
 

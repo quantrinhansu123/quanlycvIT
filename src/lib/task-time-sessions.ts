@@ -1,5 +1,12 @@
 import type { SubtaskTimeRecord } from "@/types/subtask";
 
+/** Deleted details must not contribute timers or reported work. Keep legacy task-level records. */
+export function existingDetailTimeRecords(records: SubtaskTimeRecord[], updates: { id: string }[], initialDeleted = false): SubtaskTimeRecord[] {
+  const ids = new Set(updates.map((entry) => entry.id));
+  if (!initialDeleted) ids.add("initial");
+  return records.filter((record) => !record.detailId || ids.has(record.detailId));
+}
+
 export interface TaskTimeSession {
   id: string;
   startedAt: string;
@@ -30,4 +37,12 @@ export function taskTimeSessions(records: SubtaskTimeRecord[], now: number): Tas
 export function formatSessionDuration(milliseconds: number): string {
   const seconds = Math.floor(milliseconds / 1000);
   return `${Math.floor(seconds / 3600)}:${String(Math.floor(seconds / 60) % 60).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+export function runningTaskTimeSessions(records: SubtaskTimeRecord[], now: number): TaskTimeSession[] {
+  const latestByDetail = new Map<string, SubtaskTimeRecord>();
+  for (const record of records) latestByDetail.set(record.detailId ?? "", record);
+  return [...latestByDetail.values()]
+    .filter((record) => record.type === "start")
+    .flatMap((record) => taskTimeSessions([record], now));
 }
