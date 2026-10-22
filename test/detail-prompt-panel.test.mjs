@@ -7,8 +7,19 @@ function setup() {
   const slots = [];
   let cursor = 0;
   const writes = [];
+  let effects = [];
+  let latestItems;
   const react = {
-    useEffect() {},
+    useEffect(callback, deps) {
+      const index = cursor++;
+      const previous = slots[index];
+      if (!previous || !deps || deps.some((dep, i) => dep !== previous.deps?.[i])) {
+        effects.push(() => {
+          previous?.cleanup?.();
+          slots[index] = { deps, cleanup: callback() };
+        });
+      }
+    },
     useState(initial) {
       const index = cursor++;
       if (!(index in slots)) slots[index] = typeof initial === "function" ? initial() : initial;
@@ -42,10 +53,16 @@ function setup() {
   ];
   const render = () => {
     cursor = 0;
-    return exports.SubtaskPromptPanel({ subtaskId: "task", initialItems: items, initialDataLoaded: true,
+    const result = exports.SubtaskPromptPanel({ subtaskId: "task", initialItems: items, initialDataLoaded: true,
+      onItemsChange: (next) => { latestItems = next; },
       detailId: "detail-a", taskDetailOptions: [{ value: "detail-a", label: "Detail A" }] });
+    const pending = effects;
+    effects = [];
+    pending.forEach((effect) => effect());
+    return result;
   };
-  return { render, writes };
+  return { render, writes, latestItems: () => latestItems,
+    unmount: () => slots.forEach((slot) => slot?.cleanup?.()) };
 }
 
 function elements(node) {
@@ -71,4 +88,27 @@ test("editing a scoped prompt preserves prompts belonging to other details", asy
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(writes.length, 1);
   assert.deepEqual(writes[0].map((item) => [item.taskTitle, item.content]), [["detail-a", "Edited A"], ["detail-b", "Prompt B"]]);
+});
+
+test("closing without blur flushes the latest prompt and shares it before reopening", async () => {
+  const panel = setup();
+  const textarea = elements(panel.render()).find((n) => n.type === "textarea");
+  textarea.props.onChange({ target: { value: "Keep on close" }, currentTarget: { style: {}, scrollHeight: 40 } });
+  assert.equal(panel.latestItems()[0].content, "Keep on close");
+  panel.unmount();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(panel.writes.length, 1);
+  assert.equal(panel.writes[0][0].content, "Keep on close");
+});
+
+test("typing saves automatically without blur and coalesces keystrokes", async () => {
+  const panel = setup();
+  const textarea = elements(panel.render()).find((n) => n.type === "textarea");
+  for (const value of ["First", "Latest"]) {
+    textarea.props.onChange({ target: { value }, currentTarget: { style: {}, scrollHeight: 40 } });
+  }
+  await new Promise((resolve) => setTimeout(resolve, 600));
+  assert.equal(panel.writes.length, 1);
+  assert.equal(panel.writes[0][0].content, "Latest");
+  panel.unmount();
 });

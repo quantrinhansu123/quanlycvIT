@@ -1321,6 +1321,7 @@ export function SubtaskDetailView({
                 })),
               ]}
               initialItems={subtask.promptItems}
+              onItemsChange={handlePromptItemsChange}
               detailId={promptDetailId}
               onCloseDetail={() => setPromptDetailId(null)}
               initialDataLoaded

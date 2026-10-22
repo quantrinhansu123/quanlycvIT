@@ -102,6 +102,7 @@ export function SubtaskPromptPanel({
   const initial = initialItems.length > 0 ? initialItems : [emptyItem(`prompt-empty-${subtaskId}`)];
   const [items, setItems] = useState<SubtaskPromptItem[]>(initial);
   const itemsRef = useRef(initial);
+  const previousInitialItemsRef = useRef(initialItems);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [uploadingIds, setUploadingIds] = useState<Set<string>>(new Set());
   const [previewImage, setPreviewImage] = useState<PreviewImage | null>(null);
@@ -111,10 +112,20 @@ export function SubtaskPromptPanel({
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const saveGenerationRef = useRef(0);
   const hasEditedRef = useRef(false);
+  const pendingSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flushSaveRef = useRef<() => void>(() => {});
 
   useEffect(() => {
-    onItemsChange?.(items);
-  }, [items, onItemsChange]);
+    if (previousInitialItemsRef.current === initialItems) return;
+    previousInitialItemsRef.current = initialItems;
+    if (initialItems === itemsRef.current) return;
+    itemsRef.current = initialItems;
+    setItems(initialItems);
+  }, [initialItems]);
+
+  useEffect(() => () => {
+    flushSaveRef.current();
+  }, []);
 
   useEffect(() => {
     // SSR chi tiết đã kèm prompt_items — bỏ GET trùng khi đã có dữ liệu.
@@ -128,6 +139,7 @@ export function SubtaskPromptPanel({
       if (!active || hasEditedRef.current || savedItems.length === 0) return;
       itemsRef.current = savedItems;
       setItems(savedItems);
+      onItemsChange?.(savedItems);
       setSelectedIds([]);
     }).catch(() => {
       // Trang vẫn dùng được khi deployment chưa áp dụng migration Prompt.
@@ -169,10 +181,15 @@ export function SubtaskPromptPanel({
   function replaceItems(next: SubtaskPromptItem[]) {
     itemsRef.current = next;
     setItems(next);
+    onItemsChange?.(next);
     setSelectedIds((current) => current.filter((id) => next.some((item) => item.id === id)));
   }
 
   function persist(next: SubtaskPromptItem[]) {
+    if (pendingSaveRef.current !== null) {
+      clearTimeout(pendingSaveRef.current);
+      pendingSaveRef.current = null;
+    }
     const generation = ++saveGenerationRef.current;
     setSaveStatus("saving");
     const payload = next
@@ -209,8 +226,22 @@ export function SubtaskPromptPanel({
     hasEditedRef.current = true;
     const next = itemsRef.current.map((item) => (item.id === id ? { ...item, ...patch } : item));
     replaceItems(next);
-    if (save) persist(next);
+    if (save) {
+      persist(next);
+    } else {
+      // Invalidate an older response as soon as the user types again.
+      ++saveGenerationRef.current;
+      setSaveStatus("saving");
+      if (pendingSaveRef.current !== null) clearTimeout(pendingSaveRef.current);
+      pendingSaveRef.current = setTimeout(() => persist(itemsRef.current), 500);
+    }
   }
+
+  useEffect(() => {
+    flushSaveRef.current = () => {
+      if (pendingSaveRef.current !== null) persist(itemsRef.current);
+    };
+  });
 
   function addItem() {
     if (itemsRef.current.length >= MAX_PROMPT_ITEMS) return;
