@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight, Clock3, LoaderCircle, Plus, X } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Clock3, LoaderCircle, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
@@ -14,7 +14,7 @@ const pad = (value: number) => String(value).padStart(2, "0");
 const dateKey = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 
 export function WorkScheduleManagementPage() {
-  const { notify } = useFeedback();
+  const { notify, confirm } = useFeedback();
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [schedules, setSchedules] = useState<EmployeeWorkSchedule[]>([]);
   const [onlineEmployees, setOnlineEmployees] = useState<EmployeeAttendance[]>([]);
@@ -24,6 +24,7 @@ export function WorkScheduleManagementPage() {
   const [showForm, setShowForm] = useState(false);
   const [showWeeklyForm, setShowWeeklyForm] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -90,6 +91,27 @@ export function WorkScheduleManagementPage() {
       return { date: new Date(month.getFullYear(), month.getMonth(), dayNumber), current: true };
     });
   }, [month]);
+
+  async function remove(schedule: EmployeeWorkSchedule) {
+    if (deletingId) return;
+    setDeletingId(schedule.id);
+    try {
+      const confirmed = await confirm({
+        title: "Xóa lịch làm việc?",
+        description: `Xóa buổi làm của ${schedule.employeeName ?? schedule.employeeCode ?? "nhân viên"} ngày ${schedule.date.split("-").reverse().join("/")}, ${schedule.startTime.slice(0, 5)}–${schedule.endTime.slice(0, 5)}? Thao tác này không thể hoàn tác.`,
+        confirmLabel: "Xóa lịch",
+        tone: "danger",
+      });
+      if (!confirmed) return;
+      await accountService.deleteWorkSchedule(schedule.id);
+      setSchedules((current) => current.filter((item) => item.id !== schedule.id));
+      notify({ type: "success", title: "Đã xóa lịch làm việc" });
+    } catch (error) {
+      notify({ type: "error", title: "Không thể xóa lịch làm việc", description: getErrorMessage(error, "Vui lòng thử lại.") });
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -210,6 +232,17 @@ export function WorkScheduleManagementPage() {
                 {events.map((event) => <div key={event.id} title={`${event.employeeName ?? "Nhân viên"} · ${event.startTime.slice(0, 5)}–${event.endTime.slice(0, 5)}${event.note ? ` · ${event.note}` : ""}`} className="rounded-md bg-violet-50 px-1.5 py-1 text-[10px] leading-4 text-violet-800 sm:text-xs">
                   <div className="flex items-center gap-1 font-semibold"><Clock3 className="h-3 w-3 shrink-0" />{event.startTime.slice(0, 5)}–{event.endTime.slice(0, 5)}</div>
                   <div className="truncate">{event.employeeName ?? event.employeeCode ?? "Nhân viên"}</div>
+                  <button
+                    type="button"
+                    onClick={() => void remove(event)}
+                    disabled={deletingId !== null || loading}
+                    aria-label={`Xóa lịch của ${event.employeeName ?? event.employeeCode ?? "nhân viên"} ngày ${event.date}, ${event.startTime.slice(0, 5)}–${event.endTime.slice(0, 5)}`}
+                    title="Xóa lịch làm việc"
+                    className="mt-1 inline-flex items-center gap-1 rounded px-1 py-1 text-rose-600 hover:bg-rose-100 focus-visible:outline-2 focus-visible:outline-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {deletingId === event.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                    Xóa
+                  </button>
                 </div>)}
               </div>
             </div>;

@@ -55,6 +55,8 @@ export const accountService = {
     apiClient.post<EmployeeWorkSchedule>("/work-schedules", { employeeId, ...input }),
   createWeeklyWorkSchedules: (employeeId: string, schedules: EmployeeWorkScheduleInput[]) =>
     apiClient.post<EmployeeWorkSchedule[]>("/work-schedules", { employeeId, schedules }),
+  deleteWorkSchedule: (id: string) =>
+    apiClient.delete<boolean>(`/work-schedules/${encodeURIComponent(id)}`),
   createWorkSchedule: (id: string, input: EmployeeWorkScheduleInput) =>
     apiClient.post<EmployeeWorkSchedule>(`/accounts/${id}/work-schedule`, input),
   delete: (id: string) => apiClient.delete<boolean>(`/accounts/${id}`),

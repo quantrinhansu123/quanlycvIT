@@ -1,5 +1,5 @@
 import type { ApiSupabaseClient } from "@/lib/supabase/api";
-import { throwDatabaseError } from "@/lib/api/response";
+import { ApiException, throwDatabaseError } from "@/lib/api/response";
 import type { EmployeeWorkSchedule, EmployeeWorkScheduleInput } from "@/types/account";
 
 interface WorkScheduleRow {
@@ -25,6 +25,17 @@ function mapWorkSchedule(row: WorkScheduleRow): EmployeeWorkSchedule {
 }
 
 const WORK_SCHEDULE_SELECT = "id,nhan_vien_id,ngay,gio_bat_dau,gio_ket_thuc,ghi_chu,created_at";
+
+export async function deleteWorkSchedule(supabase: ApiSupabaseClient, id: string): Promise<void> {
+  const { data, error } = await supabase
+    .from("nhan_vien_lich_lam_viec")
+    .delete()
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
+  throwDatabaseError(error);
+  if (!data) throw new ApiException("Lịch làm việc không tồn tại hoặc đã bị xóa.", 404);
+}
 
 export async function listWorkSchedulesForPeriod(
   supabase: ApiSupabaseClient,
