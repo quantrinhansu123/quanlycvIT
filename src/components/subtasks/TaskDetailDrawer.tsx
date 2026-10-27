@@ -398,6 +398,7 @@ export function TaskDetailDrawer({
                 <AcceptanceFields
                   compact={false}
                   hideMembers={true}
+                  showItems
                   members={subtask.assignees}
                   row={acceptanceRow}
                   disabled={!canEditHandover || savingAcceptance || Boolean(deletingDetailId)}

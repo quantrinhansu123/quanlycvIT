@@ -15,6 +15,7 @@ export function AcceptanceMinutesPopup({ task, selectedIds, workTaskTitle, disab
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const [printing, setPrinting] = useState(false);
+  const [receiverName, setReceiverName] = useState("");
   const { notify } = useFeedback();
   const entries = selectedAcceptanceDetails(task, selectedIds);
 
@@ -29,7 +30,7 @@ export function AcceptanceMinutesPopup({ task, selectedIds, workTaskTitle, disab
     setPrinting(true);
     try {
       const { printAcceptanceMinutes } = await import("@/lib/task-detail-pdf");
-      await printAcceptanceMinutes(task, selectedIds, printWindow, workTaskTitle);
+      await printAcceptanceMinutes(task, selectedIds, printWindow, workTaskTitle, receiverName);
     } catch (error) {
       printWindow.close();
       notify({ type: "error", title: "Không thể in biên bản", description: getErrorMessage(error, "Vui lòng thử lại.") });
@@ -50,7 +51,7 @@ export function AcceptanceMinutesPopup({ task, selectedIds, workTaskTitle, disab
     <Button type="button" variant="secondary" size="sm" disabled={disabled || !entries.length} onClick={() => dialog.current?.showModal()}>
       Biên bản nghiệm thu ({entries.length})
     </Button>
-    <dialog ref={dialog} aria-labelledby={titleId} className="fixed inset-0 m-auto max-h-[85dvh] w-[min(960px,calc(100vw-2rem))] overflow-auto rounded-2xl border border-gray-200 bg-white p-5 text-gray-800 shadow-xl backdrop:bg-black/40">
+    <dialog ref={dialog} aria-labelledby={titleId} className="fixed inset-0 m-auto h-[96dvh] max-h-[96dvh] w-[min(1400px,calc(100vw-1.5rem))] overflow-auto rounded-2xl border border-gray-200 bg-white p-5 text-gray-800 shadow-xl backdrop:bg-black/40">
       <div className="sticky -top-5 z-10 -mx-5 -mt-5 mb-5 flex items-center justify-between gap-3 border-b border-gray-100 bg-white px-5 py-4">
         <h2 id={titleId} className="text-lg font-bold">Biên bản nghiệm thu</h2>
         <Button type="button" size="sm" disabled={printing || disabled || !entries.length} onClick={() => void print()}><Printer className="h-4 w-4" />{printing ? "Đang chuẩn bị..." : "In nghiệm thu"}</Button>
@@ -62,10 +63,11 @@ export function AcceptanceMinutesPopup({ task, selectedIds, workTaskTitle, disab
       </div>
       <h3 className="text-center text-2xl font-bold tracking-wide text-gray-900">BIÊN BẢN NGHIỆM THU</h3>
       <p className="mb-6 mt-2 text-center text-xs text-gray-500">Xác nhận nội dung và trạng thái thực hiện công việc</p>
-      <dl className="mb-6 grid grid-cols-3 gap-4 rounded-lg bg-gray-50 p-4 text-sm">
+      <dl className="mb-6 grid grid-cols-4 gap-4 rounded-lg bg-gray-50 p-4 text-sm">
         <div className="min-w-0"><dt className="text-xs text-gray-500">TASK</dt><dd className="mt-1 break-words font-semibold">{task.title}</dd></div>
         <div className="min-w-0"><dt className="text-xs text-gray-500">CÔNG VIỆC</dt><dd className="mt-1 break-words">{workTaskTitle || "—"}</dd></div>
         <div className="min-w-0"><dt className="text-xs text-gray-500">NGƯỜI PHỤ TRÁCH</dt><dd className="mt-1 break-words">{task.assignees.map((person) => person.name).join(", ") || "—"}</dd></div>
+        <div className="min-w-0"><dt className="text-xs text-gray-500">NGƯỜI NHẬN BÀN GIAO</dt><dd className="mt-1"><input type="text" value={receiverName} maxLength={120} placeholder="Nhập tên người nhận..." aria-label="Người nhận bàn giao" onChange={(event) => setReceiverName(event.target.value)} className="w-full border-b border-dashed border-gray-300 bg-transparent py-0.5 text-sm outline-none focus:border-violet-500" /></dd></div>
       </dl>
       <div className="mb-3 flex items-center justify-between gap-2"><h3 className="text-sm font-bold">01 &nbsp; NỘI DUNG NGHIỆM THU</h3><span className="text-xs text-gray-500">{entries.length} hạng mục / {entries.filter((entry) => entry.status === "Hoàn thành").length} hoàn thành</span></div>
       <div className="overflow-x-auto rounded-lg border border-gray-200">
@@ -74,10 +76,23 @@ export function AcceptanceMinutesPopup({ task, selectedIds, workTaskTitle, disab
           <tbody className="divide-y divide-gray-100">{entries.map((entry, index) => <tr key={entry.id} className="align-top">
             <td className="p-3 text-gray-500">{index + 1}</td>
             <td className="break-words p-4">
-              <p className="font-semibold text-gray-900">{entry.title}</p>
-              <p className="mt-2 whitespace-pre-wrap leading-6">{entry.description}</p>
-              <p className="mt-3 text-xs"><strong>Trạng thái:</strong> {entry.status}</p>
-              <p className="mt-2 whitespace-pre-wrap text-xs leading-5"><strong>Ghi chú:</strong> {entry.note}</p>
+              <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)] gap-4">
+                <div className="min-w-0">
+                  <p className="font-semibold text-gray-900">{entry.title}</p>
+                  {entry.description !== "—" && <p className="mt-2 whitespace-pre-wrap leading-6">{entry.description}</p>}
+                </div>
+                <p className="text-xs leading-5"><strong>Trạng thái:</strong> {entry.status}</p>
+                <p className="whitespace-pre-wrap text-xs leading-5"><strong>Ghi chú:</strong> {entry.note}</p>
+              </div>
+              {entry.items.length > 0 && (
+                <ol className="mt-3 space-y-1 text-xs leading-5">
+                  {entry.items.map((item, itemIndex) => <li key={item.id} className="grid grid-cols-[1.5rem_minmax(0,1fr)_minmax(0,1fr)] gap-x-6">
+                    <span className="text-gray-500">{itemIndex + 1}.</span>
+                    <span className="whitespace-pre-wrap break-words text-gray-900">{item.name || "—"}</span>
+                    <span className="whitespace-pre-wrap break-words text-gray-500">{item.note}</span>
+                  </li>)}
+                </ol>
+              )}
             </td>
             <td className="p-4">
               {/^https?:\/\//i.test(entry.imageUrl) ? <a href={entry.imageUrl} target="_blank" rel="noopener noreferrer" title="Mở ảnh nghiệm thu gốc">

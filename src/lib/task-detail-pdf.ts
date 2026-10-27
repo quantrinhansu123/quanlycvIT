@@ -80,7 +80,7 @@ async function acceptanceImageForPrint(url: string): Promise<string> {
   });
 }
 
-export async function printAcceptanceMinutes(task: Subtask, selectedIds: string[], printWindow: Window, workTaskTitle?: string): Promise<void> {
+export async function printAcceptanceMinutes(task: Subtask, selectedIds: string[], printWindow: Window, workTaskTitle?: string, receiverName?: string): Promise<void> {
   const entries = selectedAcceptanceDetails(task, selectedIds);
   if (!entries.length) throw new Error("Vui lòng chọn chi tiết Task để lập biên bản.");
   const images: Record<string, string> = {};
@@ -112,11 +112,12 @@ export async function printAcceptanceMinutes(task: Subtask, selectedIds: string[
       { canvas: [{ type: "line", x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 2, lineColor: "#d1122a" }] },
       { text: "BIÊN BẢN NGHIỆM THU", bold: true, fontSize: 21, color: "#111827", alignment: "center", margin: [0, 22, 0, 5] },
       { text: "Xác nhận nội dung và trạng thái thực hiện công việc", fontSize: 9, color: "#64748b", alignment: "center", margin: [0, 0, 0, 22] },
-      { table: { widths: ["*", "*", "*"], body: [
+      { table: { widths: ["*", "*", "*", "*"], body: [
         [
           { stack: [{ text: "TASK", color: "#64748b", fontSize: 8 }, { text: task.title, bold: true, color: "#111827", margin: [0, 5, 0, 0] }] },
           { stack: [{ text: "CÔNG VIỆC", color: "#64748b", fontSize: 8 }, { text: workTaskTitle || "—", margin: [0, 5, 0, 0] }] },
           { stack: [{ text: "NGƯỜI PHỤ TRÁCH", color: "#64748b", fontSize: 8 }, { text: task.assignees.map((person) => person.name).join(", ") || "—", margin: [0, 5, 0, 0] }] },
+          { stack: [{ text: "NGƯỜI NHẬN BÀN GIAO", color: "#64748b", fontSize: 8 }, { text: receiverName?.trim() || "—", margin: [0, 5, 0, 0] }] },
         ],
       ] }, layout: { fillColor: () => "#f8fafc", hLineWidth: () => 0, vLineWidth: () => 0, paddingLeft: () => 12, paddingRight: () => 12, paddingTop: () => 7, paddingBottom: () => 7 }, margin: [0, 0, 0, 20] },
       { columns: [{ text: "01  NỘI DUNG NGHIỆM THU", bold: true, fontSize: 11, color: "#111827" }, { text: `${entries.length} hạng mục  /  ${completed} hoàn thành`, alignment: "right", fontSize: 8, color: "#64748b" }], margin: [0, 0, 0, 10] },
@@ -125,10 +126,22 @@ export async function printAcceptanceMinutes(task: Subtask, selectedIds: string[
         ...entries.map((entry, index): TableCell[] => [
           { text: String(index + 1), color: "#64748b" },
           { stack: [
-            { text: entry.title, bold: true, fontSize: 11, color: "#111827" },
-            { text: entry.description, fontSize: 10, margin: [0, 6, 0, 10] },
-            { text: `Trạng thái: ${entry.status}`, bold: true, fontSize: 9, color: entry.status === "Hoàn thành" ? "#047857" : "#334155" },
-            { text: `Ghi chú: ${entry.note}`, margin: [0, 5, 0, 0] },
+            { columns: [
+              { width: "*", stack: [
+                { text: entry.title, bold: true, fontSize: 11, color: "#111827" },
+                ...(entry.description !== "—" ? [{ text: entry.description, fontSize: 10, margin: [0, 6, 0, 0] as [number, number, number, number] }] : []),
+              ] },
+              { width: 62, text: `Trạng thái: ${entry.status}`, bold: true, fontSize: 8, color: entry.status === "Hoàn thành" ? "#047857" : "#334155" },
+              { width: 62, text: `Ghi chú: ${entry.note}`, fontSize: 8 },
+            ], columnGap: 8, margin: [0, 0, 0, 8] },
+            ...entry.items.map((item, itemIndex): Content => ({
+              columns: [
+                { width: 14, text: `${itemIndex + 1}.`, color: "#64748b" },
+                { width: "*", text: item.name || "—", color: "#111827" },
+                { width: "*", text: item.note, color: "#64748b" },
+              ],
+              columnGap: 14, fontSize: 9, margin: [0, 0, 0, 3],
+            })),
           ] },
           images[entry.imageUrl]
             ? { image: images[entry.imageUrl], fit: [190, 260], alignment: "center" }

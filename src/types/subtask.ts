@@ -61,9 +61,18 @@ export type SubtaskHandoverStatus = "pending" | "handedOver";
 /** Trạng thái nghiệm thu của một lần trong Chi tiết Task. */
 export type AcceptanceStatus = "pending" | "testing" | "tested" | "acceptance" | "rework" | "cancelled" | "accepted";
 
+/** Dòng con (hạng mục) trong một lần nghiệm thu. STT là thứ tự dòng. */
+export interface AcceptanceItem {
+  id: string;
+  name: string;
+  note: string;
+}
+
 export interface AcceptanceRow {
   /** Nhân sự được phân công riêng cho chi tiết Task này. */
   assigneeIds?: string[];
+  /** Các dòng con: tên công việc + ghi chú. */
+  items?: AcceptanceItem[];
   imageUrl: string;
   status: AcceptanceStatus;
   note: string;

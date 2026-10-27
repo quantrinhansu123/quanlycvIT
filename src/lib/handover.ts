@@ -1,7 +1,8 @@
-import type { AcceptanceRow, AcceptanceStatus, SubtaskHandover, SubtaskHandoverStatus } from "@/types/subtask";
+import type { AcceptanceItem, AcceptanceRow, AcceptanceStatus, SubtaskHandover, SubtaskHandoverStatus } from "@/types/subtask";
 
 const HANDOVER_VERSION = 2;
 const MAX_ROWS = 50;
+const MAX_ITEMS = 100;
 
 export const INITIAL_HANDOVER_SOURCE_ID = "initial";
 
@@ -43,8 +44,21 @@ export function normalizeAcceptanceRows(value: unknown): Record<string, Acceptan
     const assigneeIds = Array.isArray(entry.assigneeIds)
       ? [...new Set(entry.assigneeIds.filter((id): id is string => typeof id === "string" && id.trim().length > 0 && id.length <= 100))].slice(0, 100)
       : undefined;
+    const items = Array.isArray(entry.items)
+      ? entry.items.slice(0, MAX_ITEMS).flatMap((item, index): AcceptanceItem[] => {
+          if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+          const value = item as Record<string, unknown>;
+          const id = typeof value.id === "string" && value.id.trim() && value.id.length <= 80 ? value.id.trim() : `item-${index}`;
+          return [{
+            id,
+            name: typeof value.name === "string" ? value.name.slice(0, 500) : "",
+            note: typeof value.note === "string" ? value.note.slice(0, 2_000) : "",
+          }];
+        })
+      : undefined;
     rows[key] = { imageUrl, status: acceptanceStatus(entry.status), note,
       ...(assigneeIds !== undefined ? { assigneeIds } : {}),
+      ...(items !== undefined ? { items } : {}),
     };
   }
   return rows;

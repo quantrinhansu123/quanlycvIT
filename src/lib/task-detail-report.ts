@@ -27,6 +27,7 @@ export function groupTaskDetailsForReport(task: Subtask) {
           personnel: (row?.assigneeIds ?? []).map((id) => task.assignees.find((person) => person.id === id)?.name ?? id).join(", ") || "—",
           note: row?.note || "—",
           imageUrl: row?.imageUrl || "",
+          items: (row?.items ?? []).filter((item) => item.name.trim() || item.note.trim()),
         };
       }),
   })).filter((group) => group.entries.length > 0);
