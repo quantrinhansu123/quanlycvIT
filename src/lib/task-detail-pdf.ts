@@ -1,7 +1,7 @@
 import type { Content, TableCell, TDocumentDefinitions } from "pdfmake/interfaces";
 import type { Subtask } from "@/types/subtask";
 import { loadPdfMake } from "@/lib/pdf-export";
-import { groupTaskDetailsForReport, selectedAcceptanceDetails } from "@/lib/task-detail-report";
+import { groupTaskDetailsForReport, letterIndex, selectedAcceptanceDetails } from "@/lib/task-detail-report";
 
 export async function exportTaskDetailPdf(task: Subtask, workTaskTitle?: string, printWindow?: Window): Promise<void> {
   const groups = groupTaskDetailsForReport(task);
@@ -124,7 +124,7 @@ export async function printAcceptanceMinutes(task: Subtask, selectedIds: string[
       { table: { headerRows: 1, widths: [22, "*", 190], body: [
         ["STT", "NỘI DUNG NGHIỆM THU", "ẢNH NGHIỆM THU"].map((text) => ({ text, bold: true, fontSize: 9, color: "#ffffff", fillColor: "#252b36" })),
         ...entries.map((entry, index): TableCell[] => [
-          { text: String(index + 1), color: "#64748b" },
+          { text: letterIndex(index), bold: true, color: "#334155" },
           { stack: [
             { columns: [
               { width: "*", stack: [

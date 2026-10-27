@@ -4,7 +4,7 @@ import { useId, useRef, useState } from "react";
 import { Printer, X } from "lucide-react";
 import Image from "next/image";
 import type { Subtask } from "@/types/subtask";
-import { selectedAcceptanceDetails } from "@/lib/task-detail-report";
+import { letterIndex, selectedAcceptanceDetails } from "@/lib/task-detail-report";
 import { Button } from "@/components/ui/Button";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
@@ -74,7 +74,7 @@ export function AcceptanceMinutesPopup({ task, selectedIds, workTaskTitle, disab
         <table className="w-full min-w-[720px] table-fixed text-left text-sm">
           <thead className="bg-gray-800 text-xs text-white"><tr><th scope="col" className="w-12 p-3">STT</th><th scope="col" className="w-[52%] p-3">Nội dung nghiệm thu</th><th scope="col" className="p-3">Ảnh nghiệm thu</th></tr></thead>
           <tbody className="divide-y divide-gray-100">{entries.map((entry, index) => <tr key={entry.id} className="align-top">
-            <td className="p-3 text-gray-500">{index + 1}</td>
+            <td className="p-3 font-semibold text-gray-700">{letterIndex(index)}</td>
             <td className="break-words p-4">
               <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)] gap-4">
                 <div className="min-w-0">

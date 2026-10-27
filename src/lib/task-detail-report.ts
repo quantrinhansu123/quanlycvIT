@@ -39,3 +39,10 @@ export function selectedAcceptanceDetails(task: Subtask, selectedIds: string[]) 
     group.entries.filter((entry) => selected.has(entry.id)).map((entry) => ({ ...entry, status: group.label }))
   );
 }
+
+/** Số thứ tự dạng chữ cái: 0 → A, 25 → Z, 26 → AA. */
+export function letterIndex(index: number): string {
+  let label = "";
+  for (let n = index; n >= 0; n = Math.floor(n / 26) - 1) label = String.fromCharCode(65 + (n % 26)) + label;
+  return label;
+}
