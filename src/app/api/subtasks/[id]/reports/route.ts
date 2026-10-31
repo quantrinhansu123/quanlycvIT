@@ -100,7 +100,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           attachments.push({
             kind: "image",
             fileName: file.name,
-            path: await uploadTaskReportFile(supabase, id, file),
+            path: await uploadTaskReportFile(id, file),
             mimeType: file.type || undefined,
             size: file.size,
           });
@@ -112,7 +112,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           attachments.push({
             kind: "file",
             fileName: file.name,
-            path: await uploadTaskReportFile(supabase, id, file),
+            path: await uploadTaskReportFile(id, file),
             mimeType: file.type || undefined,
             size: file.size,
           });

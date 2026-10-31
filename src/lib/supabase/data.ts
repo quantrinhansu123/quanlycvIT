@@ -1,4 +1,5 @@
 import { decodeHandover, detailTaskProgressPercent, encodeHandoverContent } from "@/lib/handover";
+import { removeReportFile, uploadReportFile } from "@/lib/cloudinary-reports";
 import { existingDetailTimeRecords, runningTaskTimeSessions } from "@/lib/task-time-sessions";
 import type { ApiSupabaseClient } from "@/lib/supabase/api";
 import { ApiException, isSchemaCacheError, throwDatabaseError } from "@/lib/api/response";
@@ -2844,7 +2845,7 @@ interface ReportLinkRow {
   duong_dan: string;
 }
 
-/** Đường dẫn lưu trong DB là storage path; đổi sang URL công khai để hiển thị. */
+/** Báo cáo mới lưu URL Cloudinary; giữ hỗ trợ đường dẫn Supabase của báo cáo cũ. */
 function attachmentPublicUrl(
   supabase: ApiSupabaseClient,
   path: string
@@ -3040,43 +3041,23 @@ export async function deleteTaskReport(
   throwDatabaseError(error);
   if (!data) return false;
 
-  const paths = ((attachments ?? []) as { duong_dan: string }[])
-    .map((row) => row.duong_dan)
-    .filter((path) => !/^https?:\/\//i.test(path));
-  if (paths.length > 0) {
+  const paths = ((attachments ?? []) as { duong_dan: string }[]).map((row) => row.duong_dan);
+  try {
+    await removeTaskReportFiles(supabase, paths);
+  } catch {
     // File mồ côi không chặn việc xóa báo cáo.
-    await supabase.storage.from(TASK_REPORT_BUCKET).remove(paths);
+    console.error("Không thể dọn tệp của báo cáo đã xóa.");
   }
 
   return true;
 }
 
-/** Upload ảnh/file của báo cáo lên bucket storage và trả về đường dẫn đã lưu. */
+/** Upload ảnh/file báo cáo lên Cloudinary và lưu URL trực tiếp vào DB. */
 export async function uploadTaskReportFile(
-  supabase: ApiSupabaseClient,
   taskId: string,
   file: File
 ): Promise<string> {
-  const extension = file.name.includes(".")
-    ? `.${file.name.split(".").pop()?.toLowerCase()}`
-    : "";
-  const path = `${taskId}/${Date.now()}-${crypto.randomUUID()}${extension}`;
-
-  const { error } = await supabase.storage
-    .from(TASK_REPORT_BUCKET)
-    .upload(path, file, {
-      contentType: file.type || "application/octet-stream",
-      upsert: false,
-    });
-
-  if (error) {
-    throw new ApiException(
-      `Không thể tải file “${file.name}” lên kho lưu trữ. ${error.message}`,
-      500
-    );
-  }
-
-  return path;
+  return uploadReportFile(taskId, file);
 }
 
 export async function removeTaskReportFiles(
@@ -3084,8 +3065,16 @@ export async function removeTaskReportFiles(
   paths: string[]
 ): Promise<void> {
   if (paths.length === 0) return;
-  const { error } = await supabase.storage.from(TASK_REPORT_BUCKET).remove(paths);
-  throwDatabaseError(error);
+  const legacyPaths = paths.filter((path) => !/^https?:\/\//i.test(path));
+  const results = await Promise.allSettled([
+    ...paths.filter((path) => /^https?:\/\//i.test(path)).map(removeReportFile),
+    ...(legacyPaths.length ? [(async () => {
+      const { error } = await supabase.storage.from(TASK_REPORT_BUCKET).remove(legacyPaths);
+      throwDatabaseError(error);
+    })()] : []),
+  ]);
+  const failed = results.find((result) => result.status === "rejected");
+  if (failed?.status === "rejected") throw failed.reason;
 }
 
 const SUBTASK_REPORT_SELECT =
