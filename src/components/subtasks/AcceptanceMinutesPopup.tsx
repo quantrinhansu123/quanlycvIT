@@ -41,7 +41,7 @@ export function AcceptanceMinutesPopup({ task, selectedIds, workTaskTitle, disab
 
   if (directPrint) return (
     <Button type="button" variant="secondary" size="sm" disabled={printing || disabled || !entries.length}
-      title="In nội dung và ảnh nghiệm thu đã lưu của chi tiết này"
+      title="In nội dung nghiệm thu đã lưu của chi tiết này"
       onClick={() => void print()}>
       <Printer className="h-4 w-4" />{printing ? "Đang chuẩn bị..." : "In nghiệm thu"}
     </Button>
@@ -71,8 +71,8 @@ export function AcceptanceMinutesPopup({ task, selectedIds, workTaskTitle, disab
       </dl>
       <div className="mb-3 flex items-center justify-between gap-2"><h3 className="text-sm font-bold">01 &nbsp; NỘI DUNG NGHIỆM THU</h3><span className="text-xs text-gray-500">{entries.length} hạng mục / {entries.filter((entry) => entry.status === "Hoàn thành").length} hoàn thành</span></div>
       <div className="overflow-x-auto rounded-lg border border-gray-200">
-        <table className="w-full min-w-[720px] table-fixed text-left text-sm">
-          <thead className="bg-gray-800 text-xs text-white"><tr><th scope="col" className="w-12 p-3">STT</th><th scope="col" className="w-[52%] p-3">Nội dung nghiệm thu</th><th scope="col" className="p-3">Ảnh nghiệm thu</th></tr></thead>
+        <table className="w-full min-w-[640px] table-fixed text-left text-sm">
+          <thead className="bg-gray-800 text-xs text-white"><tr><th scope="col" className="w-12 p-3">STT</th><th scope="col" className="p-3">Nội dung nghiệm thu</th></tr></thead>
           <tbody className="divide-y divide-gray-100">{entries.map((entry, index) => <tr key={entry.id} className="align-top">
             <td className="p-3 font-semibold text-gray-700">{letterIndex(index)}</td>
             <td className="break-words p-4">
@@ -93,11 +93,6 @@ export function AcceptanceMinutesPopup({ task, selectedIds, workTaskTitle, disab
                   </li>)}
                 </ol>
               )}
-            </td>
-            <td className="p-4">
-              {/^https?:\/\//i.test(entry.imageUrl) ? <a href={entry.imageUrl} target="_blank" rel="noopener noreferrer" title="Mở ảnh nghiệm thu gốc">
-                <Image src={entry.imageUrl} alt={`Ảnh nghiệm thu: ${entry.title}`} width={900} height={700} unoptimized className="h-auto max-h-80 w-full rounded border border-gray-100 object-contain" />
-              </a> : <p className="text-xs italic text-gray-400">Chưa có ảnh nghiệm thu</p>}
             </td>
           </tr>)}</tbody>
         </table>

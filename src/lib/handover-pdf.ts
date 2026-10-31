@@ -122,7 +122,10 @@ function imageBlock(dataUrl: string | null, fallbackUrl: string): Content[] {
   }];
 }
 
-export async function exportHandoverPdf(input: HandoverPrintInput): Promise<void> {
+export async function exportHandoverPdf(
+  input: HandoverPrintInput,
+  options: { printWindow?: Window } = {}
+): Promise<void> {
   const urls = [
     input.handoverImageUrl,
     ...input.rows.flatMap((row) => row.imageUrls),
@@ -222,5 +225,9 @@ export async function exportHandoverPdf(input: HandoverPrintInput): Promise<void
 
   const pdfMake = await loadPdfMake();
   const filename = `ban-giao-${fileSlug(input.taskTitle)}.pdf`;
+  if (options.printWindow) {
+    pdfMake.createPdf(documentDefinition).print({}, options.printWindow);
+    return;
+  }
   pdfMake.createPdf(documentDefinition).download(filename);
 }

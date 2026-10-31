@@ -34,6 +34,7 @@ import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 import { TaskAttachmentFields } from "@/components/tasks/TaskAttachmentFields";
 import { useCurrentAccount } from "@/hooks/useCurrentAccount";
+import { useProjectDirectoryOptions } from "@/hooks/useProjectDirectoryOptions";
 import { buildFormDraftKey, useVersionedFormDraft } from "@/hooks/useVersionedFormDraft";
 import { FormDraftBanner, RememberDraftToggle } from "@/components/ui/FormDraftBanner";
 import { runUploadBatch } from "@/lib/upload-concurrency";
@@ -378,6 +379,7 @@ export function SubtaskFormModal({
   const [form, setForm] = useState<FormState>(() =>
     buildInitialState(subtask, workTasks, projects, defaultWorkTaskId)
   );
+  const availableProjects = useProjectDirectoryOptions(projects);
   const [formTab, setFormTab] = useState<"info" | "issues" | "attachments">("info");
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -459,12 +461,12 @@ export function SubtaskFormModal({
     [workTasks, form.workTaskId]
   );
   const projectOptions = useMemo(
-    () => projects.map((project) => ({
+    () => availableProjects.map((project) => ({
       value: project.id,
       label: project.name,
       sublabel: project.code,
     })),
-    [projects]
+    [availableProjects]
   );
   const filteredWorkTasks = useMemo(
     () => workTasks.filter((item) => item.projectId === form.projectId),
@@ -902,9 +904,9 @@ export function SubtaskFormModal({
 
           {formTab === "info" ? (
             <div className="space-y-5" role="tabpanel">
-          {(projects.length === 0 || workTasks.length === 0 || members.length === 0) && (
+          {(availableProjects.length === 0 || workTasks.length === 0 || members.length === 0) && (
             <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-              {projects.length === 0
+              {availableProjects.length === 0
                 ? "Chưa có dự án để chọn. Hãy tạo dự án trước khi tạo công việc và task."
                 : workTasks.length === 0
                   ? "Chưa có công việc trong các dự án. Hãy tạo công việc trước khi tạo task."

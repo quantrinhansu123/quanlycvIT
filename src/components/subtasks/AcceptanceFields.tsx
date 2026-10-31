@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
@@ -31,14 +31,10 @@ export function AcceptanceFields({
   onDraftChange?: (patch: Partial<AcceptanceRow>) => void;
   onUpload: (file: File) => Promise<void>;
 }) {
-  const [localDraft, setDraft] = useState(row);
-  const draft = onDraftChange ? row : localDraft;
-  const [dirty, setDirty] = useState(false);
+  const [draftEdits, setDraftEdits] = useState<Partial<AcceptanceRow> | null>(null);
+  const draft = onDraftChange ? row : draftEdits ? { ...row, ...draftEdits } : row;
+  const dirty = draftEdits !== null;
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (!dirty) setDraft(row);
-  }, [row, dirty]);
 
   const items = draft.items ?? [];
 
@@ -51,8 +47,7 @@ export function AcceptanceFields({
       onDraftChange(patch);
       return;
     }
-    setDirty(true);
-    setDraft((current) => ({ ...current, ...patch }));
+    setDraftEdits((current) => ({ ...current, ...patch }));
   }
 
   async function saveDraft() {
@@ -65,7 +60,7 @@ export function AcceptanceFields({
         ...(showItems ? { items } : {}),
         ...(!hideMembers ? { assigneeIds: draft.assigneeIds ?? [] } : {}),
       });
-      setDirty(false);
+      setDraftEdits(null);
     } catch {
       // Keep draft available for retry
     } finally {
@@ -102,14 +97,14 @@ export function AcceptanceFields({
 
       <label className="order-2 min-w-0 text-xs font-semibold text-gray-500">
         Ghi chú nghiệm thu
-        <input
-          type="text"
+        <textarea
           value={draft.note}
           disabled={disabled || saving}
           maxLength={5000}
+          rows={2}
           placeholder="Nhập ghi chú hoặc kết quả nghiệm thu..."
           onChange={(event) => updateDraft({ note: event.target.value })}
-          className="mt-1.5 h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm font-normal text-gray-800 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-100 disabled:bg-gray-50"
+          className="mt-1.5 field-sizing-content max-h-48 min-h-10 w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-normal leading-5 text-gray-800 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-100 disabled:bg-gray-50"
         />
       </label>
 
@@ -157,15 +152,15 @@ export function AcceptanceFields({
                           className="h-9 w-full rounded-md border border-gray-200 bg-white px-2.5 text-sm text-gray-800 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-100 disabled:bg-gray-50"
                         />
                       </td>
-                      <td className="px-2 py-1.5">
-                        <input
-                          type="text"
+                      <td className="px-2 py-1.5 align-top">
+                        <textarea
                           value={item.note}
                           disabled={disabled || saving}
                           maxLength={2000}
+                          rows={1}
                           placeholder="Ghi chú..."
                           onChange={(event) => updateItem(item.id, { note: event.target.value })}
-                          className="h-9 w-full rounded-md border border-gray-200 bg-white px-2.5 text-sm text-gray-800 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-100 disabled:bg-gray-50"
+                          className="field-sizing-content max-h-40 min-h-9 w-full resize-y rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-sm leading-5 text-gray-800 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-100 disabled:bg-gray-50"
                         />
                       </td>
                       <td className="px-2 py-1.5 text-center">

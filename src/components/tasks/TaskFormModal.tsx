@@ -21,6 +21,7 @@ import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 import { TaskAttachmentFields } from "@/components/tasks/TaskAttachmentFields";
 import { useCurrentAccount } from "@/hooks/useCurrentAccount";
+import { useProjectDirectoryOptions } from "@/hooks/useProjectDirectoryOptions";
 import { buildFormDraftKey, useVersionedFormDraft } from "@/hooks/useVersionedFormDraft";
 import { FormDraftBanner, RememberDraftToggle } from "@/components/ui/FormDraftBanner";
 import { runUploadBatch } from "@/lib/upload-concurrency";
@@ -197,6 +198,7 @@ export function TaskFormModal({
   const [form, setForm] = useState<FormState>(() =>
     buildInitialState(task, projects, defaultProjectId, defaultStatus)
   );
+  const availableProjects = useProjectDirectoryOptions(projects);
   const [formTab, setFormTab] = useState<"info" | "attachments">("info");
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [isPending, startTransition] = useTransition();
@@ -268,8 +270,8 @@ export function TaskFormModal({
   }, [isPending, onClose]);
 
   const selectedProject = useMemo(
-    () => projects.find((project) => project.id === form.projectId),
-    [projects, form.projectId]
+    () => availableProjects.find((project) => project.id === form.projectId),
+    [availableProjects, form.projectId]
   );
   const projectParticipants = useMemo(() => participantsOf(selectedProject), [selectedProject]);
   const projectStartDate = selectedProject
@@ -281,12 +283,12 @@ export function TaskFormModal({
 
   const projectOptions = useMemo(
     () =>
-      projects.map((project) => ({
+      availableProjects.map((project) => ({
         value: project.id,
         label: project.name,
         sublabel: project.code,
       })),
-    [projects]
+    [availableProjects]
   );
 
   const priorityOptions = useMemo(
@@ -314,7 +316,7 @@ export function TaskFormModal({
 
   /** Đổi dự án thì bỏ những người không còn tham gia dự án mới. */
   function handleProjectChange(projectId: string) {
-    const project = projects.find((item) => item.id === projectId);
+    const project = availableProjects.find((item) => item.id === projectId);
     const allowed = new Set(participantsOf(project).map((member) => member.id));
     setForm((prev) => ({
       ...prev,
@@ -675,9 +677,9 @@ export function TaskFormModal({
 
           {formTab === "info" ? (
             <div className="space-y-5" role="tabpanel" aria-label="Thông tin công việc">
-              {(projects.length === 0 || members.length === 0) && (
+              {(availableProjects.length === 0 || members.length === 0) && (
                 <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                  {projects.length === 0
+                  {availableProjects.length === 0
                     ? "Chưa có dự án. Hãy tạo dự án trước khi tạo công việc."
                     : "Chưa có nhân sự đang hoạt động trong Supabase để giao công việc."}
                 </div>
@@ -884,10 +886,10 @@ export function TaskFormModal({
             <Button type="button" variant="secondary" onClick={onClose} disabled={isPending}>
               Hủy
             </Button>
-            <Button type="submit" disabled={isPending || projects.length === 0 || members.length === 0}>
+            <Button type="submit" disabled={isPending || availableProjects.length === 0 || members.length === 0}>
               {isPending
                 ? "Đang lưu..."
-                : projects.length === 0
+                : availableProjects.length === 0
                   ? "Chưa có dự án"
                   : members.length === 0
                     ? "Chưa có nhân sự"
