@@ -62,7 +62,7 @@ interface TaskDetailDrawerProps {
   uploadingAcceptanceId: string | null;
   savingIteration: boolean;
   deletingDetailId: string | null;
-  onRecordTime: (detailId: string, type: SubtaskTimeRecord["type"]) => void;
+  onRecordTime: (detailId: string, type: SubtaskTimeRecord["type"] | "manual", startedAt?: string, endedAt?: string) => void;
   onSaveAcceptance: (detailId: string, patch: Partial<AcceptanceRow>) => void | Promise<void>;
   onUploadAcceptanceImage: (detailId: string, file: File) => Promise<void>;
   onDeleteDetail: (detailId: string, title: string) => void | Promise<void>;
@@ -423,7 +423,7 @@ export function TaskDetailDrawer({
                   <DetailTimeTracker
                     records={detailRecords}
                     disabled={statusLocked || savingTimeRecord || !timeRecordsReady || Boolean(deletingDetailId)}
-                    onRecord={(type) => onRecordTime(entry.id, type)}
+                    onRecord={(type, startedAt, endedAt) => onRecordTime(entry.id, type, startedAt, endedAt)}
                   />
                 </div>
               </div>

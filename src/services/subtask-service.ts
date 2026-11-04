@@ -159,9 +159,10 @@ export const subtaskService = {
   async appendTimeRecord(
     id: string,
     type: SubtaskTimeRecord["type"],
-    detailId: string
+    detailId: string,
+    at?: string
   ): Promise<SubtaskTimeRecord[]> {
-    return apiClient.post<SubtaskTimeRecord[]>(`/subtasks/${id}/time-records`, { type, detailId });
+    return apiClient.post<SubtaskTimeRecord[]>(`/subtasks/${id}/time-records`, { type, detailId, ...(at ? { at } : {}) });
   },
 
   async deleteSubtask(id: string): Promise<boolean> {

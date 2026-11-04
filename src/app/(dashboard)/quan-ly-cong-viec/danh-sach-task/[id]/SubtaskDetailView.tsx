@@ -228,11 +228,14 @@ export function SubtaskDetailView({
     }));
   }, [subtask, timeRecords]);
 
-  const recordTime = useCallback(async (detailId: string, type: SubtaskTimeRecord["type"]) => {
+  const recordTime = useCallback(async (detailId: string, type: SubtaskTimeRecord["type"] | "manual", startedAt?: string, endedAt?: string) => {
     if (savingTimeRecord) return;
     setSavingTimeRecord(true);
     try {
-      setTimeRecords(await subtaskService.appendTimeRecord(subtaskId, type, detailId));
+      if (type === "manual" && startedAt && endedAt) {
+        await subtaskService.appendTimeRecord(subtaskId, "start", detailId, startedAt);
+        setTimeRecords(await subtaskService.appendTimeRecord(subtaskId, "end", detailId, endedAt));
+      } else if (type !== "manual") setTimeRecords(await subtaskService.appendTimeRecord(subtaskId, type, detailId));
     } catch (recordError) {
       notify({
         type: "error",
