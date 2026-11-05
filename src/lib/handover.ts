@@ -28,7 +28,7 @@ export function emptyHandover(imageUrl = ""): SubtaskHandover {
 
 function acceptanceStatus(value: unknown): AcceptanceStatus {
   if (value === "accepted" || value === "handedOver") return "accepted";
-  if (value === "testing" || value === "tested" || value === "acceptance" || value === "rework" || value === "cancelled") return value;
+  if (value === "inProgress" || value === "testing" || value === "tested" || value === "acceptance" || value === "rework" || value === "cancelled") return value;
   return "pending";
 }
 

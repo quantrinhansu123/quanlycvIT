@@ -2,6 +2,7 @@ import type { AcceptanceStatus, Subtask } from "@/types/subtask";
 
 export const DETAIL_REPORT_STATUSES: { value: AcceptanceStatus; label: string }[] = [
   { value: "acceptance", label: "Nghiệm thu" },
+  { value: "inProgress", label: "Đang làm" },
   { value: "testing", label: "Đang test" },
   { value: "tested", label: "Đã test" },
   { value: "rework", label: "Làm lại" },

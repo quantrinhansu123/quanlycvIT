@@ -27,9 +27,6 @@ import {
   Plus,
   Printer,
   Send,
-  TestTube2,
-  Trash2,
-  UsersRound,
   X,
   type LucideIcon,
   Image as ImageIcon,
@@ -46,7 +43,6 @@ import { SUBTASK_STATUS_OPTIONS, TASK_PRIORITY_OPTIONS } from "@/types/task";
 import { detailTaskProgressPercent, emptyAcceptanceRow, INITIAL_HANDOVER_SOURCE_ID } from "@/lib/handover";
 import type { AcceptanceRow, Subtask, SubtaskPromptItem, SubtaskReport, SubtaskTestHistoryEntry, SubtaskTimeRecord } from "@/types/subtask";
 import { isSubtaskOverdue } from "@/types/subtask";
-import { AvatarStack } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { RowActionMenu } from "@/components/ui/RowActionMenu";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -149,7 +145,7 @@ export function SubtaskDetailView({
   const [reports, setReports] = useState<SubtaskReport[]>(initialReports);
   const [members, setMembers] = useState<ProjectMember[]>(initialMembers);
   const [projects, setProjects] = useState<ProjectDirectoryItem[]>([]);
-  const [testHistory, setTestHistory] = useState<SubtaskTestHistoryEntry[]>(initialTestHistory);
+  const [, setTestHistory] = useState<SubtaskTestHistoryEntry[]>(initialTestHistory);
   const [timeRecords, setTimeRecords] = useState<SubtaskTimeRecord[]>(initialSubtask?.timeRecords ?? []);
   const [savingTimeRecord, setSavingTimeRecord] = useState(false);
   const [timeRecordsReady, setTimeRecordsReady] = useState(false);
@@ -226,6 +222,10 @@ export function SubtaskDetailView({
 
   const recordTime = useCallback(async (detailId: string, type: SubtaskTimeRecord["type"] | "manual", startedAt?: string, endedAt?: string) => {
     if (savingTimeRecord) return;
+    if (type === "manual" && (!startedAt || !endedAt)) {
+      notify({ type: "error", title: "Chưa ghi nhận thời gian", description: "Vui lòng nhập đủ giờ bắt đầu và giờ kết thúc." });
+      return;
+    }
     setSavingTimeRecord(true);
     try {
       if (type === "manual" && startedAt && endedAt) {
@@ -1014,6 +1014,7 @@ export function SubtaskDetailView({
                             const statusKey = acceptance.status ?? "pending";
                             const statusStyles: Record<string, { label: string; bg: string; text: string; border: string; dot: string }> = {
                               pending: { label: "Chưa hoàn thành", bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200", dot: "bg-amber-500" },
+                              inProgress: { label: "Đang làm", bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200", dot: "bg-blue-500" },
                               testing: { label: "Đang test", bg: "bg-sky-50", text: "text-sky-700", border: "border-sky-200", dot: "bg-sky-500" },
                               tested: { label: "Đã test", bg: "bg-indigo-50", text: "text-indigo-700", border: "border-indigo-200", dot: "bg-indigo-500" },
                               acceptance: { label: "Nghiệm thu", bg: "bg-purple-50", text: "text-purple-700", border: "border-purple-200", dot: "bg-purple-500" },
@@ -1093,6 +1094,7 @@ export function SubtaskDetailView({
                                         )}
                                       >
                                         <option value="pending">● Chưa hoàn thành</option>
+                                        <option value="inProgress">● Đang làm</option>
                                         <option value="testing">● Đang test</option>
                                         <option value="tested">● Đã test</option>
                                         <option value="acceptance">● Nghiệm thu</option>
@@ -1370,108 +1372,6 @@ export function SubtaskDetailView({
                 </div>
               </section>
             )}
-
-
-
-            <section className="grid grid-cols-1 gap-5">
-              <Panel
-                accentClassName="bg-violet-600"
-                icon={UsersRound}
-                iconClassName="text-violet-600"
-                title="Nhân sự"
-                subtitle="Người thực hiện và người test"
-              >
-                <p className="mb-2 text-xs font-medium text-gray-400">
-                  Người thực hiện:
-                </p>
-                <MemberMultiSelect
-                  options={workTask?.assignees ?? []}
-                  value={subtask.assignees.map((member) => member.id)}
-                  onChange={(ids) => {
-                    if (ids.length > 0) handleQuickUpdate({ assigneeIds: ids });
-                  }}
-                  emptyHint="Công việc chưa có người phụ trách"
-                  disabled={quickUpdating || statusLocked}
-                />
-
-                <div className="mt-5 border-t border-gray-100 pt-4">
-                  <p className="mb-2 text-xs font-medium text-gray-400">
-                    Người test:
-                  </p>
-                  {subtask.tester ? (
-                    <div className="flex items-center gap-3 rounded-xl border border-violet-100 bg-violet-50/60 p-3">
-                      <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-600">
-                        <TestTube2 className="h-4 w-4" />
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-bold text-gray-900">
-                          {subtask.tester.name}
-                        </span>
-                        <span className="block truncate text-xs text-gray-500">
-                          {subtask.tester.role ?? "Tester được phân công"}
-                        </span>
-                      </span>
-                    </div>
-                  ) : (
-                    <p className="rounded-xl border border-dashed border-gray-200 px-3 py-3 text-sm text-gray-400">
-                      Chưa phân công người test.
-                    </p>
-                  )}
-                </div>
-
-                {subtask.assignees.length > 1 && (
-                  <div className="mt-4 flex items-center gap-2 text-xs text-gray-400">
-                    <AvatarStack people={subtask.assignees} max={4} />
-                    {subtask.assignees.length} người thực hiện
-                  </div>
-                )}
-
-                <div className="mt-5 border-t border-gray-100 pt-4">
-                  <p className="mb-3 text-xs font-medium text-gray-400">
-                    Lịch sử kiểm thử:
-                  </p>
-                  {testHistory.length === 0 ? (
-                    <p className="rounded-xl border border-dashed border-gray-200 px-3 py-3 text-sm text-gray-400">
-                      Chưa có kết quả kiểm thử.
-                    </p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {testHistory.map((entry) => {
-                        const passed = entry.result === "passed";
-                        return (
-                          <li
-                            key={entry.id}
-                            className={cn(
-                              "rounded-xl border px-3 py-3",
-                              passed
-                                ? "border-emerald-100 bg-emerald-50/60"
-                                : "border-rose-100 bg-rose-50/60"
-                            )}
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <span className={cn("text-sm font-bold", passed ? "text-emerald-700" : "text-rose-700")}>
-                                {passed ? "Pass kiểm thử" : "Fail kiểm thử"}
-                              </span>
-                              <span className="shrink-0 text-[11px] text-gray-400">
-                                {formatDateVN(entry.createdAt)}
-                              </span>
-                            </div>
-                            <p className="mt-1 text-xs text-gray-600">
-                              Tester: {entry.tester?.name ?? "Không xác định"}
-                            </p>
-                            {entry.note && (
-                              <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-gray-700">
-                                {entry.note}
-                              </p>
-                            )}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </div>
-              </Panel>
-            </section>
           </div>
         ) : (
           <section className="min-h-[520px] rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
@@ -1683,7 +1583,7 @@ export function SubtaskDetailView({
             uploadingAcceptanceId={uploadingAcceptanceId}
             savingIteration={savingIteration}
             deletingDetailId={deletingDetailId}
-            onRecordTime={(detailId, type) => void recordTime(detailId, type)}
+            onRecordTime={(detailId, type, startedAt, endedAt) => void recordTime(detailId, type, startedAt, endedAt)}
             onSaveAcceptance={saveAcceptance}
             onUploadAcceptanceImage={uploadAcceptanceImage}
             onUploadAcceptanceItemImage={uploadAcceptanceItemImage}
@@ -1761,8 +1661,6 @@ function IterationTitleInput({ value, onChange }: { value: string; onChange: (va
     </label>
   );
 }
-
-
 
 function DetailDescription({
   description,

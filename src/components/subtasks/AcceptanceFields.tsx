@@ -101,6 +101,7 @@ export function AcceptanceFields({
           className="mt-1.5 h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-800 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-100 disabled:bg-gray-50"
         >
           <option value="pending">Chưa hoàn thành</option>
+          <option value="inProgress">Đang làm</option>
           <option value="testing">Đang test</option>
           <option value="tested">Đã test</option>
           <option value="acceptance">Nghiệm thu</option>
@@ -178,6 +179,7 @@ export function AcceptanceFields({
                           className="h-9 w-full rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-700 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100 disabled:bg-gray-50"
                         >
                           <option value="pending">Chưa hoàn thành</option>
+                          <option value="inProgress">Đang làm</option>
                           <option value="testing">Đang test</option>
                           <option value="tested">Đã test</option>
                           <option value="acceptance">Nghiệm thu</option>

@@ -59,7 +59,7 @@ export interface SubtaskIssueEntry {
 export type SubtaskHandoverStatus = "pending" | "handedOver";
 
 /** Trạng thái nghiệm thu của một lần trong Chi tiết Task. */
-export type AcceptanceStatus = "pending" | "testing" | "tested" | "acceptance" | "rework" | "cancelled" | "accepted";
+export type AcceptanceStatus = "inProgress" | "pending" | "testing" | "tested" | "acceptance" | "rework" | "cancelled" | "accepted";
 
 /** Dòng con (hạng mục) trong một lần nghiệm thu. STT là thứ tự dòng. */
 export interface AcceptanceItem {

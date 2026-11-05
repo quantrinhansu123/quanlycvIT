@@ -429,7 +429,9 @@ export function HandoverClient({
                                 ? "bg-emerald-50 text-emerald-700"
                                 : row.statusValue === "cancelled"
                                   ? "bg-gray-100 text-gray-500"
-                                  : "bg-amber-50 text-amber-700"
+                                  : row.statusValue === "inProgress"
+                                    ? "bg-blue-50 text-blue-700"
+                                    : "bg-amber-50 text-amber-700"
                             )}
                           >
                             {row.statusLabel}

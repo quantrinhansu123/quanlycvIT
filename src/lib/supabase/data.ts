@@ -2155,12 +2155,12 @@ export async function appendSubtaskTimeRecord(
   detailId: string,
   at?: string
 ): Promise<SubtaskTimeRecord[] | null> {
+  if (at) return appendSubtaskTimeRecordAt(supabase, id, type, actorId, detailId, at);
   const { data, error } = await supabase.rpc("append_task_detail_time_record", {
     p_task_id: id,
     p_type: type,
     p_actor_id: actorId,
     p_detail_id: detailId,
-    p_at: at ?? null,
   });
   if (error?.code === "42883" || error?.code === "PGRST202" || error?.code === "42703") {
     throw new ApiException(
@@ -2174,6 +2174,58 @@ export async function appendSubtaskTimeRecord(
   throwDatabaseError(error);
   if (data === null) return null;
   return normalizeSubtaskTimeRecords(data);
+}
+
+/** Ghi mốc thời gian do người dùng nhập tay, không phụ thuộc migration RPC mới. */
+async function appendSubtaskTimeRecordAt(
+  supabase: ApiSupabaseClient,
+  id: string,
+  type: SubtaskTimeRecord["type"],
+  actorId: string,
+  detailId: string,
+  at: string
+): Promise<SubtaskTimeRecord[] | null> {
+  const { data: task, error: readError } = await supabase
+    .from("task")
+    .select("time_records,cap_nhat_bo_sung,ban_giao_noi_dung")
+    .eq("id", id)
+    .maybeSingle();
+  throwDatabaseError(readError);
+  if (!task) return null;
+  const records = normalizeSubtaskTimeRecords(task.time_records);
+  if (detailId === "initial" && decodeHandover(task.ban_giao_noi_dung, null).initialDeleted) {
+    throw new ApiException("Chi tiết Task không hợp lệ.", 409);
+  }
+  if (detailId !== "initial") {
+    const updates = Array.isArray(task.cap_nhat_bo_sung) ? task.cap_nhat_bo_sung as { id?: unknown }[] : [];
+    if (!updates.some((entry) => entry?.id === detailId)) {
+      throw new ApiException("Chi tiết Task không hợp lệ.", 409);
+    }
+  }
+  const lastType = records.filter((record) => record.detailId === detailId).at(-1)?.type;
+  const invalid =
+    (type === "start" && lastType !== undefined && lastType !== "pause" && lastType !== "end") ||
+    (type === "pause" && lastType !== "start") ||
+    (type === "end" && lastType !== "start" && lastType !== "pause");
+  if (invalid) {
+    throw new ApiException("Mốc thời gian không hợp lệ theo trạng thái hiện tại.", 409);
+  }
+  const nextRecords: SubtaskTimeRecord[] = [...records, {
+    id: crypto.randomUUID(),
+    type,
+    detailId,
+    at,
+    actorId,
+  }];
+  const { data, error } = await supabase
+    .from("task")
+    .update({ time_records: nextRecords })
+    .eq("id", id)
+    .select("time_records")
+    .maybeSingle();
+  throwDatabaseError(error);
+  if (!data) return null;
+  return normalizeSubtaskTimeRecords(data.time_records);
 }
 
 function normalizeSubtaskTimeRecords(value: unknown): SubtaskTimeRecord[] {
