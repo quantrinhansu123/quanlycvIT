@@ -51,6 +51,7 @@ function fromAccount(account?: EmployeeAccount): AccountInput {
 
 export function AccountFormModal({ account, departments, onClose, onSave }: Props) {
   const [form, setForm] = useState<AccountInput>(() => fromAccount(account));
+  const [activeTab, setActiveTab] = useState<"basic" | "work" | "bank">("basic");
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [avatarError, setAvatarError] = useState("");
@@ -154,8 +155,21 @@ export function AccountFormModal({ account, departments, onClose, onSave }: Prop
           </button>
         </div>
 
-        <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
-          <section>
+        <div role="tablist" aria-label="Nhóm thông tin tài khoản" className="flex shrink-0 gap-1 border-b border-gray-200 px-6 pt-2">
+          {([
+            ["basic", "Thông tin cơ bản", UserRound],
+            ["work", "Công việc & phân quyền", Building2],
+            ["bank", "Ngân hàng & ghi chú", Landmark],
+          ] as const).map(([tab, label, Icon]) => (
+            <button key={tab} type="button" role="tab" aria-selected={activeTab === tab} onClick={() => setActiveTab(tab)}
+              className={cn("inline-flex items-center gap-2 border-b-2 px-3 py-3 text-sm font-medium transition", activeTab === tab ? "border-brand-600 text-brand-700" : "border-transparent text-gray-500 hover:text-gray-800")}>
+              <Icon className="h-4 w-4" />{label}
+            </button>
+          ))}
+        </div>
+
+        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-5">
+          {activeTab === "basic" && <section role="tabpanel">
             <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-800">
               <UserRound className="h-4 w-4 text-brand-600" /> Thông tin cơ bản
             </h3>
@@ -177,18 +191,18 @@ export function AccountFormModal({ account, departments, onClose, onSave }: Prop
               </Field>
               <Field label="Ảnh đại diện">
                 <div className="space-y-2">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3">
                     {form.avatarUrl ? (
                       <Image
                         src={form.avatarUrl}
                         alt="Ảnh đại diện xem trước"
-                        width={40}
-                        height={40}
+                        width={96}
+                        height={96}
                         unoptimized
-                        className="h-10 w-10 shrink-0 rounded-full border border-gray-200 object-cover"
+                        className="h-24 w-24 shrink-0 rounded-lg border border-gray-200 bg-white object-contain"
                       />
                     ) : (
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-semibold text-brand-600">AV</div>
+                      <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50 text-sm font-semibold text-gray-500">Ảnh</div>
                     )}
                     <label className={cn("flex h-10 cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-xs font-medium text-gray-700 transition hover:bg-gray-50", uploadingAvatar && "cursor-wait opacity-60")}>
                       {uploadingAvatar ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ImageUp className="h-4 w-4" />}
@@ -216,9 +230,9 @@ export function AccountFormModal({ account, departments, onClose, onSave }: Prop
                 <input className={inputClass} value={form.address ?? ""} onChange={(e) => set("address", e.target.value)} placeholder="Nhập địa chỉ" />
               </Field>
             </div>
-          </section>
+          </section>}
 
-          <section>
+          {activeTab === "work" && <section role="tabpanel">
             <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-800">
               <Building2 className="h-4 w-4 text-brand-600" /> Công việc & phân quyền
             </h3>
@@ -263,9 +277,9 @@ export function AccountFormModal({ account, departments, onClose, onSave }: Prop
                 <input type="date" className={inputClass} value={form.endDate ?? ""} onChange={(e) => set("endDate", e.target.value)} />
               </Field>
             </div>
-          </section>
+          </section>}
 
-          <section>
+          {activeTab === "bank" && <section role="tabpanel">
             <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-800">
               <Landmark className="h-4 w-4 text-brand-600" /> Ngân hàng & ghi chú
             </h3>
@@ -282,7 +296,7 @@ export function AccountFormModal({ account, departments, onClose, onSave }: Prop
                 </Field>
               </div>
             </div>
-          </section>
+          </section>}
           <p className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
             Mật khẩu được quản lý an toàn bởi Supabase Auth và không lưu trong hồ sơ nhân viên.
           </p>

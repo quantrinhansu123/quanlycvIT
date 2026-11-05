@@ -65,6 +65,7 @@ interface TaskDetailDrawerProps {
   onRecordTime: (detailId: string, type: SubtaskTimeRecord["type"] | "manual", startedAt?: string, endedAt?: string) => void;
   onSaveAcceptance: (detailId: string, patch: Partial<AcceptanceRow>) => void | Promise<void>;
   onUploadAcceptanceImage: (detailId: string, file: File) => Promise<void>;
+  onUploadAcceptanceItemImage: (detailId: string, file: File) => Promise<string>;
   onDeleteDetail: (detailId: string, title: string) => void | Promise<void>;
   onStartEdit: (entry: {
     id: string;
@@ -75,7 +76,6 @@ interface TaskDetailDrawerProps {
     images: string[];
     acceptance: AcceptanceRow;
   }) => void;
-  onOpenPrompt: (detailId: string) => void;
   onPromptItemsChange: (items: SubtaskPromptItem[]) => void;
   onImportPrompt: (entry: {
     requestId: string;
@@ -113,9 +113,9 @@ export function TaskDetailDrawer({
   onRecordTime,
   onSaveAcceptance,
   onUploadAcceptanceImage,
+  onUploadAcceptanceItemImage,
   onDeleteDetail,
   onStartEdit,
-  onOpenPrompt,
   onPromptItemsChange,
   onImportPrompt,
   onSaveAttachments,
@@ -405,6 +405,7 @@ export function TaskDetailDrawer({
                   uploading={uploadingAcceptanceId === entry.id}
                   onSave={(patch) => onSaveAcceptance(entry.id, patch)}
                   onUpload={(file) => onUploadAcceptanceImage(entry.id, file)}
+                  onUploadItemImage={(file) => onUploadAcceptanceItemImage(entry.id, file)}
                 />
               </div>
             )}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { ImagePlus, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import type { ProjectMember } from "@/types/project";
@@ -19,6 +19,7 @@ export function AcceptanceFields({
   onSave,
   onDraftChange,
   onUpload,
+  onUploadItemImage,
 }: {
   compact?: boolean;
   hideMembers?: boolean;
@@ -30,11 +31,13 @@ export function AcceptanceFields({
   onSave: (patch: Partial<AcceptanceRow>) => void | Promise<void>;
   onDraftChange?: (patch: Partial<AcceptanceRow>) => void;
   onUpload: (file: File) => Promise<void>;
+  onUploadItemImage: (file: File) => Promise<string>;
 }) {
   const [draftEdits, setDraftEdits] = useState<Partial<AcceptanceRow> | null>(null);
   const draft = onDraftChange ? row : draftEdits ? { ...row, ...draftEdits } : row;
   const dirty = draftEdits !== null;
   const [saving, setSaving] = useState(false);
+  const [uploadingItemId, setUploadingItemId] = useState<string | null>(null);
 
   const items = draft.items ?? [];
 
@@ -48,6 +51,18 @@ export function AcceptanceFields({
       return;
     }
     setDraftEdits((current) => ({ ...current, ...patch }));
+  }
+
+  async function addItemImages(itemId: string, files: File[]) {
+    if (disabled || saving || uploadingItemId) return;
+    setUploadingItemId(itemId);
+    try {
+      const uploaded: string[] = [];
+      for (const file of files) uploaded.push(await onUploadItemImage(file));
+      updateDraft({ items: items.map((item) => item.id === itemId ? { ...item, images: [...(item.images ?? []), ...uploaded] } : item) });
+    } finally {
+      setUploadingItemId(null);
+    }
   }
 
   async function saveDraft() {
@@ -115,7 +130,7 @@ export function AcceptanceFields({
             <button
               type="button"
               disabled={disabled || saving}
-              onClick={() => updateDraft({ items: [...items, { id: crypto.randomUUID(), name: "", note: "" }] })}
+              onClick={() => updateDraft({ items: [...items, { id: crypto.randomUUID(), name: "", note: "", status: "pending" }] })}
               className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-2.5 text-xs font-medium text-violet-700 transition hover:bg-violet-100 disabled:opacity-50 cursor-pointer"
             >
               <Plus className="h-3.5 w-3.5" />
@@ -128,12 +143,14 @@ export function AcceptanceFields({
             </p>
           ) : (
             <div className="overflow-x-auto rounded-lg border border-gray-200">
-              <table className="w-full min-w-[520px] text-left text-sm">
+              <table className="w-full min-w-[900px] text-left text-sm">
                 <thead className="bg-gray-50 text-xs font-semibold text-gray-500">
                   <tr>
                     <th className="w-14 px-3 py-2 text-center">STT</th>
                     <th className="px-3 py-2">Tên công việc</th>
+                    <th className="w-44 px-3 py-2">Trạng thái</th>
                     <th className="px-3 py-2">Ghi chú</th>
+                    <th className="px-3 py-2">Ảnh bàn giao</th>
                     <th className="w-10 px-2 py-2" />
                   </tr>
                 </thead>
@@ -153,6 +170,23 @@ export function AcceptanceFields({
                         />
                       </td>
                       <td className="px-2 py-1.5 align-top">
+                        <select
+                          aria-label={`Trạng thái hạng mục ${index + 1}`}
+                          value={item.status ?? "pending"}
+                          disabled={disabled || saving}
+                          onChange={(event) => updateItem(item.id, { status: event.target.value as AcceptanceItem["status"] })}
+                          className="h-9 w-full rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-700 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100 disabled:bg-gray-50"
+                        >
+                          <option value="pending">Chưa hoàn thành</option>
+                          <option value="testing">Đang test</option>
+                          <option value="tested">Đã test</option>
+                          <option value="acceptance">Nghiệm thu</option>
+                          <option value="rework">Làm lại</option>
+                          <option value="cancelled">Hủy bỏ</option>
+                          <option value="accepted">Hoàn thành</option>
+                        </select>
+                      </td>
+                      <td className="px-2 py-1.5 align-top">
                         <textarea
                           value={item.note}
                           disabled={disabled || saving}
@@ -162,6 +196,22 @@ export function AcceptanceFields({
                           onChange={(event) => updateItem(item.id, { note: event.target.value })}
                           className="field-sizing-content max-h-40 min-h-9 w-full resize-y rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-sm leading-5 text-gray-800 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-100 disabled:bg-gray-50"
                         />
+                      </td>
+                      <td className="min-w-56 px-2 py-1.5 align-top">
+                        <div className="flex flex-wrap gap-1.5">
+                          {(item.images ?? []).map((url, imageIndex) => (
+                            <div key={`${url}-${imageIndex}`} className="relative">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={url} alt={`Ảnh bàn giao ${imageIndex + 1}`} className="h-10 w-10 rounded border border-gray-200 object-cover" />
+                              <button type="button" disabled={disabled || saving} onClick={() => updateItem(item.id, { images: (item.images ?? []).filter((_, index) => index !== imageIndex) })} aria-label={`Xóa ảnh bàn giao ${imageIndex + 1}`} className="absolute -right-1 -top-1 rounded-full bg-white text-rose-600 shadow disabled:opacity-50"><X className="h-3 w-3" /></button>
+                            </div>
+                          ))}
+                          <label className="inline-flex h-10 cursor-pointer items-center gap-1 rounded-md border border-dashed border-gray-300 px-2 text-xs text-gray-600 hover:border-violet-400 hover:text-violet-700">
+                            <ImagePlus className="h-3.5 w-3.5" />{uploadingItemId === item.id ? "Đang tải" : "Thêm ảnh"}
+                            <input type="file" accept="image/png,image/jpeg,image/webp,image/avif" multiple disabled={disabled || saving || Boolean(uploadingItemId)} className="sr-only" onChange={(event) => { const files = Array.from(event.target.files ?? []); event.target.value = ""; if (files.length) void addItemImages(item.id, files); }} />
+                          </label>
+                        </div>
+                        <textarea aria-label="Dán ảnh bàn giao bằng Ctrl+V" rows={1} disabled={disabled || saving || Boolean(uploadingItemId)} placeholder="Dán ảnh Ctrl+V" onPaste={(event) => { const files = Array.from(event.clipboardData.items).filter((clipboardItem) => clipboardItem.kind === "file" && clipboardItem.type.startsWith("image/")).map((clipboardItem) => clipboardItem.getAsFile()).filter((file): file is File => Boolean(file)); if (files.length) { event.preventDefault(); void addItemImages(item.id, files); } }} className="mt-1 w-full resize-none rounded border border-gray-200 px-2 py-1 text-xs focus:border-violet-400 focus:outline-none" />
                       </td>
                       <td className="px-2 py-1.5 text-center">
                         <button

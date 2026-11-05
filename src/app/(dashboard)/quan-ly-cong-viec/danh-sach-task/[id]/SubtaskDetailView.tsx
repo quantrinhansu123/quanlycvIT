@@ -8,6 +8,7 @@ import {
   AlertCircle,
   ArrowLeft,
   CalendarDays,
+  ChevronDown,
   CircleAlert,
   CircleCheck,
   Clock3,
@@ -66,10 +67,6 @@ import { CACHE_RESOURCE } from "@/lib/client-cache/resources";
 import { useSplitView } from "@/components/layout/SplitViewShell";
 import type { SubtaskPromptImportRequest } from "@/components/subtasks/SubtaskPromptPanel";
 
-const SubtaskPromptPanel = dynamic(
-  () => import("@/components/subtasks/SubtaskPromptPanel").then((mod) => mod.SubtaskPromptPanel),
-  { ssr: false, loading: () => <div className="h-40 animate-pulse rounded-2xl bg-gray-100" /> }
-);
 const SubtaskFormModal = dynamic(
   () => import("@/components/subtasks/SubtaskFormModal").then((mod) => mod.SubtaskFormModal),
   { ssr: false, loading: () => <ModalLoadingFallback /> }
@@ -171,7 +168,6 @@ export function SubtaskDetailView({
   const [quickUpdating, setQuickUpdating] = useState(false);
   const [accepting, setAccepting] = useState(false);
   const [promptImport, setPromptImport] = useState<SubtaskPromptImportRequest | null>(null);
-  const [promptDetailId, setPromptDetailId] = useState<string | null>(null);
   const [savingAcceptance, setSavingAcceptance] = useState(false);
   const [exportingDetailPdf, setExportingDetailPdf] = useState(false);
   const [uploadingAcceptanceId, setUploadingAcceptanceId] = useState<string | null>(null);
@@ -334,6 +330,25 @@ export function SubtaskDetailView({
       notify({
         type: "error",
         title: "Không thể tải ảnh nghiệm thu",
+        description: getErrorMessage(uploadError, "Ảnh phải là JPG, PNG, WEBP hoặc AVIF và tối đa 10 MB."),
+      });
+      throw uploadError;
+    } finally {
+      setUploadingAcceptanceId(null);
+    }
+  }
+
+  async function uploadAcceptanceItemImage(sourceId: string, file: File): Promise<string> {
+    if (!file.type.startsWith("image/") || file.size > 10 * 1024 * 1024) {
+      throw new Error("Ảnh phải là JPG, PNG, WEBP hoặc AVIF và tối đa 10 MB.");
+    }
+    setUploadingAcceptanceId(sourceId);
+    try {
+      return await subtaskService.uploadImage(file);
+    } catch (uploadError) {
+      notify({
+        type: "error",
+        title: "Không thể tải ảnh bàn giao",
         description: getErrorMessage(uploadError, "Ảnh phải là JPG, PNG, WEBP hoặc AVIF và tối đa 10 MB."),
       });
       throw uploadError;
@@ -1061,19 +1076,32 @@ export function SubtaskDetailView({
                                 </td>
 
                                 {/* Nghiệm thu (Smart Badge) */}
-                                <td className="px-3 py-3">
+                                <td className="px-3 py-3" onClick={(event) => event.stopPropagation()}>
                                   <div className="flex flex-col items-start gap-1">
-                                    <span
-                                      className={cn(
-                                        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-medium shadow-2xs",
-                                        statusInfo.bg,
-                                        statusInfo.text,
-                                        statusInfo.border
-                                      )}
-                                    >
-                                      <span className={cn("h-1.5 w-1.5 rounded-full", statusInfo.dot)} />
-                                      {statusInfo.label}
-                                    </span>
+                                    <div className="relative inline-flex items-center">
+                                      <select
+                                        aria-label={`Đổi trạng thái nghiệm thu: ${detailTitle}`}
+                                        title="Bấm để đổi trạng thái nghiệm thu"
+                                        value={statusKey}
+                                        disabled={savingAcceptance || Boolean(deletingDetailId)}
+                                        onChange={(event) => void saveAcceptance(entry.id, { status: event.target.value as AcceptanceRow["status"] })}
+                                        className={cn(
+                                          "cursor-pointer appearance-none whitespace-nowrap rounded-full border py-1 pl-2.5 pr-7 text-xs font-medium shadow-2xs outline-none focus:ring-2 focus:ring-violet-300 disabled:cursor-wait disabled:opacity-60",
+                                          statusInfo.bg,
+                                          statusInfo.text,
+                                          statusInfo.border
+                                        )}
+                                      >
+                                        <option value="pending">● Chưa hoàn thành</option>
+                                        <option value="testing">● Đang test</option>
+                                        <option value="tested">● Đã test</option>
+                                        <option value="acceptance">● Nghiệm thu</option>
+                                        <option value="rework">● Làm lại</option>
+                                        <option value="cancelled">● Hủy bỏ</option>
+                                        <option value="accepted">● Hoàn thành</option>
+                                      </select>
+                                      <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-2 h-3 w-3 opacity-70" />
+                                    </div>
                                     <div className="flex items-center gap-2 text-[11px] text-gray-500">
                                       {acceptance.imageUrl && (
                                         <span className="inline-flex items-center gap-0.5 text-emerald-600" title="Đã có ảnh nghiệm thu">
@@ -1312,28 +1340,6 @@ export function SubtaskDetailView({
                 />
               </OverviewCard>
             </section>
-
-            <SubtaskPromptPanel
-              key={`${subtask.id}-${subtask.updatedAt ?? ""}`}
-              subtaskId={subtask.id}
-              taskDetailOptions={[
-                ...(!subtask.handover?.initialDeleted ? [{ value: INITIAL_HANDOVER_SOURCE_ID, label: subtask.handover?.titles?.[INITIAL_HANDOVER_SOURCE_ID] ?? taskDetailName(subtask.description) }] : []),
-                ...subtask.updates.map((entry) => ({
-                  value: entry.id,
-                  label: subtask.handover?.titles?.[entry.id] ?? taskDetailName(entry.description),
-                })),
-              ]}
-              initialItems={subtask.promptItems}
-              onItemsChange={handlePromptItemsChange}
-              detailId={promptDetailId}
-              onCloseDetail={() => setPromptDetailId(null)}
-              initialDataLoaded
-              importRequest={promptImport}
-              onImported={(requestId) => {
-                setPromptImport((current) => current?.requestId === requestId ? null : current);
-              }}
-            />
-
 
             {subtask.issues.length > 0 && (
               <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
@@ -1680,12 +1686,12 @@ export function SubtaskDetailView({
             onRecordTime={(detailId, type) => void recordTime(detailId, type)}
             onSaveAcceptance={saveAcceptance}
             onUploadAcceptanceImage={uploadAcceptanceImage}
+            onUploadAcceptanceItemImage={uploadAcceptanceItemImage}
             onDeleteDetail={handleDeleteDetail}
             onStartEdit={(draft) => {
               setDrawerDetailId(null);
               setIterationEditor(draft);
             }}
-            onOpenPrompt={(detailId) => setPromptDetailId(detailId)}
             onPromptItemsChange={handlePromptItemsChange}
             onImportPrompt={(item) => setPromptImport(item)}
             onSaveAttachments={(detailId, value) =>

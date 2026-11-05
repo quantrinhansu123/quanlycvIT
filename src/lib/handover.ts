@@ -53,6 +53,8 @@ export function normalizeAcceptanceRows(value: unknown): Record<string, Acceptan
             id,
             name: typeof value.name === "string" ? value.name.slice(0, 500) : "",
             note: typeof value.note === "string" ? value.note.slice(0, 2_000) : "",
+            status: acceptanceStatus(value.status),
+            ...(Array.isArray(value.images) ? { images: [...new Set(value.images.filter((url): url is string => typeof url === "string" && /^https?:\/\//i.test(url)))].slice(0, 30) } : {}),
           }];
         })
       : undefined;

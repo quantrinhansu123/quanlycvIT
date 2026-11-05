@@ -66,6 +66,9 @@ export interface AcceptanceItem {
   id: string;
   name: string;
   note: string;
+  status?: AcceptanceStatus;
+  /** Ảnh minh chứng/bàn giao gắn với từng hạng mục nghiệm thu. */
+  images?: string[];
 }
 
 export interface AcceptanceRow {
