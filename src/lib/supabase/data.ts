@@ -1902,6 +1902,99 @@ export async function listSubtasks(
   return filters.runningOnly ? items.filter((task) => runningTaskTimeSessions(task.timeRecords ?? [], 0).length > 0) : items;
 }
 
+/** Các dòng Tên công việc trong Hạng mục nghiệm thu — nguồn thẻ Kanban. */
+export async function listAcceptanceKanbanItems(
+  supabase: ApiSupabaseClient,
+  assigneeId?: string
+): Promise<import("@/types/kanban-detail").KanbanDetailItem[]> {
+  let query = supabase.from("task").select(
+    "id,ten_task,trang_thai,ngay_ket_thuc,uu_tien,cap_nhat_bo_sung,ban_giao_noi_dung,ban_giao_link_anh," +
+    "parent_work_task:cong_viec!task_cong_viec_id_fkey(ten_cv,du_an_id)," +
+    "task_phu_trach(tai_khoan_id)"
+  ).order("created_at", { ascending: false });
+  if (assigneeId) {
+    const { data, error } = await supabase.from("task_phu_trach")
+      .select("task_id").eq("tai_khoan_id", assigneeId);
+    throwDatabaseError(error);
+    const ids = (data ?? []).map((entry) => entry.task_id as string);
+    if (!ids.length) return [];
+    query = query.in("id", ids);
+  }
+  const { data, error } = await query;
+  throwDatabaseError(error);
+  return (data ?? []).flatMap((raw) => {
+    const row = raw as unknown as {
+      id: string; ten_task: string; trang_thai: string; ngay_ket_thuc: string | null; uu_tien: string;
+      cap_nhat_bo_sung: { id: string }[] | null;
+      ban_giao_noi_dung: string | null; ban_giao_link_anh: string | null;
+      parent_work_task: { ten_cv: string; du_an_id: string } | null;
+      task_phu_trach: { tai_khoan_id: string }[] | null;
+    };
+    const handover = decodeHandover(row.ban_giao_noi_dung, row.ban_giao_link_anh);
+    const detailIds = [...(!handover.initialDeleted ? ["initial"] : []),
+      ...(row.cap_nhat_bo_sung ?? []).map((entry) => entry.id)];
+    return detailIds.flatMap((detailId) => (handover.rows[detailId]?.items ?? [])
+      .filter((item) => item.name.trim())
+      .map((item) => ({
+        id: `${row.id}:${detailId}:${item.id}`,
+        taskId: row.id,
+        detailId,
+        itemId: item.id,
+        title: item.name,
+        taskTitle: row.ten_task,
+        taskStatus: toApiStatus(row.trang_thai),
+        workTaskTitle: row.parent_work_task?.ten_cv ?? "",
+        projectId: row.parent_work_task?.du_an_id ?? "",
+        assigneeIds: (row.task_phu_trach ?? []).map((entry) => entry.tai_khoan_id),
+        note: item.note,
+        status: item.status ?? "pending",
+        priority: toPriority(row.uu_tien),
+        dueDate: row.ngay_ket_thuc ?? "",
+      })));
+  });
+}
+
+/** Chỉ sửa trạng thái một dòng; CAS tránh ghi đè ảnh/ghi chú khi người khác lưu đồng thời. */
+export async function moveAcceptanceKanbanItem(
+  supabase: ApiSupabaseClient,
+  taskId: string,
+  detailId: string,
+  itemId: string,
+  status: import("@/types/subtask").AcceptanceStatus
+): Promise<boolean> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const { data: task, error } = await supabase.from("task")
+      .select("trang_thai,updated_at,ban_giao_noi_dung,ban_giao_link_anh,cap_nhat_bo_sung")
+      .eq("id", taskId).maybeSingle();
+    throwDatabaseError(error);
+    if (!task) return false;
+    if (task.trang_thai === "done") throw new ApiException("Task đã hoàn thành nên không thể sửa hạng mục.", 409);
+    const handover = decodeHandover(task.ban_giao_noi_dung, task.ban_giao_link_anh);
+    if (detailId === "initial" ? handover.initialDeleted : !((task.cap_nhat_bo_sung ?? []) as { id?: string }[]).some((entry) => entry?.id === detailId)) {
+      throw new ApiException("Chi tiết Task không tồn tại.", 404);
+    }
+    const row = handover.rows[detailId];
+    const item = row?.items?.find((entry) => entry.id === itemId);
+    if (!item) throw new ApiException("Không tìm thấy công việc con.", 404);
+    if (item.status === status) return true;
+    const updated = {
+      ...handover,
+      rows: { ...handover.rows, [detailId]: {
+        ...row,
+        items: row.items!.map((entry) => entry.id === itemId ? { ...entry, status } : entry),
+      } },
+    };
+    const { data: saved, error: saveError } = await supabase.from("task")
+      .update({ ban_giao_noi_dung: encodeHandoverContent(updated) })
+      .eq("id", taskId)
+      .eq("updated_at", task.updated_at)
+      .select("id").maybeSingle();
+    throwDatabaseError(saveError);
+    if (saved) return true;
+  }
+  throw new ApiException("Nội dung Task vừa thay đổi. Vui lòng thử kéo lại.", 409);
+}
+
 /**
  * Giống `listSubtasks` nhưng chỉ tải một trang kết quả, có thêm lọc theo dự án
  * (qua bảng công việc cha) và nhiều người thực hiện (qua bảng task_phu_trach).

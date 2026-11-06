@@ -1,18 +1,18 @@
 import { createServerSupabaseClient } from "@/lib/supabase/api";
 import { requireRequestAccount } from "@/lib/supabase/authorization";
 import { loadKanbanInitialData } from "./loadKanbanInitialData";
-import { KanbanClient } from "./KanbanClient";
+import { KanbanDetailClient } from "./KanbanDetailClient";
 
 export default async function KanbanPage() {
   const supabase = await createServerSupabaseClient();
   const access = await requireRequestAccount(supabase);
-  const { initialTasks } = await loadKanbanInitialData(supabase, access);
+  const { initialItems } = await loadKanbanInitialData(supabase, access);
 
   return (
-    <KanbanClient
+    <KanbanDetailClient
       accountId={access.id}
       accountRole={access.role}
-      initialTasks={initialTasks}
+      initialItems={initialItems}
     />
   );
 }
