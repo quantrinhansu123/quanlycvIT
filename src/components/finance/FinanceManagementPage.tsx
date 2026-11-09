@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownCircle, ArrowDownUp, ArrowUpCircle, CalendarDays,
   CircleDollarSign, Download, Eye, FilterX, Gauge, Landmark,
-  Pencil, Plus, ReceiptText, RefreshCw, Search, Tags, Trash2,
+  Pencil, Plus, RefreshCw, Search, Tags, Trash2,
   WalletCards, X,
 } from "lucide-react";
 import { ActionIconButton } from "@/components/ui/ActionIconButton";
@@ -14,7 +14,6 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ListPaginationFooter } from "@/components/ui/ListPaginationFooter";
 import { ModalLoadingFallback } from "@/components/ui/ModalLoadingFallback";
 import { SearchableFilterMultiSelect } from "@/components/ui/SearchableFilterMultiSelect";
-import { SingleSelectDropdown } from "@/components/ui/SingleSelectDropdown";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { apiClient } from "@/services/api-client";
 import { getErrorMessage } from "@/lib/errors";
@@ -155,6 +154,8 @@ export function FinanceManagementPage() {
   const budgetMonths = Math.max(1, (Number(end.slice(0, 4)) - Number(start.slice(0, 4))) * 12 + Number(end.slice(5, 7)) - Number(start.slice(5, 7)) + 1);
   const averageExpense = summary.expense / days;
   const activeFilters = Number(Boolean(type)) + categoryIds.length + Number(Boolean(searchInput));
+  const incomeTransactions = transactions.filter((item) => item.type === "thu");
+  const expenseTransactions = transactions.filter((item) => item.type === "chi");
 
   function applyPreset(next: DatePreset) {
     const now = new Date(`${getAppDateKey()}T00:00:00`); let rangeStart: Date; let rangeEnd = now;
@@ -171,7 +172,7 @@ export function FinanceManagementPage() {
     return item.date >= start && item.date <= end
       && (!type || item.type === type)
       && (!categoryIds.length || categoryIds.includes(item.categoryId))
-      && (!normalizedSearch || (item.description ?? "").toLocaleLowerCase("vi").includes(normalizedSearch));
+      && (!normalizedSearch || `${item.description ?? ""} ${item.beneficiary ?? ""}`.toLocaleLowerCase("vi").includes(normalizedSearch));
   }
   async function saveTransaction(input: FinanceInput) {
     const isNew = editing === "new";
@@ -202,7 +203,7 @@ export function FinanceManagementPage() {
     try { await apiClient.delete<boolean>(`/thu-chi/${item.id}`); setTransactions((current) => current.filter((transaction) => transaction.id !== item.id)); setTotal((current) => Math.max(0, current - 1)); notify({ type: "success", title: "Đã xóa giao dịch" }); void loadDashboard(transactionQuery(), false); void loadCurrentBalance(false); }
     catch (error) { notify({ type: "error", title: "Không thể xóa", description: getErrorMessage(error, "Vui lòng thử lại.") }); }
   }
-  async function saveCategory(input: FinanceCategoryInput, id?: string) {
+  async function saveCategory(input: FinanceCategoryInput, id?: string): Promise<FinanceCategory> {
     const saved = id
       ? await apiClient.put<FinanceCategory>(`/thu-chi-danh-muc/${id}`, input)
       : await apiClient.post<FinanceCategory>("/thu-chi-danh-muc", input);
@@ -212,6 +213,7 @@ export function FinanceManagementPage() {
     setTransactions((current) => current.map((transaction) => transaction.categoryId === saved.id ? { ...transaction, category: saved } : transaction));
     notify({ type: "success", title: id ? "Đã cập nhật danh mục" : "Đã thêm danh mục" });
     void loadDashboard(transactionQuery(), false);
+    return saved;
   }
   async function removeCategory(category: FinanceCategory) {
     if (!await confirm({ title: `Xóa danh mục “${category.name}”?`, description: "Chỉ có thể xóa danh mục chưa được sử dụng trong giao dịch.", confirmLabel: "Xóa danh mục" })) return;
@@ -228,12 +230,13 @@ export function FinanceManagementPage() {
         filename: `thu-chi-${start}-${end}.pdf`,
         columns: [
           { label: "Ngày", width: 52, alignment: "center" }, { label: "Loại", width: 38 },
-          { label: "Danh mục", width: 72 }, { label: "Nội dung", width: "*" },
+          { label: "Danh mục", width: 66 }, { label: "Nội dung", width: "*" },
+          { label: "Người thụ hưởng", width: 76 },
           { label: "Số tiền", width: 72, alignment: "right" }, { label: "Chứng từ", width: 48, alignment: "center" },
         ],
         rows: result.items.map((item) => [
           formatDate(item.date), item.type === "thu" ? "Thu" : "Chi", item.category?.name,
-          item.description, money.format(item.amount), item.receiptUrl ? "Có" : "Không",
+          item.description, item.beneficiary, money.format(item.amount), item.receiptUrl ? "Có" : "Không",
         ]),
       });
       notify({ type: "success", title: `Đã xuất ${result.items.length} giao dịch ra PDF` });
@@ -278,22 +281,8 @@ export function FinanceManagementPage() {
 
         <section className="rounded-2xl border border-gray-200 bg-white shadow-sm">
           <div className="flex flex-col gap-3 border-b border-gray-100 p-3 lg:flex-row lg:items-center">
-            <div className="relative min-w-0 flex-1 lg:max-w-md"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" /><input value={searchInput} onChange={(e) => setSearchInput(e.target.value)} className="h-10 w-full rounded-xl border border-gray-200 pl-9 pr-9 text-sm outline-none transition hover:border-gray-300 focus:border-brand-400 focus:ring-2 focus:ring-brand-100" placeholder="Tìm theo nội dung giao dịch..." />{searchInput && <button type="button" onClick={() => setSearchInput("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700" aria-label="Xóa tìm kiếm"><X className="h-4 w-4" /></button>}</div>
+            <div className="relative min-w-0 flex-1 lg:max-w-md"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" /><input value={searchInput} onChange={(e) => setSearchInput(e.target.value)} className="h-10 w-full rounded-xl border border-gray-200 pl-9 pr-9 text-sm outline-none transition hover:border-gray-300 focus:border-brand-400 focus:ring-2 focus:ring-brand-100" placeholder="Tìm theo nội dung hoặc người thụ hưởng..." />{searchInput && <button type="button" onClick={() => setSearchInput("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700" aria-label="Xóa tìm kiếm"><X className="h-4 w-4" /></button>}</div>
             <div className="flex min-w-0 flex-1 flex-wrap gap-2">
-              <div className="w-[150px] shrink-0">
-                <SingleSelectDropdown
-                  compact
-                  showSelectionIndicator={false}
-                  value={type}
-                  onChange={(value) => { setType(value as FinanceType | ""); setCategoryIds([]); setPage(1); }}
-                  placeholder="Tất cả loại"
-                  options={[
-                    { value: "", label: "Tất cả loại" },
-                    { value: "thu", label: "Khoản thu", dotClassName: "bg-emerald-500" },
-                    { value: "chi", label: "Khoản chi", dotClassName: "bg-rose-500" },
-                  ]}
-                />
-              </div>
               <SearchableFilterMultiSelect
                 className="w-[190px] shrink-0"
                 value={categoryIds}
@@ -306,25 +295,43 @@ export function FinanceManagementPage() {
             </div>
             <div className="ml-auto flex shrink-0 items-center gap-1.5"><button type="button" onClick={() => void exportPdf()} className="icon-button" title="Xuất PDF"><Download className="h-4 w-4" /></button><Button size="sm" className="h-9" onClick={() => openNew("chi")}><Plus className="h-4 w-4" />Thêm giao dịch</Button></div>
           </div>
-          <div className="account-table-scroll overflow-x-auto">
-            <table className="w-full min-w-[900px] border-collapse text-left text-sm">
-              <thead className="bg-gray-50 text-xs font-semibold text-gray-600"><tr className="border-b border-gray-200"><SortHeader label="Ngày" column="date" sort={sort} onSort={toggleSort} /><th className="px-4 py-3">Loại</th><th className="px-4 py-3">Danh mục</th><th className="min-w-[280px] px-4 py-3">Nội dung</th><SortHeader label="Số tiền" column="amount" sort={sort} onSort={toggleSort} align="right" /><th className="w-32 px-4 py-3 text-center">Thao tác</th></tr></thead>
-              <tbody>{loadingTransactions ? <LoadingRows /> : transactions.length === 0 ? <tr><td colSpan={6}><EmptyState icon={ReceiptText} title="Chưa có giao dịch phù hợp" description={activeFilters ? "Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm." : "Thêm khoản thu hoặc chi đầu tiên để bắt đầu theo dõi."} action={!activeFilters ? <Button size="sm" onClick={() => openNew("chi")}><Plus className="h-4 w-4" />Thêm giao dịch</Button> : undefined} /></td></tr> : transactions.map((item) => <tr key={item.id} className="data-table-row group border-b border-gray-100 last:border-0">
-                <td className="whitespace-nowrap px-4 py-3 font-medium text-gray-700">{formatDate(item.date)}</td>
-                <td className="px-4 py-3"><span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold", item.type === "thu" ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700")}>{item.type === "thu" ? <ArrowUpCircle className="h-3.5 w-3.5" /> : <ArrowDownCircle className="h-3.5 w-3.5" />}{item.type === "thu" ? "Thu" : "Chi"}</span></td>
-                <td className="px-4 py-3"><span className="rounded-lg bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">{item.category?.name ?? "Không xác định"}</span></td>
-                <td className="max-w-[420px] px-4 py-3"><p className="truncate font-medium text-gray-800" title={item.description}>{item.description || "—"}</p><p className="mt-0.5 text-[11px] text-gray-400">Tạo lúc {new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" }).format(new Date(item.createdAt))}</p></td>
-                <td className={cn("whitespace-nowrap px-4 py-3 text-right font-bold", item.type === "thu" ? "text-emerald-600" : "text-rose-600")}>{item.type === "thu" ? "+" : "−"}{money.format(item.amount)}</td>
-                <td className="px-4 py-3"><div className="flex justify-center gap-1.5"><ActionIconButton icon={Eye} label="Xem chi tiết" onClick={() => setViewing(item)} /><ActionIconButton icon={Pencil} label="Chỉnh sửa" tone="warning" onClick={() => setEditing(item)} /><ActionIconButton icon={Trash2} label="Xóa giao dịch" tone="danger" onClick={() => void removeTransaction(item)} /></div></td>
-              </tr>)}</tbody>
-            </table>
+          <div className="space-y-5">
+            <div className="account-table-scroll overflow-x-auto">
+              <div className="mb-2 flex items-center gap-2"><ArrowUpCircle className="h-4 w-4 text-emerald-600" /><h3 className="text-sm font-bold text-gray-900">Khoản thu</h3><span className="text-xs text-gray-500">({incomeTransactions.length} trên trang này)</span></div>
+              <table className="w-full min-w-[900px] border-collapse text-left text-sm">
+                <thead className="bg-emerald-50/60 text-xs font-semibold text-gray-600"><tr className="border-b border-gray-200"><SortHeader label="Ngày" column="date" sort={sort} onSort={toggleSort} /><th className="px-4 py-3">Danh mục</th><th className="min-w-[280px] px-4 py-3">Nội dung</th><th className="min-w-[160px] px-4 py-3">Người thụ hưởng</th><SortHeader label="Số tiền" column="amount" sort={sort} onSort={toggleSort} align="right" /><th className="w-32 px-4 py-3 text-center">Thao tác</th></tr></thead>
+                <tbody>{loadingTransactions ? <LoadingRows /> : incomeTransactions.length === 0 ? <tr><td colSpan={6}><EmptyState icon={ArrowUpCircle} title="Chưa có khoản thu phù hợp" description={activeFilters ? "Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm." : "Thêm khoản thu đầu tiên để bắt đầu theo dõi."} action={!activeFilters ? <Button size="sm" onClick={() => openNew("thu")}><Plus className="h-4 w-4" />Thêm khoản thu</Button> : undefined} /></td></tr> : incomeTransactions.map((item) => <tr key={item.id} className="data-table-row group border-b border-gray-100 last:border-0">
+                  <td className="whitespace-nowrap px-4 py-3 font-medium text-gray-700">{formatDate(item.date)}</td>
+                  <td className="px-4 py-3"><span className="rounded-lg bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">{item.category?.name ?? "Không xác định"}</span></td>
+                  <td className="max-w-[420px] px-4 py-3"><p className="truncate font-medium text-gray-800" title={item.description}>{item.description || "—"}</p><p className="mt-0.5 text-[11px] text-gray-400">Tạo lúc {new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" }).format(new Date(item.createdAt))}</p></td>
+                  <td className="max-w-[200px] px-4 py-3"><p className="truncate text-xs font-medium text-gray-600" title={item.beneficiary}>{item.beneficiary || "—"}</p></td>
+                  <td className="whitespace-nowrap px-4 py-3 text-right font-bold text-emerald-600">+{money.format(item.amount)}</td>
+                  <td className="px-4 py-3"><div className="flex justify-center gap-1.5"><ActionIconButton icon={Eye} label="Xem chi tiết" onClick={() => setViewing(item)} /><ActionIconButton icon={Pencil} label="Chỉnh sửa" tone="warning" onClick={() => setEditing(item)} /><ActionIconButton icon={Trash2} label="Xóa giao dịch" tone="danger" onClick={() => void removeTransaction(item)} /></div></td>
+                </tr>)}</tbody>
+              </table>
+            </div>
+
+            <div className="account-table-scroll overflow-x-auto">
+              <div className="mb-2 flex items-center gap-2"><ArrowDownCircle className="h-4 w-4 text-rose-600" /><h3 className="text-sm font-bold text-gray-900">Khoản chi</h3><span className="text-xs text-gray-500">({expenseTransactions.length} trên trang này)</span></div>
+              <table className="w-full min-w-[900px] border-collapse text-left text-sm">
+                <thead className="bg-rose-50/60 text-xs font-semibold text-gray-600"><tr className="border-b border-gray-200"><SortHeader label="Ngày" column="date" sort={sort} onSort={toggleSort} /><th className="px-4 py-3">Danh mục</th><th className="min-w-[280px] px-4 py-3">Nội dung</th><th className="min-w-[160px] px-4 py-3">Người thụ hưởng</th><SortHeader label="Số tiền" column="amount" sort={sort} onSort={toggleSort} align="right" /><th className="w-32 px-4 py-3 text-center">Thao tác</th></tr></thead>
+                <tbody>{loadingTransactions ? <LoadingRows /> : expenseTransactions.length === 0 ? <tr><td colSpan={6}><EmptyState icon={ArrowDownCircle} title="Chưa có khoản chi phù hợp" description={activeFilters ? "Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm." : "Thêm khoản chi đầu tiên để bắt đầu theo dõi."} action={!activeFilters ? <Button size="sm" onClick={() => openNew("chi")}><Plus className="h-4 w-4" />Thêm khoản chi</Button> : undefined} /></td></tr> : expenseTransactions.map((item) => <tr key={item.id} className="data-table-row group border-b border-gray-100 last:border-0">
+                  <td className="whitespace-nowrap px-4 py-3 font-medium text-gray-700">{formatDate(item.date)}</td>
+                  <td className="px-4 py-3"><span className="rounded-lg bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">{item.category?.name ?? "Không xác định"}</span></td>
+                  <td className="max-w-[420px] px-4 py-3"><p className="truncate font-medium text-gray-800" title={item.description}>{item.description || "—"}</p><p className="mt-0.5 text-[11px] text-gray-400">Tạo lúc {new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" }).format(new Date(item.createdAt))}</p></td>
+                  <td className="max-w-[200px] px-4 py-3"><p className="truncate text-xs font-medium text-gray-600" title={item.beneficiary}>{item.beneficiary || "—"}</p></td>
+                  <td className="whitespace-nowrap px-4 py-3 text-right font-bold text-rose-600">−{money.format(item.amount)}</td>
+                  <td className="px-4 py-3"><div className="flex justify-center gap-1.5"><ActionIconButton icon={Eye} label="Xem chi tiết" onClick={() => setViewing(item)} /><ActionIconButton icon={Pencil} label="Chỉnh sửa" tone="warning" onClick={() => setEditing(item)} /><ActionIconButton icon={Trash2} label="Xóa giao dịch" tone="danger" onClick={() => void removeTransaction(item)} /></div></td>
+                </tr>)}</tbody>
+              </table>
+            </div>
           </div>
           <ListPaginationFooter total={total} page={page} pageSize={pageSize} pageSizes={[10,20,50,100]} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} />
         </section>
       </div>
-      {editing && <FinanceTransactionModal transaction={editing === "new" ? undefined : editing} categories={categories} defaultType={defaultType} onClose={() => setEditing(null)} onSave={saveTransaction} />}
+      {editing && <FinanceTransactionModal transaction={editing === "new" ? undefined : editing} categories={categories} defaultType={defaultType} onClose={() => setEditing(null)} onSave={saveTransaction} onCreateCategory={saveCategory} />}
       {viewing && <FinanceTransactionDetailModal transaction={viewing} onClose={() => setViewing(null)} onEdit={() => { setViewing(null); setEditing(viewing); }} />}
-      {categoryModalOpen && <FinanceCategoryModal categories={categories} onClose={() => setCategoryModalOpen(false)} onSave={saveCategory} onDelete={removeCategory} />}
+      {categoryModalOpen && <FinanceCategoryModal categories={categories} onClose={() => setCategoryModalOpen(false)} onSave={async (input, id) => { await saveCategory(input, id); }} onDelete={removeCategory} />}
       {transferModalOpen && <TransferQrModal categories={categories} onClose={() => setTransferModalOpen(false)} onConfirm={confirmTransfer} />}
     </div>
   );

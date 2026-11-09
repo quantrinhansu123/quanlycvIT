@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDownCircle, ArrowUpCircle, LoaderCircle, ReceiptText, X } from "lucide-react";
+import { ArrowDownCircle, ArrowUpCircle, LoaderCircle, Plus, ReceiptText, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { SingleSelectDropdown } from "@/components/ui/SingleSelectDropdown";
+import { SingleSelectDropdown, type SingleSelectOption } from "@/components/ui/SingleSelectDropdown";
 import { TaskAttachmentFields } from "@/components/tasks/TaskAttachmentFields";
 import { apiClient } from "@/services/api-client";
+import { projectService } from "@/services/project-service";
+import { getErrorMessage } from "@/lib/errors";
 import { cn, getAppDateKey } from "@/lib/utils";
-import type { FinanceCategory, FinanceFileAttachment, FinanceInput, FinanceLinkAttachment, FinanceTransaction, FinanceType } from "@/types/finance";
+import type { FinanceCategory, FinanceCategoryInput, FinanceFileAttachment, FinanceInput, FinanceLinkAttachment, FinanceTransaction, FinanceType } from "@/types/finance";
+import type { ProjectMember } from "@/types/project";
 import { useCurrentAccount } from "@/hooks/useCurrentAccount";
 import { buildFormDraftKey, useVersionedFormDraft } from "@/hooks/useVersionedFormDraft";
 import { FormDraftBanner } from "@/components/ui/FormDraftBanner";
@@ -19,6 +22,8 @@ interface Props {
   defaultType?: FinanceType;
   onClose: () => void;
   onSave: (input: FinanceInput) => Promise<void>;
+  /** Tạo nhanh danh mục mới ngay trong form giao dịch. */
+  onCreateCategory: (input: FinanceCategoryInput) => Promise<FinanceCategory>;
 }
 
 const integerFormatter = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 });
@@ -31,7 +36,7 @@ interface PendingImage { id: string; file: File; previewUrl: string; }
 interface PendingFile { id: string; file: File; }
 
 /** Phần của FinanceInput lưu được vào bản nháp (GĐ7) — loại `receiptImages`/`receiptFiles`/`receiptLinks`. */
-type FinanceDraftData = Pick<FinanceInput, "type" | "amount" | "date" | "categoryId" | "description">;
+type FinanceDraftData = Pick<FinanceInput, "type" | "amount" | "date" | "categoryId" | "description" | "beneficiary">;
 
 function formatMoneyInput(value: number | undefined) {
   return value ? integerFormatter.format(value) : "";
@@ -59,13 +64,14 @@ function initialForm(transaction?: FinanceTransaction, defaultType: FinanceType 
     date: transaction.date.slice(0, 10),
     categoryId: transaction.categoryId,
     description: transaction.description,
+    beneficiary: transaction.beneficiary,
     receiptImages: transaction.receiptImages,
     receiptFiles: transaction.receiptFiles,
     receiptLinks: transaction.receiptLinks,
   } : { type: defaultType, amount: 0, date: getAppDateKey(), categoryId: "", receiptImages: [], receiptFiles: [], receiptLinks: [] };
 }
 
-export function FinanceTransactionModal({ transaction, categories, defaultType = "chi", onClose, onSave }: Props) {
+export function FinanceTransactionModal({ transaction, categories, defaultType = "chi", onClose, onSave, onCreateCategory }: Props) {
   const { account } = useCurrentAccount();
   // Chỉ sessionStorage (allowPersistent: false) — theo đúng kế hoạch GĐ7: giao dịch
   // tài chính không được cho tùy chọn "ghi nhớ trên thiết bị" như 3 form còn lại.
@@ -85,6 +91,13 @@ export function FinanceTransactionModal({ transaction, categories, defaultType =
   const [form, setForm] = useState<FinanceInput>(() => initialForm(transaction, defaultType));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [showCategoryForm, setShowCategoryForm] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [categoryError, setCategoryError] = useState("");
+  const [creatingCategory, setCreatingCategory] = useState(false);
+  const [employees, setEmployees] = useState<ProjectMember[]>([]);
+  const [loadingEmployees, setLoadingEmployees] = useState(true);
+  const [employeeError, setEmployeeError] = useState("");
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [imageError, setImageError] = useState("");
@@ -92,8 +105,33 @@ export function FinanceTransactionModal({ transaction, categories, defaultType =
   const [linkError, setLinkError] = useState("");
   const pendingImagesRef = useRef<PendingImage[]>([]);
   const availableCategories = useMemo(() => categories.filter((item) => item.type === form.type), [categories, form.type]);
+  const selectedBeneficiaryId = useMemo(() => {
+    if (!form.beneficiary) return "";
+    return employees.find((employee) => employee.name === form.beneficiary)?.id ?? "__custom__";
+  }, [employees, form.beneficiary]);
+  const beneficiaryOptions = useMemo(() => {
+    const options: SingleSelectOption[] = employees.map((employee) => ({ value: employee.id, label: employee.name, sublabel: employee.role }));
+    if (form.beneficiary && !employees.some((employee) => employee.name === form.beneficiary)) {
+      options.unshift({ value: "__custom__", label: form.beneficiary, sublabel: "Giá trị hiện tại" });
+    }
+    if (form.beneficiary) options.unshift({ value: "", label: "Bỏ chọn người thụ hưởng" });
+    return options;
+  }, [employees, form.beneficiary]);
 
   useEffect(() => { pendingImagesRef.current = pendingImages; }, [pendingImages]);
+
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    projectService.getDirectory({ signal: controller.signal })
+      .then((items) => { if (active) setEmployees(items); })
+      .catch((error: unknown) => {
+        if (!active || (error instanceof DOMException && error.name === "AbortError")) return;
+        setEmployeeError(getErrorMessage(error, "Không thể tải danh sách nhân sự."));
+      })
+      .finally(() => { if (active) setLoadingEmployees(false); });
+    return () => { active = false; controller.abort(); };
+  }, []);
 
   useEffect(() => {
     scheduleSave({
@@ -102,8 +140,9 @@ export function FinanceTransactionModal({ transaction, categories, defaultType =
       date: form.date,
       categoryId: form.categoryId,
       description: form.description,
+      beneficiary: form.beneficiary,
     });
-  }, [form.type, form.amount, form.date, form.categoryId, form.description, scheduleSave]);
+  }, [form.type, form.amount, form.date, form.categoryId, form.description, form.beneficiary, scheduleSave]);
 
   useEffect(() => () => {
     for (const image of pendingImagesRef.current) URL.revokeObjectURL(image.previewUrl);
@@ -119,6 +158,35 @@ export function FinanceTransactionModal({ transaction, categories, defaultType =
   function setType(type: FinanceType) {
     const firstCategory = categories.find((item) => item.type === type);
     setForm((current) => ({ ...current, type, categoryId: firstCategory?.id ?? "" }));
+    setShowCategoryForm(false);
+    setNewCategoryName("");
+    setCategoryError("");
+  }
+
+  async function createCategory() {
+    const name = newCategoryName.trim();
+    if (!name) {
+      setCategoryError("Vui lòng nhập tên danh mục.");
+      return;
+    }
+    setCreatingCategory(true);
+    setCategoryError("");
+    try {
+      const created = await onCreateCategory({ name, type: form.type });
+      setForm((current) => ({ ...current, categoryId: created.id }));
+      setNewCategoryName("");
+      setShowCategoryForm(false);
+    } catch (reason) {
+      setCategoryError(getErrorMessage(reason, "Không thể thêm danh mục."));
+    } finally {
+      setCreatingCategory(false);
+    }
+  }
+
+  function handleBeneficiaryChange(employeeId: string) {
+    if (employeeId === "__custom__") return;
+    const employee = employees.find((item) => item.id === employeeId);
+    setForm((current) => ({ ...current, beneficiary: employee?.name ?? "" }));
   }
 
   function selectImages(files: FileList | File[] | null) {
@@ -233,23 +301,72 @@ export function FinanceTransactionModal({ transaction, categories, defaultType =
             <Field label="Số tiền" required><div className="relative"><input autoFocus inputMode="numeric" className={cn(inputClass, "pr-14 text-base font-semibold")} value={formatMoneyInput(form.amount)} onChange={(e) => setForm((current) => ({ ...current, amount: Number(e.target.value.replace(/\D/g, "")) }))} placeholder="0" /><span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-400">VNĐ</span></div></Field>
             <Field label="Ngày giao dịch" required><input type="date" className={inputClass} value={form.date} onChange={(e) => setForm((current) => ({ ...current, date: e.target.value }))} /></Field>
           </div>
-          <Field label="Danh mục" required>
-            <SingleSelectDropdown
-              value={form.categoryId}
-              onChange={(categoryId) => setForm((current) => ({ ...current, categoryId }))}
-              placeholder="Chọn danh mục"
-              emptyHint={`Chưa có danh mục ${form.type === "thu" ? "thu" : "chi"}`}
-              searchable
-              searchPlaceholder="Tìm danh mục..."
-              options={availableCategories.map((item) => ({
-                value: item.id,
-                label: item.name,
-                sublabel: item.type === "thu" ? "Khoản thu" : "Khoản chi",
-                dotClassName: item.type === "thu" ? "bg-emerald-500" : "bg-rose-500",
-              }))}
-            />
-          </Field>
+          <div>
+            <span className="mb-1.5 block text-xs font-medium text-gray-600">Danh mục <span className="text-rose-500">*</span></span>
+            <div className="flex gap-2">
+              <div className="min-w-0 flex-1">
+                <SingleSelectDropdown
+                  value={form.categoryId}
+                  onChange={(categoryId) => setForm((current) => ({ ...current, categoryId }))}
+                  placeholder="Chọn danh mục"
+                  emptyHint={`Chưa có danh mục ${form.type === "thu" ? "thu" : "chi"}`}
+                  searchable
+                  searchPlaceholder="Tìm danh mục..."
+                  options={availableCategories.map((item) => ({
+                    value: item.id,
+                    label: item.name,
+                    sublabel: item.type === "thu" ? "Khoản thu" : "Khoản chi",
+                    dotClassName: item.type === "thu" ? "bg-emerald-500" : "bg-rose-500",
+                  }))}
+                />
+              </div>
+              <Button type="button" variant="secondary" className="h-10 shrink-0 px-3" onClick={() => { setShowCategoryForm((current) => !current); setCategoryError(""); }} disabled={saving}>
+                <Plus className="h-4 w-4" />Thêm
+              </Button>
+            </div>
+            {showCategoryForm && (
+              <div className="mt-2 rounded-xl border border-gray-200 bg-gray-50 p-2.5">
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input
+                    autoFocus
+                    aria-label="Tên danh mục mới"
+                    className={cn(inputClass, "h-10 min-w-0 flex-1")}
+                    value={newCategoryName}
+                    onChange={(event) => setNewCategoryName(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") { event.preventDefault(); void createCategory(); }
+                      if (event.key === "Escape") { setShowCategoryForm(false); setNewCategoryName(""); setCategoryError(""); }
+                    }}
+                    placeholder={`Tên danh mục ${form.type === "thu" ? "thu" : "chi"} mới`}
+                    maxLength={100}
+                    disabled={creatingCategory}
+                  />
+                  <div className="flex gap-2">
+                    <Button type="button" className="h-10" onClick={() => void createCategory()} disabled={creatingCategory}>
+                      {creatingCategory && <LoaderCircle className="h-4 w-4 animate-spin" />}Lưu
+                    </Button>
+                    <Button type="button" variant="secondary" className="h-10" onClick={() => { setShowCategoryForm(false); setNewCategoryName(""); setCategoryError(""); }} disabled={creatingCategory}>Hủy</Button>
+                  </div>
+                </div>
+                {categoryError && <p role="alert" className="mt-1.5 text-xs text-rose-600">{categoryError}</p>}
+              </div>
+            )}
+          </div>
           <Field label="Nội dung"><div className="relative"><ReceiptText className="absolute left-3 top-3 h-4 w-4 text-gray-400" /><textarea className={cn(inputClass, "h-24 resize-none py-2.5 pl-10")} maxLength={500} value={form.description ?? ""} onChange={(e) => setForm((current) => ({ ...current, description: e.target.value }))} placeholder="Ví dụ: Thanh toán tiền điện tháng 7" /></div></Field>
+          <div>
+            <span className="mb-1.5 block text-xs font-medium text-gray-600">{form.type === "chi" ? "Người thụ hưởng" : "Người nộp"}</span>
+            <SingleSelectDropdown
+              value={selectedBeneficiaryId}
+              onChange={handleBeneficiaryChange}
+              placeholder={loadingEmployees ? "Đang tải danh sách nhân sự..." : "Chọn nhân sự"}
+              emptyHint={employeeError || "Chưa có nhân sự đang hoạt động"}
+              searchable
+              searchPlaceholder="Tìm nhân sự..."
+              disabled={loadingEmployees}
+              options={beneficiaryOptions}
+            />
+            {employeeError && <p role="alert" className="mt-1 text-xs text-rose-600">{employeeError}</p>}
+          </div>
           <TaskAttachmentFields
             label="Chứng từ"
             entityLabel="chứng từ"

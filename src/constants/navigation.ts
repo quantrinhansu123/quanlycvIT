@@ -12,6 +12,7 @@ import {
   ListTodo,
   Kanban,
   ScrollText,
+  BookOpenText,
   WalletCards,
   CalendarCheck,
   CalendarDays,
@@ -93,6 +94,11 @@ export const NAV_ITEMS: NavItem[] = [
         icon: Kanban,
       },
       {
+        label: "Quy trình",
+        href: "/quan-ly-cong-viec/quy-trinh",
+        icon: BookOpenText,
+      },
+      {
         label: "Bàn giao",
         href: "/quan-ly-cong-viec/ban-giao",
         icon: ScrollText,
@@ -126,6 +132,7 @@ export const BREADCRUMB_LABELS: Record<string, string> = {
   "danh-sach-task": "Danh sách Task",
   "cong-viec-theo-ngay": "Công việc theo ngày",
   "bang-kanban": "Bảng Kanban",
+  "quy-trinh": "Quy trình",
   "ban-giao": "Bàn giao",
   "ung-dung": "Ứng dụng",
   "nhan-vien": "Nhân viên",

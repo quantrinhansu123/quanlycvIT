@@ -49,7 +49,9 @@ export function parseFinanceInput(body: Record<string, unknown>): FinanceInput {
   if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) throw new ApiException("Số tiền phải lớn hơn 0.");
   if (typeof transactionDate !== "string" || !date.test(transactionDate)) throw new ApiException("Ngày giao dịch không hợp lệ.");
   if (typeof categoryId !== "string" || !categoryId) throw new ApiException("Vui lòng chọn danh mục.");
-  return { type: type as FinanceType, amount, date: transactionDate, categoryId, description: typeof body.description === "string" ? body.description.trim() || undefined : undefined, receiptImages: receiptImages(body), receiptFiles: receiptFiles(body), receiptLinks: receiptLinks(body) };
+  const beneficiary = typeof body.beneficiary === "string" ? body.beneficiary.trim() : "";
+  if (beneficiary.length > 150) throw new ApiException("Người thụ hưởng tối đa 150 ký tự.");
+  return { type: type as FinanceType, amount, date: transactionDate, categoryId, description: typeof body.description === "string" ? body.description.trim() || undefined : undefined, beneficiary: beneficiary || undefined, receiptImages: receiptImages(body), receiptFiles: receiptFiles(body), receiptLinks: receiptLinks(body) };
 }
 
 export function parseFinanceCategoryInput(body: Record<string, unknown>): FinanceCategoryInput {

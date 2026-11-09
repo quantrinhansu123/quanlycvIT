@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { ArrowDownCircle, ArrowUpCircle, CalendarDays, Pencil, ReceiptText, Tags, WalletCards, X } from "lucide-react";
+import { ArrowDownCircle, ArrowUpCircle, CalendarDays, Pencil, ReceiptText, Tags, UserRound, WalletCards, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { DetailAttachments } from "@/components/tasks/DetailAttachments";
 import { cn } from "@/lib/utils";
@@ -53,6 +53,12 @@ export function FinanceTransactionDetailModal({ transaction, onClose, onEdit }: 
             </DetailItem>
             <DetailItem icon={ReceiptText} label="Nội dung">{transaction.description || "—"}</DetailItem>
           </div>
+
+          {transaction.beneficiary && (
+            <div className="mt-3">
+              <DetailItem icon={UserRound} label={isIncome ? "Người nộp" : "Người thụ hưởng"}>{transaction.beneficiary}</DetailItem>
+            </div>
+          )}
 
           <section className="mt-5">
             <h3 className="text-sm font-bold text-gray-800">Chứng từ</h3>

@@ -17,6 +17,9 @@ interface SearchableFilterSelectProps {
   label: string;
   searchPlaceholder?: string;
   className?: string;
+  menuClassName?: string;
+  /** "sm" cho thanh lọc, "md" cho form nhập liệu. */
+  size?: "sm" | "md";
 }
 
 /** Bỏ dấu tiếng Việt để tìm kiếm không phân biệt dấu. */
@@ -36,6 +39,8 @@ export function SearchableFilterSelect({
   label,
   searchPlaceholder = "Tìm kiếm...",
   className,
+  menuClassName,
+  size = "sm",
 }: SearchableFilterSelectProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -72,9 +77,11 @@ export function SearchableFilterSelect({
     <div ref={containerRef} className={cn("relative", className)}>
       <button
         type="button"
+        aria-label={label}
         onClick={() => setOpen((prev) => !prev)}
         className={cn(
-          "flex h-9 w-full items-center justify-between gap-1.5 whitespace-nowrap rounded-lg border bg-white px-2.5 text-xs outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100",
+          "flex w-full items-center justify-between gap-1.5 whitespace-nowrap rounded-lg border bg-white outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100",
+          size === "md" ? "h-10 px-3 text-sm" : "h-9 px-2.5 text-xs",
           value ? "border-brand-300 text-brand-600" : "border-gray-200 text-gray-600"
         )}
         aria-expanded={open}
@@ -102,7 +109,7 @@ export function SearchableFilterSelect({
       </button>
 
       {open && (
-        <div className="absolute z-40 mt-1.5 w-64 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl">
+        <div className={cn("absolute z-40 mt-1.5 w-64 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl", menuClassName)}>
           <div className="relative border-b border-gray-100 p-2">
             <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input

@@ -102,6 +102,7 @@ export function TransferQrModal({ categories, onClose, onConfirm }: Props) {
         date: getAppDateKey(),
         categoryId,
         description: content.trim() || `Chuyển khoản cho ${recipient.name}`,
+        beneficiary: recipient.name,
       });
       setConfirmed(true);
     } catch (error) {

@@ -51,6 +51,8 @@ export const accountService = {
     apiClient.get<EmployeeAttendance[]>(`/attendance?startDate=${startDate}&endDate=${endDate}`),
   saveAttendance: (input: EmployeeAttendanceInput) =>
     apiClient.post<EmployeeAttendance>("/attendance", input),
+  deleteAttendance: (id: string) =>
+    apiClient.delete<boolean>(`/attendance/${encodeURIComponent(id)}`),
   createGlobalWorkSchedule: (employeeId: string, input: EmployeeWorkScheduleInput) =>
     apiClient.post<EmployeeWorkSchedule>("/work-schedules", { employeeId, ...input }),
   createWeeklyWorkSchedules: (employeeId: string, schedules: EmployeeWorkScheduleInput[]) =>

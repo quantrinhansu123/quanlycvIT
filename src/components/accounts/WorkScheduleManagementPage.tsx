@@ -1,17 +1,36 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight, Clock3, LoaderCircle, Plus, Trash2, X } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Clock3, List, LoaderCircle, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { useFeedback } from "@/components/ui/FeedbackProvider";
 import { getErrorMessage } from "@/lib/errors";
 import { accountService } from "@/services/account-service";
+import { formatDateVN } from "@/lib/utils";
 import type { EmployeeAccount, EmployeeAttendance, EmployeeWorkSchedule } from "@/types/account";
 
 const WEEKDAYS = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
 const WEEKDAY_OPTIONS = ["Chủ nhật", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"];
 const pad = (value: number) => String(value).padStart(2, "0");
 const dateKey = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+const weekdayOf = (date: string) => {
+  const [year, month, day] = date.split("-").map(Number);
+  if (!year || !month || !day) return "";
+  return WEEKDAYS[new Date(year, month - 1, day).getDay()];
+};
+/** Số phút của một buổi làm; qua đêm thì cộng thêm 24h. */
+const scheduleMinutes = (schedule: EmployeeWorkSchedule) => {
+  const [startHour, startMinute] = schedule.startTime.split(":").map(Number);
+  const [endHour, endMinute] = schedule.endTime.split(":").map(Number);
+  let minutes = endHour * 60 + endMinute - (startHour * 60 + startMinute);
+  if (minutes < 0) minutes += 24 * 60;
+  return minutes;
+};
+const formatHours = (minutes: number) => {
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `${hours} giờ ${pad(rest)} phút` : `${hours} giờ`;
+};
 
 export function WorkScheduleManagementPage() {
   const { notify, confirm } = useFeedback();
@@ -25,6 +44,8 @@ export function WorkScheduleManagementPage() {
   const [showWeeklyForm, setShowWeeklyForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [view, setView] = useState<"table" | "calendar">("table");
+  const [detail, setDetail] = useState<EmployeeWorkSchedule | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -78,6 +99,14 @@ export function WorkScheduleManagementPage() {
       grouped.set(schedule.date, items);
     }
     return grouped;
+  }, [schedules]);
+
+  const sortedSchedules = useMemo(() => {
+    return [...schedules].sort((a, b) =>
+      a.date === b.date
+        ? a.startTime.localeCompare(b.startTime) || (a.employeeName ?? "").localeCompare(b.employeeName ?? "")
+        : a.date.localeCompare(b.date)
+    );
   }, [schedules]);
 
   const cells = useMemo(() => {
@@ -206,21 +235,126 @@ export function WorkScheduleManagementPage() {
         </header>
 
         <div className="border-b border-slate-100 px-5 py-3">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
             {!onlineStatusError && <span className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-700"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />Đang online <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs">{onlineEmployees.length}</span></span>}
-            {onlineStatusError ? <span className="text-sm text-amber-700">Không tải được trạng thái chấm công.</span> : onlineEmployees.length ? onlineEmployees.map((employee) => <span key={employee.id} className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-800">{employee.employeeName}</span>) : <span className="text-sm text-slate-500">Chưa có nhân viên check-in hôm nay.</span>}
+            {onlineStatusError && <span className="text-sm text-amber-700">Không tải được trạng thái chấm công.</span>}
           </div>
+          {!onlineStatusError && (onlineEmployees.length ? (
+            <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <table className="w-full min-w-[520px] text-left text-sm">
+                <caption className="sr-only">Nhân viên đang online (đã check-in hôm nay)</caption>
+                <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-4 py-2 font-semibold">Nhân viên</th>
+                    <th className="px-4 py-2 font-semibold">Mã NV</th>
+                    <th className="px-4 py-2 font-semibold">Check-in</th>
+                    <th className="px-4 py-2 font-semibold">Trạng thái</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {onlineEmployees.map((employee) => (
+                    <tr key={employee.id}>
+                      <td className="px-4 py-2.5 font-medium text-slate-800">{employee.employeeName}</td>
+                      <td className="px-4 py-2.5 text-slate-500">{employee.employeeCode || "—"}</td>
+                      <td className="whitespace-nowrap px-4 py-2.5 text-slate-700">
+                        <span className="inline-flex items-center gap-1.5"><Clock3 className="h-3.5 w-3.5 text-emerald-500" />{employee.checkIn ?? "—"}</span>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Đang online</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500">Chưa có nhân viên check-in hôm nay.</p>
+          ))}
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
           <h2 className="text-base font-semibold capitalize text-slate-800">{new Intl.DateTimeFormat("vi-VN", { month: "long", year: "numeric" }).format(month)}</h2>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center rounded-lg bg-slate-100 p-0.5">
+              <button
+                type="button"
+                onClick={() => setView("table")}
+                className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-semibold transition-colors ${view === "table" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+              >
+                <List className="h-3.5 w-3.5" /> Danh sách
+              </button>
+              <button
+                type="button"
+                onClick={() => setView("calendar")}
+                className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-semibold transition-colors ${view === "calendar" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+              >
+                <CalendarDays className="h-3.5 w-3.5" /> Lịch
+              </button>
+            </div>
             <Button variant="secondary" size="sm" onClick={() => setMonth(new Date())}>Hôm nay</Button>
             <button aria-label="Tháng trước" onClick={() => setMonth((value) => new Date(value.getFullYear(), value.getMonth() - 1, 1))} className="rounded-lg border p-2 text-slate-600 hover:bg-slate-50"><ChevronLeft className="h-4 w-4" /></button>
             <button aria-label="Tháng sau" onClick={() => setMonth((value) => new Date(value.getFullYear(), value.getMonth() + 1, 1))} className="rounded-lg border p-2 text-slate-600 hover:bg-slate-50"><ChevronRight className="h-4 w-4" /></button>
           </div>
         </div>
 
+        {view === "table" ? (
+          <div className="overflow-x-auto border-t border-slate-200">
+            <table className="w-full min-w-[760px] text-left text-sm">
+              <caption className="sr-only">Danh sách nhân sự đăng ký lịch làm việc trong tháng</caption>
+              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-4 py-3 font-semibold">Ngày</th>
+                  <th className="px-4 py-3 font-semibold">Nhân viên</th>
+                  <th className="px-4 py-3 font-semibold">Giờ làm</th>
+                  <th className="px-4 py-3 font-semibold">Tổng giờ</th>
+                  <th className="px-4 py-3 font-semibold">Ghi chú</th>
+                  <th className="w-16 px-4 py-3" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {loading ? (
+                  <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-500"><LoaderCircle className="mr-2 inline h-4 w-4 animate-spin" />Đang tải lịch làm việc...</td></tr>
+                ) : sortedSchedules.length === 0 ? (
+                  <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-500">Chưa có nhân sự nào đăng ký lịch trong tháng này.</td></tr>
+                ) : sortedSchedules.map((schedule) => (
+                  <tr
+                    key={schedule.id}
+                    onClick={() => setDetail(schedule)}
+                    className="cursor-pointer transition-colors hover:bg-violet-50/60"
+                  >
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <span className="font-medium text-slate-800">{formatDateVN(schedule.date)}</span>
+                      <span className="ml-2 text-xs text-slate-400">{weekdayOf(schedule.date)}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-slate-900">{schedule.employeeName ?? "Nhân viên"}</div>
+                      {schedule.employeeCode && <div className="mt-0.5 text-xs text-slate-500">{schedule.employeeCode}</div>}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-700">
+                      <span className="inline-flex items-center gap-1.5"><Clock3 className="h-3.5 w-3.5 text-violet-500" />{schedule.startTime.slice(0, 5)} – {schedule.endTime.slice(0, 5)}</span>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatHours(scheduleMinutes(schedule))}</td>
+                    <td className="max-w-64 px-4 py-3">
+                      <span className="block truncate text-slate-600" title={schedule.note ?? undefined}>{schedule.note || "—"}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={(event) => { event.stopPropagation(); void remove(schedule); }}
+                        disabled={deletingId !== null || loading}
+                        aria-label={`Xóa lịch của ${schedule.employeeName ?? schedule.employeeCode ?? "nhân viên"} ngày ${schedule.date}`}
+                        title="Xóa lịch làm việc"
+                        className="rounded-md p-1.5 text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {deletingId === schedule.id ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
         <div className="grid grid-cols-7 border-l border-t border-slate-200">
           {WEEKDAYS.map((day) => <div key={day} className="border-b border-r border-slate-200 bg-slate-50 px-2 py-2 text-center text-xs font-semibold text-slate-500">{day}</div>)}
           {cells.map(({ date, current }, index) => {
@@ -248,11 +382,56 @@ export function WorkScheduleManagementPage() {
             </div>;
           })}
         </div>
+        )}
         <div className="flex items-center justify-between px-5 py-3 text-xs text-slate-500">
           <span>{schedules.length} lịch trong tháng</span>
           {loading && <span className="inline-flex items-center gap-1"><LoaderCircle className="h-3.5 w-3.5 animate-spin" /> Đang tải</span>}
         </div>
       </section>
+
+      {detail && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setDetail(null); }}>
+        <section role="dialog" aria-modal="true" aria-labelledby="work-schedule-detail-title" className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div>
+              <h2 id="work-schedule-detail-title" className="text-lg font-bold text-slate-900">Chi tiết lịch đăng ký</h2>
+              <p className="mt-1 text-sm text-slate-500">Thông tin buổi làm đã đăng ký cho nhân viên.</p>
+            </div>
+            <button type="button" onClick={() => setDetail(null)} aria-label="Đóng" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><X className="h-4 w-4" /></button>
+          </div>
+          <dl className="divide-y divide-slate-100 rounded-xl border border-slate-200">
+            <div className="flex items-center justify-between gap-4 px-4 py-3">
+              <dt className="text-sm text-slate-500">Nhân viên</dt>
+              <dd className="text-right text-sm font-semibold text-slate-900">{detail.employeeName ?? "Nhân viên"}{detail.employeeCode ? <span className="ml-1 font-normal text-slate-400">· {detail.employeeCode}</span> : null}</dd>
+            </div>
+            <div className="flex items-center justify-between gap-4 px-4 py-3">
+              <dt className="text-sm text-slate-500">Ngày</dt>
+              <dd className="text-right text-sm font-medium text-slate-800">{formatDateVN(detail.date)} <span className="text-slate-400">({weekdayOf(detail.date)})</span></dd>
+            </div>
+            <div className="flex items-center justify-between gap-4 px-4 py-3">
+              <dt className="text-sm text-slate-500">Giờ làm</dt>
+              <dd className="text-right text-sm font-medium text-slate-800">{detail.startTime.slice(0, 5)} – {detail.endTime.slice(0, 5)}</dd>
+            </div>
+            <div className="flex items-center justify-between gap-4 px-4 py-3">
+              <dt className="text-sm text-slate-500">Tổng giờ</dt>
+              <dd className="text-right text-sm font-medium text-slate-800">{formatHours(scheduleMinutes(detail))}</dd>
+            </div>
+            <div className="flex items-start justify-between gap-4 px-4 py-3">
+              <dt className="shrink-0 text-sm text-slate-500">Ghi chú</dt>
+              <dd className="whitespace-pre-line text-right text-sm text-slate-700">{detail.note || "—"}</dd>
+            </div>
+          </dl>
+          <div className="mt-5 flex justify-end gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => { const target = detail; setDetail(null); void remove(target); }}
+              disabled={deletingId !== null || loading}
+            >
+              <Trash2 className="h-4 w-4" /> Xóa lịch
+            </Button>
+            <Button onClick={() => setDetail(null)}>Đóng</Button>
+          </div>
+        </section>
+      </div>}
 
       {showForm && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowForm(false); }}>
         <form onSubmit={(event) => void save(event)} className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl">

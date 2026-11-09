@@ -2,6 +2,12 @@ import type { NextConfig } from "next";
 
 const cloudinaryCloudName = process.env.CLOUDINARY_CLOUD_NAME;
 
+// Tài khoản Cloudinary cũ vẫn còn ảnh đại diện trong dữ liệu; cho phép cả hai
+// để next/image không làm sập trang khi gặp URL cũ.
+const cloudinaryCloudNames = Array.from(
+  new Set([cloudinaryCloudName, "ndnaevkf"].filter((name): name is string => Boolean(name)))
+);
+
 const nextConfig: NextConfig = {
   images: {
     // AVIF nhỏ hơn WebP nhưng mã hóa chậm hơn, nên đặt sau WebP để Next ưu tiên WebP.
@@ -13,15 +19,11 @@ const nextConfig: NextConfig = {
         pathname: "/img/**",
       },
       // Chỉ chấp nhận ảnh được upload vào đúng Cloudinary account của ứng dụng.
-      ...(cloudinaryCloudName
-        ? [
-            {
-              protocol: "https" as const,
-              hostname: "res.cloudinary.com",
-              pathname: `/${cloudinaryCloudName}/image/upload/**`,
-            },
-          ]
-        : []),
+      ...cloudinaryCloudNames.map((name) => ({
+        protocol: "https" as const,
+        hostname: "res.cloudinary.com",
+        pathname: `/${name}/image/upload/**`,
+      })),
     ],
   },
   experimental: {

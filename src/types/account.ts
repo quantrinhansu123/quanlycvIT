@@ -81,6 +81,7 @@ export interface EmployeeAttendance {
   checkIn?: string;
   checkOut?: string;
   taskId?: string;
+  taskIds?: string[];
   taskTitle?: string;
   workDetail?: string;
 }
@@ -91,6 +92,7 @@ export interface EmployeeAttendanceInput {
   checkIn?: string;
   checkOut?: string;
   taskId?: string;
+  taskIds?: string[];
   workDetail?: string;
 }
 

@@ -36,6 +36,9 @@ export async function POST(request: Request) {
     const checkIn = typeof body.checkIn === "string" ? body.checkIn.trim() : "";
     const checkOut = typeof body.checkOut === "string" ? body.checkOut.trim() : "";
     const taskId = typeof body.taskId === "string" ? body.taskId.trim() : "";
+    const taskIds = Array.isArray(body.taskIds)
+      ? body.taskIds.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean)
+      : [];
     const workDetail = typeof body.workDetail === "string" ? body.workDetail.trim() : "";
     if (!employeeId) throw new ApiException("Vui lòng chọn nhân viên.", 400);
     if (!validDate(date)) throw new ApiException("Ngày chấm công không hợp lệ.", 400);
@@ -43,7 +46,9 @@ export async function POST(request: Request) {
     if (!validTime(checkIn) || !validTime(checkOut)) {
       throw new ApiException("Giờ check-in hoặc check-out không hợp lệ.", 400);
     }
-    if (taskId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(taskId)) {
+    const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+    const selectedTaskIds = Array.from(new Set([...(taskIds.length ? taskIds : taskId ? [taskId] : [])]));
+    if (selectedTaskIds.some((item) => !isUuid(item))) {
       throw new ApiException("Task được chọn không hợp lệ.", 400);
     }
     if (workDetail.length > 2000) {
@@ -52,7 +57,15 @@ export async function POST(request: Request) {
     if (!checkIn && !checkOut) throw new ApiException("Hãy nhập ít nhất giờ check-in hoặc check-out.", 400);
     // Cho phép ca qua đêm: check-out <= check-in được hiểu là sáng hôm sau.
     // Không chặn ở đây; cách tính giờ làm sẽ tự cộng 24h.
-    const attendance = await saveAttendance(supabase, access.id, { employeeId, date, checkIn, checkOut, taskId, workDetail });
+    const attendance = await saveAttendance(supabase, access.id, {
+      employeeId,
+      date,
+      checkIn,
+      checkOut,
+      taskId: selectedTaskIds[0] ?? "",
+      taskIds: selectedTaskIds,
+      workDetail,
+    });
     return apiSuccess(attendance, 200, "Đã lưu chấm công.");
   } catch (error) {
     return handleApiError(error);
